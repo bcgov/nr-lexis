@@ -144,7 +144,12 @@ public class ApplicationSubmissionImportService {
   private static final String FEDERAL_ENDPOINT_ONLY_ERROR =
       "Federal submission endpoint only accepts jurisdictionCode=F. Provincial applications must use the modern provincial upload path.";
   private static final String PROVINCIAL_ENDPOINT_ONLY_ERROR =
-      "Federal applications must use the dedicated federal submission endpoint.";
+      "Federal applications can't be uploaded here.";
+  private static final String ZIP_SINGLE_APPLICATION_ERROR =
+      "A ZIP file can contain only one application file.";
+  // The upload page links "report an issue" to the support email.
+  private static final String APPLICATION_SAVE_FAILURE_ERROR =
+      "We couldn't save this application. Try again later. If it keeps happening, report an issue.";
   private static final OrgUnitConstraint UNRESTRICTED_ORG_UNITS =
       new OrgUnitConstraint(false, List.of());
   private static final Pattern UNTERMINATED_XML_TAG_PATTERN =
@@ -168,6 +173,9 @@ public class ApplicationSubmissionImportService {
           Map.entry("RWC", 1910L));
   private static final String VALID_REGION_CODES =
       ORG_UNIT_BY_REGION_CODE.keySet().stream().sorted().collect(Collectors.joining(", "));
+  private static final Map<Long, String> REGION_CODE_BY_ORG_UNIT =
+      ORG_UNIT_BY_REGION_CODE.entrySet().stream()
+          .collect(Collectors.toUnmodifiableMap(Map.Entry::getValue, Map.Entry::getKey));
 
   private final ObjectProvider<ApplicationDetailsRpcService> applicationDetailsServiceProvider;
   private final ObjectProvider<LexisReportScheduleRepository> scheduleRepositoryProvider;
@@ -309,7 +317,7 @@ public class ApplicationSubmissionImportService {
       return virusScanRejection.get();
     }
 
-    ParsedUpload parsedUpload = parseUploadedLexisSubmission(file, fileName, fileSize);
+    ParsedUpload parsedUpload = parseUploadedLexisSubmission(file, fileName, fileSize, federalOnly);
     if (parsedUpload.rejection() != null) {
       return withUserReference(parsedUpload.rejection(), normalizedUserReference);
     }
@@ -579,7 +587,7 @@ public class ApplicationSubmissionImportService {
       return virusScanRejection.get();
     }
 
-    ParsedUpload parsedUpload = parseUploadedLexisSubmission(file, fileName, fileSize);
+    ParsedUpload parsedUpload = parseUploadedLexisSubmission(file, fileName, fileSize, federalOnly);
     if (parsedUpload.rejection() != null) {
       return withUserReference(parsedUpload.rejection(), normalizedUserReference);
     }
@@ -708,7 +716,7 @@ public class ApplicationSubmissionImportService {
       return rejected(
           fileName,
           fileSize,
-          resultErrors(applicationResult.errors(), applicationResult.message()),
+          applicationSaveErrors(applicationResult, federalOnly),
           warnings,
           submissionSummary,
           normalizedUserReference);
@@ -817,7 +825,8 @@ public class ApplicationSubmissionImportService {
     return importApplicationSubmission(file, userId, userReference, true, FEDERAL_ENDPOINT_ONLY_ERROR);
   }
 
-  private ParsedUpload parseUploadedLexisSubmission(MultipartFile file, String fileName, long fileSize) {
+  private ParsedUpload parseUploadedLexisSubmission(
+      MultipartFile file, String fileName, long fileSize, boolean federalOnly) {
     if (file == null || file.isEmpty()) {
       return ParsedUpload.rejected(
           rejected(
@@ -835,7 +844,12 @@ public class ApplicationSubmissionImportService {
               : parse(uploadedSubmission.bytes());
       return ParsedUpload.valid(submission);
     } catch (ApplicationSubmissionImportException ex) {
-      return ParsedUpload.rejected(rejected(fileName, fileSize, ex.errors(), List.of()));
+      // A federal file on the provincial upload gets one message, not its federal field errors.
+      List<String> errors =
+          !federalOnly && FEDERAL_JURISDICTION.equals(ex.jurisdictionCode())
+              ? List.of(PROVINCIAL_ENDPOINT_ONLY_ERROR)
+              : ex.errors();
+      return ParsedUpload.rejected(rejected(fileName, fileSize, errors, List.of()));
     } catch (Exception ex) {
       LOGGER.warn(
           "event=lexis_submission_import outcome=parse_failed failureType={}",
@@ -931,17 +945,11 @@ public class ApplicationSubmissionImportService {
       throw new ApplicationSubmissionImportException(List.of("The uploaded Zip file is corrupt, and cannot be read."));
     }
 
-    if (!unexpectedEntryNames.isEmpty()) {
-      throw new ApplicationSubmissionImportException(
-          List.of("The ZIP file must contain only one LEXIS XML or GeoJSON application submission file."));
-    }
-    if (importEntryNames.isEmpty() || importBytes == null || importFormat == null) {
-      throw new ApplicationSubmissionImportException(
-          List.of("The ZIP file must contain one LEXIS XML or GeoJSON application submission file."));
-    }
-    if (importEntryNames.size() > 1) {
-      throw new ApplicationSubmissionImportException(
-          List.of("The ZIP file must contain exactly one LEXIS XML or GeoJSON application submission file."));
+    if (!unexpectedEntryNames.isEmpty()
+        || importEntryNames.size() != 1
+        || importBytes == null
+        || importFormat == null) {
+      throw new ApplicationSubmissionImportException(List.of(ZIP_SINGLE_APPLICATION_ERROR));
     }
 
     return new UploadedLexisSubmission(importBytes, importFormat);
@@ -1262,7 +1270,7 @@ public class ApplicationSubmissionImportService {
     ParsedSpeciesEndUseSort parsedSpeciesEndUseSort =
         parseSpeciesEndUseSort(speciesEndUseSort, errors);
     if (!errors.isEmpty()) {
-      throw new ApplicationSubmissionImportException(errors);
+      throw new ApplicationSubmissionImportException(errors, jurisdictionCode);
     }
 
     return new ParsedSubmission(
@@ -2641,9 +2649,14 @@ public class ApplicationSubmissionImportService {
         submission.ownerClientNumber(),
         submission.ownerClientLocationCode(),
         submission.ownerContactName(),
+        submission.agentClientNumber(),
+        submission.agentClientLocationCode(),
         submission.jurisdictionCode(),
         submission.federalApplicationNumber(),
         submission.orgUnitNumber(),
+        submission.orgUnitNumber() == null
+            ? null
+            : REGION_CODE_BY_ORG_UNIT.get(submission.orgUnitNumber()),
         submission.applicationStatusCode(),
         submission.exemptionReasonCode(),
         submission.applicantTypeCode(),
@@ -3035,9 +3048,19 @@ public class ApplicationSubmissionImportService {
         fileName,
         fileSize,
         List.of(federalOnly ? federalOnlyError : PROVINCIAL_ENDPOINT_ONLY_ERROR),
-        warnings,
+        // The provincial upload shows a federal file's one message without its federal warnings.
+        federalOnly ? warnings : List.of(),
         submissionSummary,
         userReference);
+  }
+
+  // A save that fails without a validation error is a system failure. The provincial upload asks
+  // the user to try again or report it.
+  private List<String> applicationSaveErrors(CreateApplicationResult result, boolean federalOnly) {
+    if (!federalOnly && (result.errors() == null || result.errors().isEmpty())) {
+      return List.of(APPLICATION_SAVE_FAILURE_ERROR);
+    }
+    return resultErrors(result.errors(), result.message());
   }
 
   private ApplicationSubmissionImportResultDto forestClientScopeRejection(
@@ -3247,13 +3270,24 @@ public class ApplicationSubmissionImportService {
 
   private static class ApplicationSubmissionImportException extends Exception {
     private final List<String> errors;
+    private final String jurisdictionCode;
 
     ApplicationSubmissionImportException(List<String> errors) {
+      this(errors, null);
+    }
+
+    /** Errors in a file whose jurisdiction code was read before the errors were found. */
+    ApplicationSubmissionImportException(List<String> errors, String jurisdictionCode) {
       this.errors = List.copyOf(errors);
+      this.jurisdictionCode = jurisdictionCode;
     }
 
     List<String> errors() {
       return errors;
+    }
+
+    String jurisdictionCode() {
+      return jurisdictionCode;
     }
   }
 }

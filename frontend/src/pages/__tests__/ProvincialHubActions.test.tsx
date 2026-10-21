@@ -131,12 +131,10 @@ describe('Provincial hub actions', () => {
     renderPage()
 
     expect(screen.queryByText('Applications')).not.toBeInTheDocument()
-    expect(
-      screen.getByRole('button', { name: 'Upload application submission' }),
-    ).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Upload applications' })).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Create application' })).not.toBeInTheDocument()
 
-    await userEvent.click(screen.getByRole('button', { name: 'Upload application submission' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Upload applications' }))
 
     expect(await screen.findByText('Upload route')).toBeInTheDocument()
   })

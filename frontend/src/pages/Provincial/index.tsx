@@ -112,7 +112,7 @@ const QUICK_ACTIONS: ProvincialQuickAction[] = [
   },
   {
     id: 'uploadApplicationSubmission',
-    label: 'Upload application submission',
+    label: 'Upload applications',
     path: '/provincial/application/upload',
     requiredActions: ['uploadApplicationSubmission'],
   },

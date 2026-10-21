@@ -77,6 +77,7 @@ function MultiFileDropZone({
   const dropZoneClassName = [
     'admin-upload-drop-zone',
     variant === 'fspts' ? 'admin-upload-drop-zone--fspts' : '',
+    invalidText ? 'is-invalid' : '',
     isDraggingOver ? 'is-dragging' : '',
     disabled ? 'is-disabled' : '',
   ]

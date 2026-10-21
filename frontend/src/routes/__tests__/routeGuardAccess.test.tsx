@@ -175,8 +175,8 @@ describe('Protected route guard access', () => {
 
     renderWithPath('/provincial/application/upload')
 
-    expect(await findLazyPageHeading('Upload application submission')).toBeInTheDocument()
-    expect(screen.getByLabelText('Application submission file')).toBeInTheDocument()
+    expect(await findLazyPageHeading('Upload applications')).toBeInTheDocument()
+    expect(screen.getByLabelText('Application files')).toBeInTheDocument()
   })
 
   it('allows scoped provincial submitters to open the provincial application submission route', async () => {
@@ -195,8 +195,8 @@ describe('Protected route guard access', () => {
 
     renderWithPath('/provincial/application/upload')
 
-    expect(await findLazyPageHeading('Upload application submission')).toBeInTheDocument()
-    expect(screen.getByLabelText('Application submission file')).toBeInTheDocument()
+    expect(await findLazyPageHeading('Upload applications')).toBeInTheDocument()
+    expect(screen.getByLabelText('Application files')).toBeInTheDocument()
   })
 
   it('allows provincial submitters to open the client summary', async () => {
@@ -306,8 +306,8 @@ describe('Protected route guard access', () => {
 
     renderWithPath('/provincial/application/upload')
 
-    expect(await findLazyPageHeading('Upload application submission')).toBeInTheDocument()
-    expect(screen.getByLabelText('Application submission file')).toBeInTheDocument()
+    expect(await findLazyPageHeading('Upload applications')).toBeInTheDocument()
+    expect(screen.getByLabelText('Application files')).toBeInTheDocument()
   })
 
   it('ignores stale RTM-only runtime configuration for authorized protected routes', async () => {

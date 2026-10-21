@@ -32,6 +32,7 @@ import { useAuth } from '@/context/auth/useAuth'
 import { useTheme } from '@/context/theme/useTheme'
 import type { NavigationRoleScope, RouteActionMatch } from '@/routes/routeAccessTypes'
 import { fetchNotifications } from '@/service/notification-service'
+import { REPORT_ISSUE_HREF } from '@/utils/support'
 
 type LayoutProps = {
   children: ReactNode
@@ -52,8 +53,6 @@ type NavigationSection = {
   links: NavigationLink[]
   standalone?: boolean
 }
-
-const SUPPORT_EMAIL = 'Heartwood@gov.bc.ca'
 
 const UI_PREFERENCE_KEYS = {
   sideNavCollapsed: 'lexis.ui.sideNavCollapsed',
@@ -127,7 +126,7 @@ const NAVIGATION_SECTIONS: NavigationSection[] = [
       },
       {
         to: '/provincial/application/upload',
-        label: 'Upload',
+        label: 'Upload applications',
         requiredActions: ['uploadApplicationSubmission'],
         roleScope: 'provincialApplicationSubmission',
       },
@@ -790,7 +789,7 @@ function Layout({ children }: LayoutProps) {
             <SideNavigationTooltip enabled={isSideNavCollapsed} label="Report an issue">
               {(descriptionId) => (
                 <a
-                  href={`mailto:${SUPPORT_EMAIL}`}
+                  href={REPORT_ISSUE_HREF}
                   className="cds--side-nav__link csp-side-nav__link"
                   aria-label={isSideNavCollapsed ? 'Report an issue' : undefined}
                   aria-describedby={descriptionId}

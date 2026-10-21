@@ -296,6 +296,14 @@ const installSyntheticLexisApi = async (page: Page) => {
       case '/api/lexis/admin/policies/fee':
         body = feePolicyPage
         break
+      case '/api/lexis/application-submissions':
+        body = {
+          status: 'accepted',
+          applicationNumber: 46820,
+          packageNumber: 'UI-TEST-100',
+          scaleRows: 2,
+        }
+        break
       case '/api/lexis/application-submissions/validation':
         if (route.request().postData()?.includes('invalid-submission.xml')) {
           status = 422
@@ -315,12 +323,15 @@ const installSyntheticLexisApi = async (page: Page) => {
               ownerClientNumber: '00010001',
               ownerClientLocationCode: '01',
               ownerContactName: 'UI Test Contact',
+              agentClientNumber: null,
               jurisdictionCode: 'P',
               orgUnitNumber: 1909,
+              regionCode: 'RSC',
               sourceApplicationStatusCode: 'SUB',
               exemptionReasonCode: 'U',
               applicantTypeCode: 'O',
               productTypeCode: 'H',
+              packageNumber: 'UI-TEST-100',
               productLocation: 'Synthetic location',
               ageClass: 'M',
               applicationVolume: 525,
@@ -329,6 +340,7 @@ const installSyntheticLexisApi = async (page: Page) => {
               averageDiameter: 12.8,
               speciesCodes: ['HE', 'FI'],
               endUseCode: 'PL',
+              scaleRows: 2,
             },
           }
         }
@@ -3261,7 +3273,7 @@ test.describe('FSPTS-aligned LEXIS shell', () => {
     await expect(filAddButton).toBeFocused()
   })
 
-  test('uses the FSPTS review-card layout for validated application submissions', async ({
+  test('uses the FSPTS layout from upload through review to the result for application uploads', async ({
     page,
   }) => {
     await page.setViewportSize({ width: 1440, height: 900 })
@@ -3269,29 +3281,18 @@ test.describe('FSPTS-aligned LEXIS shell', () => {
       waitUntil: 'domcontentloaded',
       ready: page.getByRole('heading', {
         level: 1,
-        name: 'Upload application submission',
+        name: 'Upload applications',
         exact: true,
       }),
     })
 
     await expect(
-      page.getByRole('heading', { level: 1, name: 'Upload application submission' }),
-    ).toBeVisible()
-    await expect(
-      page.getByText('Upload an XML, ZIP, GeoJSON, or JSON file to create a LEXIS application.'),
+      page.getByText('Create one or more applications by uploading their LEXIS files.'),
     ).toBeVisible()
     await expect(page.locator('.admin-upload-fspts-page')).toHaveCSS('row-gap', '0px')
     const uploadPanel = page.locator('.admin-upload-panel').first()
-    await expect(uploadPanel.getByText('Submission file', { exact: true })).toBeVisible()
-    await expect(
-      uploadPanel.getByText(
-        'Accepted file types: XML, ZIP, GeoJSON, and JSON. Maximum file size: 20 MB.',
-        { exact: true },
-      ),
-    ).toBeVisible()
+    await expect(uploadPanel.getByText('Application files', { exact: true })).toBeVisible()
     await expect(uploadPanel.locator('.admin-upload-panel__header')).toHaveCount(0)
-    await expect(uploadPanel.locator('.admin-upload-settings-grid')).toBeHidden()
-    await expect(uploadPanel.locator('.admin-upload-summary-strip')).toHaveCount(0)
     await expect(uploadPanel.locator('.admin-upload-drop-zone-field')).toHaveCSS(
       'margin-top',
       '0px',
@@ -3305,7 +3306,7 @@ test.describe('FSPTS-aligned LEXIS shell', () => {
     await expect(reviewButton).toBeEnabled()
     await reviewButton.click()
     const uploadError = uploadPanel.locator('.admin-upload-file-error')
-    await expect(uploadError).toContainText('Submission file is required')
+    await expect(uploadError).toContainText('Add at least one file to review')
     await expect(uploadError.locator('svg')).toHaveCount(1)
     await expect(uploadError).toHaveCSS('display', 'flex')
     await expect(uploadError).toHaveCSS('font-size', '12px')
@@ -3313,53 +3314,51 @@ test.describe('FSPTS-aligned LEXIS shell', () => {
     await expect(uploadError).toHaveCSS('gap', '4px')
     await expect(uploadError).toHaveCSS('margin-top', '6px')
 
-    await page.getByLabel('Application submission file').setInputFiles({
+    await page.getByLabel('Application files', { exact: true }).setInputFiles({
       name: 'valid-submission.xml',
       mimeType: 'application/xml',
       buffer: Buffer.from('<LexisSubmission />', 'utf8'),
     })
 
-    await expect(page.locator('.admin-upload-panel')).toHaveCount(1)
-    await expect(uploadPanel.locator('.admin-upload-application-validation-content')).toBeVisible()
-    await expect(uploadPanel.getByLabel('Selected submission files')).toBeVisible()
-    await expect(uploadPanel.locator('.admin-upload-file-chip')).toHaveCount(1)
-    await expect(uploadPanel.locator('.admin-upload-queue__table--submission')).toHaveCount(0)
-    await expect(uploadPanel.getByRole('heading', { name: 'Submission validated' })).toBeVisible()
-    await expect(uploadPanel.getByRole('button', { name: 'Review' })).toHaveCount(0)
-    await expect(page.getByRole('heading', { name: 'Submission validated' })).toBeVisible()
-    await page.getByRole('button', { name: 'Review' }).click()
+    const fileRow = uploadPanel.locator('.application-upload-file')
+    await expect(fileRow).toHaveCount(1)
+    await expect(fileRow).toContainText('Validated')
+    await expect(fileRow.locator('.application-upload-file__status')).toHaveCSS(
+      'color',
+      'rgb(0, 123, 0)',
+    )
+    await expect(uploadPanel.getByText('1 file validated')).toBeVisible()
+    await expect(uploadPanel.getByRole('table')).toHaveCount(0)
+    await reviewButton.click()
 
     await expect(page.getByRole('heading', { level: 2, name: 'Review' })).toBeVisible()
-    await expect(page.getByRole('heading', { name: 'Submission validated' })).toHaveCount(0)
-    await expect(page.getByRole('heading', { name: 'Submission review' })).toHaveCount(0)
-    await expect(page.getByRole('heading', { name: 'Submission metadata' })).toBeVisible()
-    await expect(page.getByRole('heading', { name: 'Application details' })).toBeVisible()
-    await expect(page.getByRole('heading', { name: 'Package details' })).toBeVisible()
-    await expect(page.getByRole('heading', { name: 'Product details' })).toBeVisible()
-    await expect(page.getByRole('table', { name: 'Application details review' })).toContainText(
-      'UI Test Contact',
-    )
-    await expect(page.getByRole('table', { name: 'Product details review' })).toContainText(
-      'HE, FI',
-    )
-
-    const reviewPanel = page.locator('.admin-upload-panel--submission-review')
-    await expect(reviewPanel).toHaveCSS('border-top-width', '0px')
-    await expect(reviewPanel).toHaveCSS('background-color', 'rgba(0, 0, 0, 0)')
-    await expect(page.locator('.admin-upload-submission-review__section')).toHaveCount(4)
-    await expect(page.locator('.admin-upload-submission-review__section').first()).toHaveCSS(
-      'border-radius',
-      '8px',
-    )
+    const reviewTable = page.getByRole('table', { name: 'Applications to create (1)' })
+    await expect(reviewTable).toContainText('UI-TEST-100')
+    await expect(reviewTable).toContainText('RSC')
+    await expect(reviewTable.getByText('UI Test Contact')).toBeHidden()
+    await page.getByRole('button', { name: 'Details for valid-submission.xml' }).click()
+    await expect(reviewTable.getByText('UI Test Contact')).toBeVisible()
+    await expect(reviewTable).toContainText('HE, FI')
 
     const actionGap = await page
-      .locator('.admin-upload-panel--submission-review .admin-upload-preview-footer-actions')
+      .locator('.application-upload-review__actions')
       .evaluate((actions) => {
         const buttons = actions.querySelectorAll('button')
         if (buttons.length !== 2) throw new Error('Review actions not found')
         return buttons[1].getBoundingClientRect().left - buttons[0].getBoundingClientRect().right
       })
     expect(actionGap).toBe(8)
+
+    await page.getByRole('button', { name: 'Create 1 application' }).click()
+
+    await expect(
+      page.getByRole('heading', { level: 1, name: '1 application created' }),
+    ).toBeFocused()
+    await expect(page.getByRole('table', { name: 'Created (1)' })).toContainText('UI-TEST-100')
+    await expect(page.getByRole('link', { name: '46820' })).toHaveAttribute(
+      'href',
+      '/provincial/application/46820',
+    )
 
     await page.setViewportSize({ width: 390, height: 844 })
     expect(
@@ -3369,37 +3368,47 @@ test.describe('FSPTS-aligned LEXIS shell', () => {
     ).toBe(false)
   })
 
-  test('presents application-submission validation failures as FSPTS issues', async ({ page }) => {
+  test('presents application upload validation failures as one notice and an issues table', async ({
+    page,
+  }) => {
     await page.setViewportSize({ width: 1440, height: 900 })
     await gotoSyntheticRoute(page, '/provincial/application/upload', {
       waitUntil: 'domcontentloaded',
       ready: page.getByRole('heading', {
         level: 1,
-        name: 'Upload application submission',
+        name: 'Upload applications',
         exact: true,
       }),
     })
 
-    await page.getByLabel('Application submission file').setInputFiles({
+    await page.getByLabel('Application files', { exact: true }).setInputFiles({
       name: 'invalid-submission.xml',
       mimeType: 'application/xml',
       buffer: Buffer.from('<InvalidLexisSubmission />', 'utf8'),
     })
 
-    await expect(
-      page.getByRole('heading', { name: '1 issue found in application submission' }),
-    ).toBeVisible()
-    const issuesTable = page.getByRole('table', { name: 'Validation issues' })
-    await expect(issuesTable.getByRole('columnheader', { name: 'Issue' })).toBeVisible()
-    await expect(issuesTable.getByRole('columnheader', { name: 'Submission file' })).toBeVisible()
+    await expect(page.getByText('1 file failed validation')).toBeVisible()
+    await expect(page.getByText('Correct the file and add it again.')).toBeVisible()
+    await expect(page.locator('.application-upload-file--failed')).toHaveCSS(
+      'border-top-color',
+      'rgb(179, 32, 1)',
+    )
+    const issuesTable = page.getByRole('table', { name: 'Validation issues (1)' })
+    await expect(issuesTable.getByRole('columnheader', { name: 'Application file' })).toBeVisible()
     await expect(issuesTable.getByRole('columnheader', { name: 'Detail' })).toBeVisible()
+    await expect(issuesTable.getByRole('columnheader', { name: 'Issue' })).toHaveCount(0)
     await expect(issuesTable).toContainText('invalid-submission.xml')
     await expect(issuesTable).toContainText('Synthetic package number is required.')
-    await expect(page.getByRole('link', { name: 'Download issues as CSV' })).toHaveAttribute(
+    await expect(page.getByRole('link', { name: 'Download issues (.csv)' })).toHaveAttribute(
       'download',
       'lexis-validation-issues.csv',
     )
-    await expect(page.getByRole('button', { name: 'Review' })).toBeDisabled()
+
+    await page.getByRole('button', { name: 'Review' }).click()
+
+    await expect(page.locator('.admin-upload-file-error')).toContainText(
+      'No files are ready for review. Correct the failed files and add them again.',
+    )
     await expect(page.getByText('Upload error')).toHaveCount(0)
   })
 

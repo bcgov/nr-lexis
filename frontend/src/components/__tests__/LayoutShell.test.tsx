@@ -411,7 +411,7 @@ describe('Layout shell', () => {
 
   it.each([
     ['/provincial/application/create', 'Create application'],
-    ['/provincial/application/upload', 'Upload'],
+    ['/provincial/application/upload', 'Upload applications'],
   ])('gives exact route %s priority over the application detail pattern', (path, linkName) => {
     renderLayout(path)
 
@@ -550,7 +550,7 @@ describe('Layout shell', () => {
     expect(screen.queryByRole('link', { name: 'Advertising List (CSV)' })).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: /Help/i })).not.toBeInTheDocument()
     await userEvent.click(screen.getByRole('button', { name: 'Provincial' }))
-    const uploadLinks = screen.getAllByRole('link', { name: /^Upload$/i })
+    const uploadLinks = screen.getAllByRole('link', { name: /^Upload applications$/i })
     expect(uploadLinks.map((link) => link.getAttribute('href'))).toEqual([
       '/provincial/application/upload',
     ])
@@ -790,7 +790,7 @@ describe('Layout shell', () => {
 
     renderLayout('/provincial/application/upload')
 
-    expect(screen.getByRole('link', { name: /^Upload$/i })).toBeVisible()
+    expect(screen.getByRole('link', { name: /^Upload applications$/i })).toBeVisible()
     expect(
       screen.queryByRole('link', { name: /Create\/Edit Application/i }),
     ).not.toBeInTheDocument()
