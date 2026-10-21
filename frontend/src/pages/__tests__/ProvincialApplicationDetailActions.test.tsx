@@ -2031,6 +2031,7 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
       summaryControls.getByRole('group', { name: 'List date' }),
       summaryControls.getByLabelText('Exemption term (days)'),
     ]
+    expect(summaryControls.getByLabelText('Application date')).not.toHaveAttribute('readonly')
     legacyOrderedControls.slice(1).forEach((control, index) => {
       expect(
         legacyOrderedControls[index].compareDocumentPosition(control) &
@@ -3094,6 +3095,7 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
           .map((radio) => radio.getAttribute('value')),
       ).toEqual(['987', '988'])
     })
+    expect(summaryControls.getByLabelText('Application date')).toHaveAttribute('readonly')
     within(listDate)
       .getAllByRole('radio')
       .forEach((radio) => expect(radio).not.toBeChecked())
@@ -3117,6 +3119,7 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
       expect(mockedUpdateApplicationSummary).toHaveBeenCalledWith(
         expect.objectContaining({
           applicationNumber: '321',
+          applicationDate: '2026-01-01',
           exportScheduleId: '988',
         }),
       )

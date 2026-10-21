@@ -705,6 +705,19 @@ class ApplicationEditPolicyServiceTest {
         .isFalse();
   }
 
+  @ParameterizedTest
+  @CsvSource({
+    "LEXIS_PROVINCIAL_SUBMITTER_00012345, true",
+    "LEXIS_APPLICATION_APPROVER, false",
+    "LEXIS_ADMIN|LEXIS_PROVINCIAL_SUBMITTER_00012345, false"
+  })
+  void industryUserIsAClientWithoutTheAdministratorRole(String roles, boolean industryUser) {
+    when(sessionService.parseRolesFromPrincipal(authentication))
+        .thenReturn(List.of(roles.split("\\|")));
+
+    assertThat(policyService.isIndustryUser(authentication)).isEqualTo(industryUser);
+  }
+
   private void allowRoles(String... roles) {
     List<String> grantedRoles = List.of(roles);
     when(sessionService.parseRolesFromPrincipal(authentication)).thenReturn(grantedRoles);
