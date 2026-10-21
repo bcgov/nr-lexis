@@ -96,6 +96,31 @@ describe('DisapproveApplicationModal', () => {
     expect(dialog.querySelector('.exemption-approval-modal__recipient--loading')).toBeNull()
   })
 
+  it('replaces the placeholder with one owner summary row when the owner has an email', async () => {
+    let finishLoad: (value: ReturnType<typeof summary>) => void = () => undefined
+    vi.mocked(fetchApplicationSummarySnapshot).mockReturnValueOnce(
+      new Promise((resolve) => {
+        finishLoad = resolve
+      }),
+    )
+    vi.mocked(fetchApplicationClientData).mockResolvedValue(clientData('owner@example.com'))
+    renderModal()
+
+    const dialog = await screen.findByRole('dialog', { name: 'Disapprove application 1000123' })
+    expect(dialog.querySelector('.exemption-approval-modal__recipient--loading')).not.toBeNull()
+
+    finishLoad(summary())
+    expect(await within(dialog).findByText('owner@example.com')).toBeInTheDocument()
+    // The placeholder is sized for this row: the owner's email beside its Edit recipients button.
+    expect(dialog.querySelector('.exemption-approval-modal__recipient--loading')).toBeNull()
+    const rows = dialog.querySelectorAll('.exemption-approval-modal__recipient')
+    expect(rows).toHaveLength(1)
+    expect(rows[0].querySelectorAll('dt')).toHaveLength(1)
+    expect(
+      rows[0].querySelector('.exemption-approval-modal__recipient-summary > .cds--btn'),
+    ).toHaveTextContent('Edit recipients')
+  })
+
   it('marks the recipient inputs invalid and described after a both-empty submit', async () => {
     renderModal()
     const dialog = await screen.findByRole('dialog', { name: 'Disapprove application 1000123' })

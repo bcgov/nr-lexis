@@ -29,8 +29,10 @@
   display: grid;
   gap: 1rem;
 }
+/* The placeholder holds the height of one loaded owner-only recipient row: its borders and
+   padding around the summary, whose Edit recipients button is pulled up to the first email line. */
 .exemption-approval-modal__recipient--loading {
-  min-block-size: 4.625rem;
+  min-block-size: calc(2px + 2rem + 2.5rem + (1.375rem - 2.5rem) / 2);
   align-content: center;
 }
 .exemption-approval-modal__recipient--batch {
@@ -103,6 +105,10 @@
   }
   .exemption-approval-modal__recipient-summary > .cds--btn {
     margin-block-start: 0;
+  }
+  /* The summary stacks its email line and the full-height Edit recipients button. */
+  .exemption-approval-modal__recipient--loading {
+    min-block-size: calc(2px + 2rem + 1.375rem + 1rem + 2.5rem);
   }
 }
 

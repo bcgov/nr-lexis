@@ -610,6 +610,14 @@ describe('ExemptionApprovalModal', () => {
     finishLoad(contacts)
     expect(await screen.findByText('owner@example.com')).toBeInTheDocument()
     expect(dialog.querySelector('.exemption-approval-modal__recipient--loading')).toBeNull()
+    // One recipient row takes the placeholder's place, with its Edit recipients button in the
+    // summary the placeholder's height is sized for.
+    const rows = dialog.querySelectorAll('.exemption-approval-modal__recipient')
+    expect(rows).toHaveLength(1)
+    expect(rows[0]).not.toHaveClass('exemption-approval-modal__recipient--batch')
+    expect(
+      rows[0].querySelector('.exemption-approval-modal__recipient-summary > .cds--btn'),
+    ).toHaveTextContent('Edit recipients')
   })
 
   it('keeps a single exemption number together in the visible title', async () => {
