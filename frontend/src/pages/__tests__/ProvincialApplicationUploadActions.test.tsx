@@ -173,6 +173,15 @@ describe('Upload applications', () => {
     expect(dropZone).toHaveFocus()
     expect(dropZone).toHaveClass('is-invalid')
     expect(screen.getByRole('heading', { level: 2, name: 'Upload' })).toBeVisible()
+    expect(screen.queryByRole('heading', { level: 2, name: 'Review' })).not.toBeInTheDocument()
+  })
+
+  it('focuses the page heading when the page opens with focus lost', async () => {
+    renderPage()
+
+    await waitFor(() =>
+      expect(screen.getByRole('heading', { level: 1, name: 'Upload applications' })).toHaveFocus(),
+    )
   })
 
   it('validates files one at a time and disables Review until they finish', async () => {
