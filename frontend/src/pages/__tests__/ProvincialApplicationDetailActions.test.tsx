@@ -3050,6 +3050,7 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
       applicationStatusCode: 'NEW',
       statusDescription: 'New',
       listingDate: null,
+      industryUser: true,
     })
     mockedFetchApplicationSummarySnapshot.mockResolvedValue({
       ...applicationSummarySnapshot,

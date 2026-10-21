@@ -1326,8 +1326,9 @@ const ProvincialApplicationDetailsPage = () => {
   const isProvincialSubmitter = hasProvincialSubmitterRole(capabilities?.roles)
   const requiresApplicationAccuracyAcknowledgement =
     detail?.industryUser === true || isProvincialSubmitter
-  // Clients cannot change the application date; staff can while the details are editable.
-  const applicationDateLocked = detail?.industryUser === true || isProvincialSubmitter
+  // Clients cannot change the application date; staff can while the details are editable. An
+  // Administrator who also holds a client role counts as staff, as on the server.
+  const applicationDateLocked = detail?.industryUser === true
   const canChangeApplicantType = canPerform('/changeApplicantType', applicationOrgUnit)
   // After the other details lock, an Application Approver can still add or remove the agent on
   // a Ministerial or Blanket OIC application while every permit it is on is Active or Payment

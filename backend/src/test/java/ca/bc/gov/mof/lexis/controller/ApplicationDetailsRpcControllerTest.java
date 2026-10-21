@@ -35,6 +35,7 @@ import ca.bc.gov.mof.lexis.service.session.LexisAuthorizationService;
 import ca.bc.gov.mof.lexis.service.session.ProvincialAuthorizationService;
 import ca.bc.gov.mof.lexis.service.session.ProvincialAuthorizationService.ApplicationItemMutation;
 import ca.bc.gov.mof.lexis.service.session.LexisSessionService;
+import ca.bc.gov.mof.lexis.util.LexisBusinessTime;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpSession;
 import java.io.ByteArrayOutputStream;
@@ -1097,7 +1098,7 @@ class ApplicationDetailsRpcControllerTest {
         ArgumentCaptor.forClass(ApplicationDetailsRpcService.CreateApplicationRequest.class);
     verify(service).addApplication(requestCaptor.capture(), org.mockito.ArgumentMatchers.eq("idir\\jsmith"));
     ApplicationDetailsRpcService.CreateApplicationRequest request = requestCaptor.getValue();
-    assertThat(request.applicationDate()).isEqualTo(LocalDate.of(2026, 3, 1));
+    assertThat(request.applicationDate()).isEqualTo(LexisBusinessTime.today());
     assertThat(request.receivedDate()).isEqualTo(LocalDate.of(2026, 3, 2));
     assertThat(request.agentClientNumber()).isEqualTo("00022222");
     assertThat(request.ownerClientNumber()).isEqualTo("00011111");

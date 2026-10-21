@@ -30,6 +30,7 @@ import ca.bc.gov.mof.lexis.service.session.ProvincialAuthorizationService;
 import ca.bc.gov.mof.lexis.service.session.ProvincialAuthorizationService.ApplicationItemMutation;
 import ca.bc.gov.mof.lexis.service.session.ProvincialAuthorizationService.OrgUnitSurface;
 import ca.bc.gov.mof.lexis.service.session.LexisSessionService;
+import ca.bc.gov.mof.lexis.util.LexisBusinessTime;
 import ca.bc.gov.mof.lexis.util.TextUtils;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.type.TypeReference;
@@ -2217,7 +2218,9 @@ public class ApplicationDetailsRpcController {
         APPLICATION_APPLICANT_TYPE_OWNER.equalsIgnoreCase(applicantTypeCode);
     return new ApplicationDetailsRpcService.CreateApplicationRequest(
         parsePositiveLong(first(parameters, "federalApplicationNumber", "fedApplicationNumber")),
-        parseDate(first(parameters, "applicationDate")),
+        // INTENTIONAL_LEGACY_DIVERGENCE(APPLICATION_CREATE_DATES): A new application is dated the
+        // business day it is created, whatever date the form sends.
+        LexisBusinessTime.today(),
         parsePositiveLong(first(parameters, "exemptionTerm", "termDays")),
         parseDate(first(parameters, "dateReceived", "receivedDate")),
         parseDouble(first(parameters, "applicationVolume")),

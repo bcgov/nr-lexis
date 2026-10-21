@@ -899,6 +899,7 @@ export const expectInvalidApplicationCreateValidation = async (
 
   expect(payload.valid ?? payload.success).toBe(false)
   expect(payload.applicationNumber ?? null).toBeNull()
-  expect(normalizedErrors).toContain('application date')
+  // The server dates every new application itself, so a blank Application date is not an error.
+  expect(normalizedErrors).not.toContain('application date')
   expect(normalizedErrors).toContain('application owner number')
 }
