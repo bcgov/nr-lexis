@@ -95,7 +95,7 @@ export default function IsoDatePicker({
       <DatePickerInput
         id={id}
         labelText={labelText}
-        placeholder="YYYY-MM-DD"
+        placeholder={readOnly ? undefined : 'YYYY-MM-DD'}
         helperText={readOnly ? undefined : 'year-month-day'}
         pattern={ISO_DATE_INPUT_PATTERN}
         data-1p-ignore="true"

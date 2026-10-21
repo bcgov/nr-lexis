@@ -84,6 +84,7 @@ describe('IsoDatePicker', () => {
     expect(input).toHaveAttribute('readonly')
     expect(input).toHaveValue('2026-10-21')
     expect(input._flatpickr.isOpen).toBe(false)
+    expect(input).not.toHaveAttribute('placeholder')
     expect(screen.queryByText('year-month-day')).not.toBeInTheDocument()
     expect(onChange).not.toHaveBeenCalled()
   })
