@@ -1077,7 +1077,11 @@ const ProvincialApplicationDetailsPage = () => {
         let editableSummaryForm = response
           ? normalizeSummaryAgentFields(toSummaryFormState(response))
           : null
-        setDetail(response)
+        // A first load keeps the page in its loading state until the summary is ready, so the
+        // heading is never inside the inert region that a refresh of a shown record uses.
+        if (retainingCurrentDetail || !response) {
+          setDetail(response)
+        }
         if (!preserveSummaryDraft) {
           // A refresh keeps the shown summary until the saved one arrives, so the client details
           // keep their locations instead of clearing and loading again in between.
@@ -1157,6 +1161,9 @@ const ProvincialApplicationDetailsPage = () => {
 
         // The core application and its editable summary are now stable. Permit and document reads
         // remain serial to avoid multiplying Oracle demand, but no longer keep the whole page inert.
+        if (!retainingCurrentDetail) {
+          setDetail(response)
+        }
         setLoading(false)
         const loadSecondarySections = async () => {
           try {

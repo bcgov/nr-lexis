@@ -196,6 +196,32 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
     await waitFor(() => expect(heading).toHaveFocus())
   })
 
+  it('keeps the title focused and the page usable while the first load waits for the summary', async () => {
+    let resolveSnapshot: (snapshot: typeof applicationSummarySnapshot) => void = () => undefined
+    mockedFetchApplicationSummarySnapshot.mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          resolveSnapshot = resolve
+        }),
+    )
+    const { container } = renderApplicationDetailPage()
+
+    const heading = await screen.findByRole('heading', { level: 1, name: 'Application 321' })
+    await waitFor(() => expect(mockedFetchApplicationSummarySnapshot).toHaveBeenCalled())
+    await waitFor(() => expect(heading).toHaveFocus())
+    expect(mockedFetchProvincialApplicationDetail).toHaveBeenCalled()
+    expect(container.querySelector('.provincial-application-detail')).not.toHaveAttribute('inert')
+    expect(screen.getByText('Loading provincial application detail…')).toBeInTheDocument()
+
+    await act(async () => {
+      resolveSnapshot(applicationSummarySnapshot)
+    })
+
+    await screen.findByRole('tab', { name: 'Application' })
+    expect(container.querySelector('.provincial-application-detail')).not.toHaveAttribute('inert')
+    expect(screen.getByRole('heading', { level: 1, name: 'Application 321' })).toHaveFocus()
+  })
+
   it('leaves focus where it already is when a record opens', async () => {
     const elsewhere = document.createElement('button')
     document.body.append(elsewhere)
