@@ -20,7 +20,6 @@ import MultiFileDropZone from '@/components/uploads/MultiFileDropZone'
 import UploadWorkflowProgress from '@/components/uploads/UploadWorkflowProgress'
 import {
   extractUploadErrorDetails,
-  GENERIC_SUBMISSION_FAILURE_MESSAGE,
   uploadQueueFileKey,
   validateUploadFileSize,
 } from '@/components/uploads/uploadQueueHelpers'
@@ -35,6 +34,7 @@ import ApplicationUploadFileList from './ApplicationUploadFileList'
 import ApplicationUploadResult from './ApplicationUploadResult'
 import ApplicationUploadReviewTable from './ApplicationUploadReviewTable'
 import ApplicationUploadTableCard from './ApplicationUploadTableCard'
+import { reasonContent } from './reasonContent'
 import {
   applicationCountLabel,
   buildValidationIssuesCsv,
@@ -60,22 +60,30 @@ const UPLOAD_FIELD_HELPER =
 const NO_FILES_ERROR = 'Add at least one file to review.'
 const NO_VALID_FILES_ERROR =
   'No files are ready for review. Correct the failed files and add them again.'
+const FILE_EMPTY_MESSAGE = 'The file is empty.'
+const FILE_TOO_LARGE_MESSAGE = 'The file must be 20 MB or smaller.'
 const VALIDATION_FAILURE_MESSAGE =
-  'Submission validation failed. Please try again. If the problem persists, contact your administrator.'
+  "We couldn't check this file. Try again later. If it keeps happening, report an issue."
+const SAVE_FAILURE_MESSAGE =
+  "We couldn't save this application. Try again later. If it keeps happening, report an issue."
 
 const localFileError = (file: File): string => {
   if (!file.name.trim()) {
     return 'File name is required.'
   }
   if (file.size === 0) {
-    return 'File is empty.'
+    return FILE_EMPTY_MESSAGE
   }
-  return validateUploadFileSize(file)
+  return validateUploadFileSize(file) ? FILE_TOO_LARGE_MESSAGE : ''
 }
 
 // A server or database failure shows the generic message, never what its response carries.
 const failureReasons = (error: unknown, fallbackMessage: string): string[] => {
-  if ((getResponseStatus(error) ?? 0) >= 500) {
+  const status = getResponseStatus(error) ?? 0
+  if (status === 413) {
+    return [FILE_TOO_LARGE_MESSAGE]
+  }
+  if (status >= 500) {
     return [fallbackMessage]
   }
   const { details } = extractUploadErrorDetails(error, fallbackMessage)
@@ -127,10 +135,10 @@ const createApplication = async (
     }
     return {
       ...outcome,
-      errors: failureReasons({ response: { data: result } }, GENERIC_SUBMISSION_FAILURE_MESSAGE),
+      errors: failureReasons({ response: { data: result } }, SAVE_FAILURE_MESSAGE),
     }
   } catch (error) {
-    return { ...outcome, errors: failureReasons(error, GENERIC_SUBMISSION_FAILURE_MESSAGE) }
+    return { ...outcome, errors: failureReasons(error, SAVE_FAILURE_MESSAGE) }
   }
 }
 
@@ -391,7 +399,7 @@ function ProvincialApplicationUploadPage() {
                           {issues.map((issue) => (
                             <TableRow key={issue.key}>
                               <TableCell>{issue.fileName}</TableCell>
-                              <TableCell>{issue.detail}</TableCell>
+                              <TableCell>{reasonContent(issue.detail)}</TableCell>
                             </TableRow>
                           ))}
                         </TableBody>

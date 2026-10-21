@@ -236,4 +236,26 @@ public record ApplicationSubmissionImportResultDto(
         null);
   }
 
+  public ApplicationSubmissionImportResultDto withErrors(
+      List<String> replacementErrors, String replacementMessage) {
+    return new ApplicationSubmissionImportResultDto(
+        uploadType,
+        fileName,
+        fileSize,
+        status,
+        replacementMessage,
+        applicationNumber,
+        packageNumber,
+        federalPermitNumber,
+        scaleRows,
+        replacementErrors,
+        warnings,
+        userReference,
+        submissionSummary,
+        requestId,
+        idempotencyKey,
+        payloadSha256,
+        sourceSystem,
+        payloadRootType);
+  }
 }

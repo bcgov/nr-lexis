@@ -4078,7 +4078,7 @@ class OracleApplicationDetailsRpcServiceTest {
 
     assertThat(response.valid()).isFalse();
     assertThat(response.errors())
-        .contains("The package average length must be less than or equal to 99.9.");
+        .contains("The package average length must be less than or equal to 99.0.");
   }
 
   @Test

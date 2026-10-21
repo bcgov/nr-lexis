@@ -145,11 +145,11 @@ public class ApplicationSubmissionImportService {
       "Federal submission endpoint only accepts jurisdictionCode=F. Provincial applications must use the modern provincial upload path.";
   private static final String PROVINCIAL_ENDPOINT_ONLY_ERROR =
       "Federal applications can't be uploaded here.";
+  private static final String INVALID_XML_MESSAGE = "The file isn't valid XML.";
+  private static final String SUMMARY_OF_SCALE_REQUIRED_ERROR = "Summary of scale is required.";
   private static final String ZIP_SINGLE_APPLICATION_ERROR =
       "A ZIP file can contain only one application file.";
-  // The upload page links "report an issue" to the support email.
-  private static final String APPLICATION_SAVE_FAILURE_ERROR =
-      "We couldn't save this application. Try again later. If it keeps happening, report an issue.";
+  private static final String APPLICATION_SAVE_FAILURE_ERROR = ProvincialUploadMessages.SAVE_FAILURE;
   private static final OrgUnitConstraint UNRESTRICTED_ORG_UNITS =
       new OrgUnitConstraint(false, List.of());
   private static final Pattern UNTERMINATED_XML_TAG_PATTERN =
@@ -262,13 +262,14 @@ public class ApplicationSubmissionImportService {
       String userReference,
       String expectedForestClientNumber,
       OrgUnitConstraint orgUnitConstraint) {
-    return validateApplicationSubmission(
-        file,
-        userReference,
-        false,
-        FEDERAL_ESF_ONLY_ERROR,
-        expectedForestClientNumber,
-        orgUnitConstraint);
+    return ProvincialUploadMessages.apply(
+        validateApplicationSubmission(
+            file,
+            userReference,
+            false,
+            FEDERAL_ESF_ONLY_ERROR,
+            expectedForestClientNumber,
+            orgUnitConstraint));
   }
 
   private ApplicationSubmissionImportResultDto validateApplicationSubmission(
@@ -302,7 +303,7 @@ public class ApplicationSubmissionImportService {
       return rejected(
           fileName,
           fileSize,
-          List.of("The LEXIS application submission file must be 20 MB or smaller."),
+          List.of("The file must be 20 MB or smaller."),
           List.of(),
           null,
           normalizedUserReference);
@@ -532,14 +533,15 @@ public class ApplicationSubmissionImportService {
       String userReference,
       String expectedForestClientNumber,
       OrgUnitConstraint orgUnitConstraint) {
-    return importApplicationSubmission(
-        file,
-        userId,
-        userReference,
-        false,
-        FEDERAL_ESF_ONLY_ERROR,
-        expectedForestClientNumber,
-        orgUnitConstraint);
+    return ProvincialUploadMessages.apply(
+        importApplicationSubmission(
+            file,
+            userId,
+            userReference,
+            false,
+            FEDERAL_ESF_ONLY_ERROR,
+            expectedForestClientNumber,
+            orgUnitConstraint));
   }
 
   private ApplicationSubmissionImportResultDto importApplicationSubmission(
@@ -858,7 +860,7 @@ public class ApplicationSubmissionImportService {
           rejected(
               fileName,
               fileSize,
-              List.of("The LEXIS application submission file could not be parsed."),
+              List.of("The file can't be read as XML."),
               List.of()));
     }
   }
@@ -888,12 +890,12 @@ public class ApplicationSubmissionImportService {
       }
     }
     throw new ApplicationSubmissionImportException(
-        List.of("The LEXIS application submission file must be an XML, GeoJSON, JSON, or ZIP file."));
+        List.of("The file must be an XML, ZIP, GeoJSON, or JSON file."));
   }
 
   private UploadedLexisSubmission readZippedLexisSubmission(MultipartFile file) throws Exception {
     if (!hasZipHeader(file)) {
-      throw new ApplicationSubmissionImportException(List.of("The uploaded Zip file is corrupt, and cannot be read."));
+      throw new ApplicationSubmissionImportException(List.of("The ZIP file is damaged and can't be opened. Create the ZIP file again."));
     }
 
     List<String> importEntryNames = new ArrayList<>();
@@ -942,7 +944,7 @@ public class ApplicationSubmissionImportService {
         zipInputStream.closeEntry();
       }
     } catch (ZipException ex) {
-      throw new ApplicationSubmissionImportException(List.of("The uploaded Zip file is corrupt, and cannot be read."));
+      throw new ApplicationSubmissionImportException(List.of("The ZIP file is damaged and can't be opened. Create the ZIP file again."));
     }
 
     if (!unexpectedEntryNames.isEmpty()
@@ -1077,12 +1079,12 @@ public class ApplicationSubmissionImportService {
       totalBytes += bytesRead;
       if (totalBytes > MAX_IMPORT_BYTES) {
         throw new ApplicationSubmissionImportException(
-            List.of("The LEXIS application submission file must be 20 MB or smaller."));
+            List.of("The file must be 20 MB or smaller."));
       }
       outputStream.write(buffer, 0, bytesRead);
     }
     if (totalBytes == 0L) {
-      throw new ApplicationSubmissionImportException(List.of("The LEXIS application submission file is empty."));
+      throw new ApplicationSubmissionImportException(List.of("The file is empty."));
     }
     return outputStream.toByteArray();
   }
@@ -1504,7 +1506,7 @@ public class ApplicationSubmissionImportService {
     try {
       root = objectMapper.readTree(geoJsonBytes);
     } catch (Exception ex) {
-      throw new ApplicationSubmissionImportException(List.of("The GeoJSON file is not well-formed JSON."));
+      throw new ApplicationSubmissionImportException(List.of("The file isn't valid GeoJSON."));
     }
 
     List<String> errors = new ArrayList<>();
@@ -2079,12 +2081,7 @@ public class ApplicationSubmissionImportService {
       return;
     }
     if (!SUPPORTED_LEXIS_SCHEMA_LOCATIONS.contains(actualSchemaLocation)) {
-      errors.add(
-          "The XML schema location must use a supported LEXIS schema version "
-              + LEXIS_SCHEMA_LOCATION_V2
-              + " or "
-              + LEXIS_SCHEMA_LOCATION_V3
-              + ".");
+      errors.add("The file uses a LEXIS schema version that isn't supported. Use version 2 or 3.");
     }
   }
 
@@ -2132,16 +2129,16 @@ public class ApplicationSubmissionImportService {
   private String formatXmlLocation(SAXParseException exception) {
     if (exception.getLineNumber() > 0) {
       String column =
-          exception.getColumnNumber() > 0 ? " Column: " + exception.getColumnNumber() : "";
-      return "Line: " + exception.getLineNumber() + column + ": ";
+          exception.getColumnNumber() > 0 ? ", column " + exception.getColumnNumber() : "";
+      return "Line " + exception.getLineNumber() + column + ": ";
     }
-    return "Line UNKNOWN: ";
+    return "";
   }
 
   private String normalizeXmlParseMessage(String message) {
     String normalized = trimToNull(message);
     if (normalized == null) {
-      return "The submission is not a well-formed XML document.";
+      return INVALID_XML_MESSAGE;
     }
     if (normalized.contains("maxElementDepth")) {
       return "XML elements must not be nested more than " + MAX_XML_ELEMENT_DEPTH + " levels deep.";
@@ -2170,7 +2167,7 @@ public class ApplicationSubmissionImportService {
           + "'.";
     }
 
-    return "The submission is not a well-formed XML document. " + normalized;
+    return INVALID_XML_MESSAGE + " " + normalized;
   }
 
   private static Schema loadLexisSchema(String resourceName) {
@@ -2354,14 +2351,25 @@ public class ApplicationSubmissionImportService {
         (hasHarvestedTimber ? 1 : 0)
             + (hasHarvestedWithoutSummary ? 1 : 0)
             + (hasStandingTimber ? 1 : 0);
+    // A provincial application can only be uploaded with a summary of scale, so a provincial file
+    // with any other timber rows gets one message instead of the checks for those rows.
+    boolean federalFile = FEDERAL_JURISDICTION.equals(jurisdictionCode);
     if (shapeCount == 0) {
       errors.add(
-          "Product details must include harvestedTimber, harvestedTimberWithoutSummaryOfScale, or standingTimber rows.");
+          federalFile
+              ? "Product details must include harvestedTimber, harvestedTimberWithoutSummaryOfScale, or standingTimber rows."
+              : SUMMARY_OF_SCALE_REQUIRED_ERROR);
       return new ParsedProduct(null, null, null, List.of());
     }
     if (shapeCount > 1) {
       errors.add(
-          "Product details must not mix harvestedTimber, harvestedTimberWithoutSummaryOfScale, and standingTimber rows.");
+          federalFile
+              ? "Product details must not mix harvestedTimber, harvestedTimberWithoutSummaryOfScale, and standingTimber rows."
+              : "The file can only include summary of scale lines.");
+      return new ParsedProduct(null, null, null, List.of());
+    }
+    if (!federalFile && !hasHarvestedTimber) {
+      errors.add(SUMMARY_OF_SCALE_REQUIRED_ERROR);
       return new ParsedProduct(null, null, null, List.of());
     }
 
@@ -2377,16 +2385,13 @@ public class ApplicationSubmissionImportService {
       return parseHarvestedSummaryProduct(productDetail, errors);
     }
     if (hasHarvestedWithoutSummary) {
-      boolean federal = FEDERAL_JURISDICTION.equals(jurisdictionCode);
       return parseDeclaredVolumeProduct(
           productDetail,
           harvestedWithoutSummaryRows,
           "Harvested timber without summary",
           !FederalSubmissionPackagePolicy.allowsWithoutPackage(
               jurisdictionCode, productTypeCode, orgUnitNumber, false),
-          federal
-              ? "Boom/package number must not be provided for federal harvested timber without summary of scale."
-              : "Boom/package number must not be provided for harvested timber without summary of scale.",
+          "Boom/package number must not be provided for federal harvested timber without summary of scale.",
           errors);
     }
     boolean federalStanding =
@@ -2503,7 +2508,10 @@ public class ApplicationSubmissionImportService {
       String timberMark = upper(text(harvestedTimber, "timberMark", "Scale timber mark", errors));
       Long pieces =
           parseNonNegativeLong(
-              text(harvestedTimber, "numberOfPieces", "Scale pieces", errors), "pieces", errors);
+              text(harvestedTimber, "numberOfPieces", "Scale pieces", errors),
+              "pieces",
+              "A valid number of pieces is required.",
+              errors);
       String species = upper(text(harvestedTimber, "species", "Scale species", errors));
       String grade = upper(text(harvestedTimber, "grade", "Scale grade", errors));
       Double volume =
@@ -2803,8 +2811,13 @@ public class ApplicationSubmissionImportService {
   }
 
   private Long parseNonNegativeLong(String value, String label, List<String> errors) {
+    return parseNonNegativeLong(value, label, "A valid " + label + " is required.", errors);
+  }
+
+  private Long parseNonNegativeLong(
+      String value, String label, String invalidMessage, List<String> errors) {
     if (value == null) {
-      errors.add("A valid " + label + " is required.");
+      errors.add(invalidMessage);
       return null;
     }
     try {
@@ -2815,7 +2828,7 @@ public class ApplicationSubmissionImportService {
       }
       return parsed;
     } catch (NumberFormatException ex) {
-      errors.add("A valid " + label + " is required.");
+      errors.add(invalidMessage);
       return null;
     }
   }
@@ -3080,7 +3093,7 @@ public class ApplicationSubmissionImportService {
     return rejected(
         fileName,
         fileSize,
-        List.of("Submission owner or agent must match the authenticated forest-client scope."),
+        List.of("You can only upload applications where your client is the owner or the agent."),
         warnings,
         submissionSummary,
         userReference);
@@ -3100,7 +3113,7 @@ public class ApplicationSubmissionImportService {
     return rejected(
         fileName,
         fileSize,
-        List.of("Submission forest region is outside the authenticated organization-unit scope."),
+        List.of("You can only upload applications for regions you have access to."),
         warnings,
         submissionSummary,
         userReference);
