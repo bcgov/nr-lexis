@@ -100,11 +100,17 @@ describe('IsoDateRangePicker', () => {
     expect(document.querySelector('.flatpickr-calendar.open')).toBeNull()
   })
 
-  it('keeps focus on the control that resets the bounds to an end-only default after To was last used', async () => {
-    render(<Range initial={['2026-01-10', '2026-01-20']} />)
+  it('keeps focus on the control that resets the bounds to an end-only default after To was last typed in', async () => {
+    render(<Range initial={['', '2026-10-14']} />)
+    await userEvent.type(screen.getByLabelText('List date from'), '2026-03-01')
     const to = screen.getByLabelText('List date to')
-    await userEvent.click(to)
-    await userEvent.click(screen.getByRole('button', { name: 'Outside' }))
+    await userEvent.clear(to)
+    await userEvent.type(to, '2026-03-05')
+    await waitFor(() =>
+      expect(screen.getByLabelText('Search bounds')).toHaveTextContent(
+        '["2026-03-01","2026-03-05"]',
+      ),
+    )
     const reset = screen.getByRole('button', { name: 'Reset to default end' })
 
     await userEvent.click(reset)
