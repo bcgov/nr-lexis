@@ -2520,6 +2520,21 @@ class ApplicationSubmissionImportServiceTest {
   }
 
   @Test
+  void shouldRejectAZipFileThatIsCutOffInsideItsFirstEntry() {
+    byte[] cutOff =
+        ("PK\u0003\u0004" + "test-2026-10-20".repeat(20)).getBytes(StandardCharsets.ISO_8859_1);
+
+    ApplicationSubmissionImportResultDto result =
+        service()
+            .validateApplicationSubmission(
+                new MockMultipartFile("formFile", "cut-off.zip", "application/zip", cutOff));
+
+    assertThat(result.status()).isEqualTo("rejected");
+    assertThat(result.errors())
+        .containsExactly("The ZIP file is damaged and can't be opened. Create the ZIP file again.");
+  }
+
+  @Test
   void shouldRejectCorruptZipFiles() {
     ApplicationSubmissionImportService service = service();
     MockMultipartFile file =

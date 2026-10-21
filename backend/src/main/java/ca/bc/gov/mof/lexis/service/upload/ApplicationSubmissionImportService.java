@@ -27,6 +27,7 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
+import java.io.EOFException;
 import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
@@ -943,7 +944,8 @@ public class ApplicationSubmissionImportService {
         }
         zipInputStream.closeEntry();
       }
-    } catch (ZipException ex) {
+    } catch (ZipException | EOFException ex) {
+      // An EOFException means the ZIP was cut off part-way.
       throw new ApplicationSubmissionImportException(List.of("The ZIP file is damaged and can't be opened. Create the ZIP file again."));
     }
 
