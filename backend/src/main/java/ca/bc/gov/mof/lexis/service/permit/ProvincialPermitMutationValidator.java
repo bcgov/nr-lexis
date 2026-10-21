@@ -22,14 +22,14 @@ import java.util.function.Predicate;
 final class ProvincialPermitMutationValidator {
 
   static final String PAYMENT_PENDING_WARNING =
-      "Receipt number should not be empty for a complete permit so it will be saved as Payment Pending.";
+      "Receipt number should not be empty for a complete permit so it will be saved as Payment pending.";
 
   /**
    * Refusal for a ministry staff shipping save that would move an Interior Complete permit to
    * Payment pending.
    */
   static final String PAYMENT_PENDING_SHIPPING_MESSAGE =
-      "Fee Receipt Number should not be empty for a complete Permit so it will be saved as Payment Pending.";
+      "Receipt number should not be empty for a complete permit so it will be saved as Payment pending.";
 
   private static final String STATUS_ACTIVE = "ACT";
   private static final String STATUS_COMPLETE = "COM";

@@ -244,6 +244,7 @@ const RecordDocumentsSection = <Row extends DocumentRowBase>({
                           renderIcon={Launch}
                           disabled={openDisabled}
                           title="Open supported files in a new tab; other formats download."
+                          aria-label={`Open ${row.name}`}
                           onClick={() => onOpen(row, true)}
                         >
                           Open
@@ -253,6 +254,7 @@ const RecordDocumentsSection = <Row extends DocumentRowBase>({
                           size="md"
                           renderIcon={Download}
                           disabled={openDisabled}
+                          aria-label={`Download ${row.name}`}
                           onClick={() => onOpen(row, false)}
                         >
                           Download
@@ -263,6 +265,7 @@ const RecordDocumentsSection = <Row extends DocumentRowBase>({
                             size="md"
                             renderIcon={TrashCan}
                             disabled={removing}
+                            aria-label={`${removing ? 'Deleting…' : 'Delete'} ${row.name}`}
                             onClick={() => {
                               onDeleteStart?.()
                               setPendingDeletion(row)

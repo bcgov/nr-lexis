@@ -812,12 +812,12 @@ const adminNavigationSections: Array<{
   {
     section: 'Reports',
     links: [
-      'Advertising List',
-      'Offers Report',
-      'Permits Report',
-      'Transport Report',
-      'Species and Grade Report',
-      'Tenure Analysis',
+      'Advertising list',
+      'Offers report',
+      'Permits report',
+      'Transport report',
+      'Species and grade report',
+      'Tenure analysis report',
     ],
   },
   {
@@ -2095,12 +2095,12 @@ test.describe('TEST IDIR admin regression', () => {
     await expandSideNavSection(page, 'Reports')
 
     for (const [linkName, path, heading] of [
-      ['Advertising List', '/reports/biweeklyListing', /advertising list/i],
-      ['Offers Report', '/reports/offerReport', /offers report/i],
-      ['Permits Report', '/reports/permitLedgerReport', /permits report/i],
-      ['Transport Report', '/reports/transportReport', /transport report/i],
-      ['Species and Grade Report', '/reports/speciesGradeReport', /species and grade report/i],
-      ['Tenure Analysis', '/reports/tenureReport', /tenure analysis report/i],
+      ['Advertising list', '/reports/biweeklyListing', /advertising list/i],
+      ['Offers report', '/reports/offerReport', /offers report/i],
+      ['Permits report', '/reports/permitLedgerReport', /permits report/i],
+      ['Transport report', '/reports/transportReport', /transport report/i],
+      ['Species and grade report', '/reports/speciesGradeReport', /species and grade report/i],
+      ['Tenure analysis report', '/reports/tenureReport', /tenure analysis report/i],
     ] as const) {
       await page.locator(sideNavSection('Reports')).getByRole('link', { name: linkName }).click()
       await expect(page.getByRole('heading', { name: heading }).first()).toBeVisible()
@@ -2512,7 +2512,7 @@ test.describe('TEST IDIR admin regression', () => {
     )
     expect(response?.status(), 'client summary should load through the frontend route').toBe(200)
     await expect(deniedHeading).toBeVisible()
-    await expect(page.getByRole('heading', { name: '404' })).toHaveCount(0)
+    await expect(page.getByRole('heading', { name: 'Page not found' })).toHaveCount(0)
     await expect(page.getByRole('button', { name: /log in with idir/i })).toHaveCount(0)
 
     // Logging out here would end the shared session, so the button is only checked.
@@ -2608,7 +2608,7 @@ test.describe('TEST IDIR admin regression', () => {
     await expect(page.getByRole('heading', { name: 'Upload' })).toHaveCount(0)
     await expect(page.getByRole('link', { name: 'Download template' })).toHaveCount(0)
     await expect(
-      page.getByRole('button', { name: 'Choose an average monthly values upload spreadsheet' }),
+      page.getByRole('button', { name: 'Choose an average market values spreadsheet' }),
     ).toHaveCount(0)
     await expect(page.getByLabel('Effective month')).toBeVisible()
     await expect(page.getByRole('radio')).toHaveCount(0)
@@ -4807,7 +4807,12 @@ test.describe('TEST IDIR admin regression', () => {
           .filter({
             has: page.getByRole('link', { name: String(lifecycleApplicationNumber), exact: true }),
           })
-        await applicationRow.getByRole('button', { name: 'Remove', exact: true }).click()
+        await applicationRow
+          .getByRole('button', {
+            name: `Remove application ${lifecycleApplicationNumber}`,
+            exact: true,
+          })
+          .click()
         const removeDialog = page.getByRole('dialog', {
           name: 'Are you sure you want to remove this application?',
         })

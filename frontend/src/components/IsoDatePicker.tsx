@@ -72,9 +72,15 @@ export default function IsoDatePicker({
       parseDate={parseIsoDate}
       value={flatpickrValue}
       onOpen={placeCalendarAfterMotion}
-      onChange={(_selectedDates, dateString) => {
+      onChange={(_selectedDates, dateString, calendar) => {
         const latestInputValue = latestInputValueRef.current
         if (!dateString && latestInputValue.trim() && !isValidIsoDate(latestInputValue)) {
+          // Enter makes Flatpickr empty the input without blurring it, so put the text back.
+          requestAnimationFrame(() => {
+            if (latestInputValueRef.current === latestInputValue) {
+              calendar.input.value = latestInputValue
+            }
+          })
           return
         }
         if (dateString !== value) {

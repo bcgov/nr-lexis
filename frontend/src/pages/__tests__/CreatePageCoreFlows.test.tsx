@@ -147,6 +147,8 @@ const mockedValidateOfferApplication = vi.mocked(validateOfferApplication)
 const mockedUseAuth = vi.mocked(useAuth)
 const mockedFetchOfferScaleDetails = vi.mocked(fetchOfferScaleDetails)
 
+type EndUseOptions = Awaited<ReturnType<typeof fetchApplicationEndUsesForSpeciesRegion>>
+
 const successfulCreate = (createdId: string): CreateSubmissionResult => ({
   success: true,
   message: 'ok',
@@ -638,7 +640,7 @@ describe('Create Page Core Flows', () => {
     )
   })
 
-  it('counts species once a region is chosen and explains the wait until then', async () => {
+  it('counts species once a region is chosen without a helper under the disabled field', async () => {
     render(
       <MemoryRouter initialEntries={['/provincial/application/create']}>
         <Routes>
@@ -661,8 +663,91 @@ describe('Create Page Core Flows', () => {
     expect(scale.querySelectorAll('.cds--form-requirement')).toHaveLength(
       Number(scaleTab.textContent?.replace(/\D/g, '')),
     )
-    expect(within(scale).getByText('Select a region before adding species')).toBeVisible()
+    expect(within(scale).getByRole('combobox', { name: /^Species list/ })).toBeDisabled()
+    expect(within(scale).getByPlaceholderText('Select region first')).toBeVisible()
+    expect(within(scale).queryByText(/Select a region before adding species/)).toBeNull()
     expect(within(scale).queryByText(/At least one species is required/)).toBeNull()
+  })
+
+  it('selects the first required tab with an error when Save is refused', async () => {
+    render(
+      <MemoryRouter
+        initialEntries={[
+          '/provincial/application/create?ownerClientNumber=00011111&ownerClientLocationCode=00&ownerContactName=Owner%20Contact',
+        ]}
+      >
+        <Routes>
+          <Route
+            path="/provincial/application/create"
+            element={<ProvincialApplicationCreatePage />}
+          />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    const saveButton = await screen.findByRole('button', { name: 'Save application' })
+    await waitForApplicationCreateLoads('Applicant client details')
+    await userEvent.click(saveButton)
+    await screen.findByText('Cannot save yet.')
+
+    expect(screen.getByRole('tab', { name: 'Applicant' })).toBeVisible()
+    const applicationTab = screen.getByRole('tab', {
+      name: /^Application, \d+ required fields? outstanding$/,
+    })
+    expect(
+      screen.getByRole('tab', { name: /^Scale, \d+ required fields? outstanding$/ }),
+    ).toBeVisible()
+    expect(applicationTab).toHaveAttribute('aria-selected', 'true')
+    expect(mockedSubmitProvincialApplicationCreate).not.toHaveBeenCalled()
+  })
+
+  it('holds Save while end uses load for the chosen species and then saves the first end use', async () => {
+    mockedSubmitProvincialApplicationCreate.mockResolvedValue(successfulCreate('902'))
+    let resolveEndUses: (options: EndUseOptions) => void = () => undefined
+    mockedFetchApplicationEndUsesForSpeciesRegion.mockReturnValue(
+      new Promise<EndUseOptions>((resolve) => {
+        resolveEndUses = resolve
+      }),
+    )
+
+    render(
+      <MemoryRouter
+        initialEntries={[
+          '/provincial/application/create?ownerClientNumber=00011111&ownerClientLocationCode=00&ownerContactName=Owner%20Contact&productTypeCode=LOG&ageClass=O&exemptionReason=U&region=11&applicationDate=2026-01-09&applicationTermDays=30&listingDate=2026-01-11&productLocation=Camp%201&applicationVolume=125.5&averageLogVolume=1.2&speciesCodes=HE',
+        ]}
+      >
+        <Routes>
+          <Route
+            path="/provincial/application/create"
+            element={<ProvincialApplicationCreatePage />}
+          />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    const saveButton = await screen.findByRole('button', { name: 'Save application' })
+    await waitForApplicationCreateLoads('Applicant client details')
+    await waitFor(() => expect(mockedFetchApplicationEndUsesForSpeciesRegion).toHaveBeenCalled())
+    await userEvent.click(saveButton)
+
+    expect(
+      await screen.findByText('End uses must finish loading before this application can be saved.'),
+    ).toBeVisible()
+    expect(mockedSubmitProvincialApplicationCreate).not.toHaveBeenCalled()
+
+    await act(async () => {
+      resolveEndUses([{ code: 'SA', description: 'Sawlog' }])
+    })
+    await userEvent.click(saveButton)
+
+    await waitFor(() =>
+      expect(mockedSubmitProvincialApplicationCreate).toHaveBeenCalledWith(
+        expect.objectContaining({ speciesCodes: ['HE'], endUseCode: 'SA' }),
+      ),
+    )
+    expect(
+      screen.queryByText('End uses must finish loading before this application can be saved.'),
+    ).not.toBeInTheDocument()
   })
 
   it.each([
@@ -1016,6 +1101,42 @@ describe('Create Page Core Flows', () => {
 
     expect(mockedFetchApplicationClientData).toHaveBeenCalledWith('00011111', '00')
     expect(mockedFetchApplicationClientData).toHaveBeenCalledWith('00033333', '01')
+  })
+
+  it('groups a ten-digit phone and fax number and shows other values as stored', async () => {
+    mockedFetchApplicationClientData.mockImplementation(async (clientNumber) => ({
+      clientNumber: clientNumber.padStart(8, '0'),
+      companyName: 'Owner Forestry Ltd.',
+      clientAcronym: '',
+      address: '123 Timber Road',
+      city: 'Victoria',
+      province: 'BC',
+      postalCode: 'V8V 1A1',
+      country: 'Canada',
+      phone: '2505550100',
+      fax: '250-555-0101',
+      email: 'owner@example.test',
+      notfound: '',
+    }))
+    render(
+      <MemoryRouter
+        initialEntries={[
+          '/provincial/application/create?ownerClientNumber=00011111&ownerClientLocationCode=00&ownerContactName=Owner%20Contact',
+        ]}
+      >
+        <Routes>
+          <Route
+            path="/provincial/application/create"
+            element={<ProvincialApplicationCreatePage />}
+          />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    const ownerDetails = await screen.findByRole('region', { name: 'Applicant client details' })
+    expect(within(ownerDetails).getByText('(250) 555-0100')).toBeInTheDocument()
+    expect(within(ownerDetails).getByText('250-555-0101')).toBeInTheDocument()
+    expect(within(ownerDetails).queryByText('2505550100')).not.toBeInTheDocument()
   })
 
   it('keeps agent entry and validation within Applicant and clears it when the agent is removed', async () => {
@@ -1566,7 +1687,11 @@ describe('Create Page Core Flows', () => {
     expect(screen.queryByRole('tab', { name: 'Agent' })).not.toBeInTheDocument()
     expect(screen.getByRole('checkbox', { name: "I'm an agent" })).not.toBeChecked()
     expect(screen.queryByRole('region', { name: 'Agent information' })).not.toBeInTheDocument()
-    expect(screen.getByRole('textbox', { name: 'Client' })).toHaveValue('00077881')
+    await waitFor(() =>
+      expect(screen.getByRole('textbox', { name: 'Client' })).toHaveValue(
+        'Owner Forestry Ltd. · 00077881',
+      ),
+    )
     expect(mockedFetchApplicationClientLocations).not.toHaveBeenCalledWith('00033333', 'agent')
   })
 
@@ -1650,7 +1775,7 @@ describe('Create Page Core Flows', () => {
 
     const agentInformation = screen.getByRole('region', { name: 'Agent information' })
     const agentClient = within(agentInformation).getByRole('textbox', { name: 'Agent client' })
-    expect(agentClient).toHaveValue('00077881')
+    await waitFor(() => expect(agentClient).toHaveValue('Owner Forestry Ltd. · 00077881'))
     expect(agentClient).toHaveAttribute('readonly')
     await waitFor(() =>
       expect(
@@ -1696,6 +1821,40 @@ describe('Create Page Core Flows', () => {
       ),
     )
   }, 20_000)
+
+  it('names a locked submitter owner and agent by company, acronym and number', async () => {
+    mockedFetchApplicationClientData.mockImplementation(async (clientNumber) => ({
+      clientNumber: clientNumber.padStart(8, '0'),
+      companyName: 'Submitter Forestry Ltd.',
+      clientAcronym: 'FCC',
+      address: '123 Timber Road',
+      city: 'Victoria',
+      province: 'BC',
+      postalCode: 'V8V 1A1',
+      country: 'Canada',
+      phone: '',
+      fax: '',
+      email: '',
+      notfound: '',
+    }))
+    renderSubmitterApplicationCreate(READY_SUBMITTER_APPLICATION_QUERY)
+
+    await selectApplicationCreateTab('Applicant')
+    await waitForApplicationCreateLoads('Applicant client details')
+    await waitFor(() =>
+      expect(screen.getByRole('textbox', { name: 'Client' })).toHaveValue(
+        'Submitter Forestry Ltd. (FCC) · 00077881',
+      ),
+    )
+
+    await userEvent.click(screen.getByRole('checkbox', { name: "I'm an agent" }))
+    const agentInformation = screen.getByRole('region', { name: 'Agent information' })
+    await waitFor(() =>
+      expect(within(agentInformation).getByRole('textbox', { name: 'Agent client' })).toHaveValue(
+        'Submitter Forestry Ltd. (FCC) · 00077881',
+      ),
+    )
+  })
 
   it('refuses the submitter agent as the owner too', async () => {
     renderSubmitterApplicationCreate(READY_SUBMITTER_APPLICATION_QUERY)
@@ -1759,7 +1918,7 @@ describe('Create Page Core Flows', () => {
     await userEvent.click(agentChoice)
     expect(screen.queryByRole('region', { name: 'Agent information' })).not.toBeInTheDocument()
     const ownerClient = screen.getByRole('textbox', { name: 'Client' })
-    expect(ownerClient).toHaveValue('00077881')
+    await waitFor(() => expect(ownerClient).toHaveValue('Owner Forestry Ltd. · 00077881'))
     expect(ownerClient).toHaveAttribute('readonly')
     await waitFor(() =>
       expect(screen.getByRole('combobox', { name: 'Client location' })).toHaveValue('00'),
@@ -1967,7 +2126,11 @@ describe('Create Page Core Flows', () => {
     expect(screen.queryByRole('radio', { name: 'No list date' })).not.toBeInTheDocument()
 
     await selectApplicationCreateTab('Applicant')
-    expect(screen.getByRole('textbox', { name: 'Client' })).toHaveValue('00077881')
+    await waitFor(() =>
+      expect(screen.getByRole('textbox', { name: 'Client' })).toHaveValue(
+        'Owner Forestry Ltd. · 00077881',
+      ),
+    )
     expect(screen.getByRole('textbox', { name: 'Client' })).toHaveAttribute('readonly')
     await waitFor(() => {
       expect(screen.getByRole('combobox', { name: 'Client location' })).toHaveValue('00')

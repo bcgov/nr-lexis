@@ -115,6 +115,13 @@ describe('Provincial Offer Detail Actions', () => {
     })
   })
 
+  it('focuses the page heading when the offer opens with focus lost', async () => {
+    renderPage()
+
+    const heading = await screen.findByRole('heading', { name: 'Offer 81001', level: 1 })
+    await waitFor(() => expect(heading).toHaveFocus())
+  })
+
   it('renders one semantic page heading and exposes editing as a page action', async () => {
     renderPage()
 
@@ -127,8 +134,8 @@ describe('Provincial Offer Detail Actions', () => {
     expect(screen.getAllByRole('heading', { level: 1 })).toHaveLength(1)
     expect(pageHeader).toBeTruthy()
     expect(
-      within(pageHeader as HTMLElement).getByText('Check and manage this provincial offer'),
-    ).toBeInTheDocument()
+      within(pageHeader as HTMLElement).queryByText('Check and manage this provincial offer'),
+    ).not.toBeInTheDocument()
     expect(screen.getByRole('link', { name: 'Back to Offer search' })).toHaveAttribute(
       'href',
       '/provincial/offers',

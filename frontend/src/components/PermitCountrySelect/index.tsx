@@ -89,7 +89,10 @@ export default function PermitCountrySelect({
   return (
     <ComboBox
       id={id}
-      className="permit-country-select"
+      // Clearing a required country only leaves it empty.
+      className={['permit-country-select', required && value && 'lexis-combobox--no-clear']
+        .filter(Boolean)
+        .join(' ')}
       titleText={labelText}
       items={visibleOptions}
       selectedItem={selectedItem}

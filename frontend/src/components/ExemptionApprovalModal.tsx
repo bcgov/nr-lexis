@@ -148,6 +148,16 @@ const ExemptionApprovalModal = ({
       ? `Approve ${numbers.length} exemptions`
       : `Approve exemption ${numbers[0]}`
 
+  // A single exemption's number stays on one line in the visible title; aria-label keeps plain text.
+  const headerTitle =
+    !retrying && !plural ? (
+      <>
+        Approve exemption <span className="lexis-record-number">{numbers[0]}</span>
+      </>
+    ) : (
+      title
+    )
+
   useEffect(() => {
     onBusyChange?.(pending)
   }, [onBusyChange, pending])
@@ -405,7 +415,7 @@ const ExemptionApprovalModal = ({
           return true
         }}
       >
-        <ModalHeader title={title} />
+        <ModalHeader title={headerTitle} />
         <ModalBody hasScrollingContent>
           <div id={`approval-intro-${id}`} tabIndex={-1} className="lexis-confirmation-modal__body">
             {!retrying && (
@@ -453,7 +463,11 @@ const ExemptionApprovalModal = ({
                     onChange={(_, { checked }) => setSendEmail(Boolean(checked))}
                   />
                   {showEmailErrorUnderCheckbox && (
-                    <p className="exemption-approval-modal__error" role="alert">
+                    <p
+                      id={`approval-email-error-${id}`}
+                      className="exemption-approval-modal__error"
+                      role="alert"
+                    >
                       <WarningFilled aria-hidden="true" />
                       <span>
                         Enter at least one email, or clear “Send approval email” to notify the
@@ -474,7 +488,12 @@ const ExemptionApprovalModal = ({
                     : 'Approval emails go to the recipients below. At least one email address is needed.'}
                 </p>
                 {loading && (
-                  <Loading small withOverlay={false} description="Loading approval recipients…" />
+                  <section
+                    className="exemption-approval-modal__recipient exemption-approval-modal__recipient--loading"
+                    aria-busy="true"
+                  >
+                    <Loading small withOverlay={false} description="Loading approval recipients…" />
+                  </section>
                 )}
                 {loadError && (
                   <AppNotification
@@ -487,6 +506,14 @@ const ExemptionApprovalModal = ({
                   const isEditing = editing.includes(row.exemptionNumber)
                   const showRowError =
                     submitAttempted && (plural || retrying) && row.sendable && missingAddress(row)
+                  const rowErrorId = `approval-${id}-${row.exemptionNumber}-error`
+                  // The error that says this row needs an address: the one under the checkbox
+                  // for a single approval, or the row's own error.
+                  const missingErrorId = showEmailErrorUnderCheckbox
+                    ? `approval-email-error-${id}`
+                    : showRowError
+                      ? rowErrorId
+                      : ''
                   const update = (field: ContactField, value: string) =>
                     setRecipients((current) =>
                       current.map((item) =>
@@ -513,7 +540,11 @@ const ExemptionApprovalModal = ({
                               <p className="exemption-approval-modal__note">{row.message}</p>
                             )}
                             {showRowError && (
-                              <p className="exemption-approval-modal__error" role="alert">
+                              <p
+                                id={rowErrorId}
+                                className="exemption-approval-modal__error"
+                                role="alert"
+                              >
                                 {retrying
                                   ? 'Enter at least one email to retry, or close to notify the applicant another way.'
                                   : 'Enter at least one email address, or clear “Send approval emails”.'}
@@ -528,6 +559,14 @@ const ExemptionApprovalModal = ({
                                     key={field}
                                     id={`approval-${id}-${row.exemptionNumber}-${field}`}
                                     type="email"
+                                    // The shared error isn't Carbon's own invalid message, so link it
+                                    // here and keep the helper text described.
+                                    {...(missingErrorId
+                                      ? {
+                                          'aria-invalid': true,
+                                          'aria-describedby': `${missingErrorId} approval-${id}-${row.exemptionNumber}-${field}-helper-text`,
+                                        }
+                                      : {})}
                                     labelText={
                                       field === 'ownerEmail' ? 'Owner email' : 'Agent email'
                                     }

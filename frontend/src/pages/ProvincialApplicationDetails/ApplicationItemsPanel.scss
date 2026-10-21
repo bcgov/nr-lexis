@@ -61,12 +61,7 @@
 }
 
 .application-items-drawer {
-  .application-items-package-edit-panel {
-    display: grid;
-    gap: 1rem;
-  }
-
-  // Create package and Add scale: one field per row, or a pair of fields, 24px apart.
+  // Create package, Edit package and Add scale: one field per row, or a pair of fields, 24px apart.
   .application-items-panel-form {
     display: grid;
     gap: 1.5rem;

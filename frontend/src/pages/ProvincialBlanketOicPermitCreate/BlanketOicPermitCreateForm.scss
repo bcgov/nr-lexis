@@ -53,4 +53,14 @@
   .boic-permit-create-form .application-detail-tab-panel {
     padding-inline: 0;
   }
+
+  // The page drops its side padding and the cards trim theirs to 1rem, which gives the fields more
+  // room for their values.
+  .provincial-blanket-oic-permit-create-page.default-grid {
+    padding-inline: 0;
+  }
+
+  .provincial-blanket-oic-permit-create-page .cds--tile.create-form-tile {
+    padding-inline: 1rem;
+  }
 }

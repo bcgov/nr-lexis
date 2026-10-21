@@ -118,10 +118,14 @@ describe('Federal application detail form behaviour', () => {
     renderPage()
     await selectTab('Remarks')
     const row = (await screen.findByText('First note')).closest('tr') as HTMLElement
-    await userEvent.click(within(row).getByRole('button', { name: 'Edit' }))
-    expect(await screen.findByLabelText('Edit remark 44')).toHaveValue('First note')
+    await userEvent.click(within(row).getByRole('button', { name: /^Edit remark / }))
+    expect(await screen.findByRole('textbox', { name: /^Edit remark 44/ })).toHaveValue(
+      'First note',
+    )
     await userEvent.click(screen.getByRole('button', { name: 'Update remark' }))
-    await waitFor(() => expect(within(row).getByRole('button', { name: 'Edit' })).toHaveFocus())
+    await waitFor(() =>
+      expect(within(row).getByRole('button', { name: /^Edit remark / })).toHaveFocus(),
+    )
     expect(mockedSaveFederalApplicationRemark).not.toHaveBeenCalled()
     expect(screen.queryByText('Federal application remark saved.')).not.toBeInTheDocument()
   })
@@ -231,19 +235,23 @@ describe('Federal application detail form behaviour', () => {
     await selectTab('Remarks')
     const firstRow = (await screen.findByText('First note')).closest('tr') as HTMLElement
     const secondRow = screen.getByText('Second note').closest('tr') as HTMLElement
-    await userEvent.click(within(firstRow).getByRole('button', { name: 'Edit' }))
-    const remark = await screen.findByLabelText('Edit remark 44')
+    await userEvent.click(within(firstRow).getByRole('button', { name: /^Edit remark / }))
+    const remark = await screen.findByRole('textbox', { name: /^Edit remark 44/ })
     await waitFor(() => expect(remark).toHaveFocus())
     await userEvent.type(remark, ' changed')
 
-    await userEvent.click(within(secondRow).getByRole('button', { name: 'Edit' }))
+    await userEvent.click(within(secondRow).getByRole('button', { name: /^Edit remark / }))
     expect(await screen.findByRole('dialog', { name: 'Discard changes?' })).toBeInTheDocument()
     await userEvent.click(screen.getByRole('button', { name: 'Keep editing' }))
-    expect(screen.getByLabelText('Edit remark 44')).toHaveValue('First note changed')
+    expect(screen.getByRole('textbox', { name: /^Edit remark 44/ })).toHaveValue(
+      'First note changed',
+    )
 
-    await userEvent.click(within(secondRow).getByRole('button', { name: 'Edit' }))
+    await userEvent.click(within(secondRow).getByRole('button', { name: /^Edit remark / }))
     await userEvent.click(await screen.findByRole('button', { name: 'Discard changes' }))
-    expect(await screen.findByLabelText('Edit remark 45')).toHaveValue('Second note')
+    expect(await screen.findByRole('textbox', { name: /^Edit remark 45/ })).toHaveValue(
+      'Second note',
+    )
   })
 
   it('shows remark errors on the remark field and returns focus to the remark Edit button', async () => {

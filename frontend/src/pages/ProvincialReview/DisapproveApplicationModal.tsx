@@ -203,6 +203,7 @@ const DisapproveApplicationModal = ({
   const statusError = submitAttempted && !statusCode ? STATUS_REQUIRED : ''
   const remarkError = submitAttempted && !remark.trim() ? REMARK_REQUIRED : ''
   const showEmailRequired = submitAttempted && sendEmail && missingEmail
+  const emailRequiredId = `disapprove-email-required-${id}`
 
   const close = () => {
     if (pendingRef.current) return
@@ -348,7 +349,7 @@ const DisapproveApplicationModal = ({
                 onChange={(_, { checked }) => setSendEmail(Boolean(checked))}
               />
               {showEmailRequired && (
-                <p className="exemption-approval-modal__error" role="alert">
+                <p id={emailRequiredId} className="exemption-approval-modal__error" role="alert">
                   <WarningFilled aria-hidden="true" />
                   <span>{EMAIL_REQUIRED}</span>
                 </p>
@@ -360,7 +361,14 @@ const DisapproveApplicationModal = ({
                   Disapproval emails go to the recipients below. At least one email address is
                   needed.
                 </p>
-                {loading && <Loading small withOverlay={false} description="Loading recipients…" />}
+                {loading && (
+                  <section
+                    className="exemption-approval-modal__recipient exemption-approval-modal__recipient--loading"
+                    aria-busy="true"
+                  >
+                    <Loading small withOverlay={false} description="Loading recipients…" />
+                  </section>
+                )}
                 {loadError && (
                   <AppNotification
                     kind="error"
@@ -407,6 +415,14 @@ const DisapproveApplicationModal = ({
                           key={field}
                           id={`disapprove-${id}-${field}`}
                           type="email"
+                          // The shared error isn't Carbon's own invalid message, so link it here and
+                          // keep the helper text described.
+                          {...(showEmailRequired
+                            ? {
+                                'aria-invalid': true,
+                                'aria-describedby': `${emailRequiredId} disapprove-${id}-${field}-helper-text`,
+                              }
+                            : {})}
                           labelText={field === 'ownerEmail' ? 'Owner email' : 'Agent email'}
                           value={recipients[field]}
                           helperText={

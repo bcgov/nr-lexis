@@ -54,7 +54,7 @@ describe('Notification editing with the rich editor', () => {
   ])('keeps stored HTML unchanged after an unedited save: %s', async (contentHtml) => {
     vi.mocked(fetchAdminNotifications).mockResolvedValue([{ ...record, contentHtml }])
     render(<NotificationsPage />)
-    const edit = await screen.findByRole('button', { name: 'Edit' })
+    const edit = await screen.findByRole('button', { name: /^Edit notification / })
     await userEvent.click(edit)
     const panel = screen.getByRole('complementary', { name: 'Edit notification' })
     const editor = within(panel).getByLabelText('Notification content editor')
@@ -89,7 +89,7 @@ describe('Notification editing with the rich editor', () => {
   it('submits a genuine rich-text change with the existing request contract', async () => {
     vi.mocked(fetchAdminNotifications).mockResolvedValue([record])
     render(<NotificationsPage />)
-    await userEvent.click(await screen.findByRole('button', { name: 'Edit' }))
+    await userEvent.click(await screen.findByRole('button', { name: /^Edit notification / }))
     const editor = await screen.findByLabelText('Notification content editor')
     editor.innerHTML = '<p>Legacy plain content updated</p>'
     fireEvent.input(editor, { inputType: 'insertText', data: ' updated' })

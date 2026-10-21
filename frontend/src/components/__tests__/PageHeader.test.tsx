@@ -62,6 +62,36 @@ describe('PageHeader', () => {
     ).toBeTruthy()
   })
 
+  it('names the browser tab after the title and restores the previous name on unmount', () => {
+    document.title = 'Log Exemption Information System'
+    const { rerender, unmount } = render(<PageHeader title="Provincial applications" />)
+    expect(document.title).toBe('Provincial applications')
+
+    rerender(
+      <PageHeader
+        title={
+          <>
+            Permit <span> 9021022 </span>
+          </>
+        }
+      />,
+    )
+    expect(document.title).toBe('Permit 9021022')
+
+    unmount()
+    expect(document.title).toBe('Log Exemption Information System')
+  })
+
+  it('keeps the tab name while the title is empty', () => {
+    document.title = 'Log Exemption Information System'
+    const { rerender, unmount } = render(<PageHeader title="Reports" />)
+    rerender(<PageHeader title="" />)
+    expect(document.title).toBe('Reports')
+
+    unmount()
+    expect(document.title).toBe('Log Exemption Information System')
+  })
+
   it('supports an explicit heading id and caller-provided header attributes', () => {
     render(
       <PageHeader

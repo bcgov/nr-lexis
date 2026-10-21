@@ -1,6 +1,7 @@
 import { useState, type ComponentProps } from 'react'
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
+import { AxiosError, type AxiosResponse } from 'axios'
 import {
   createMemoryRouter,
   Link,
@@ -72,6 +73,15 @@ const renderApplicationItems = () =>
         />
       </Routes>
     </MemoryRouter>,
+  )
+
+const axiosStatusError = (status: number): AxiosError =>
+  new AxiosError(
+    `Request failed with status code ${status}`,
+    'ERR_BAD_REQUEST',
+    undefined,
+    undefined,
+    { status, statusText: '', data: '', headers: {}, config: {} } as AxiosResponse,
   )
 
 const fillNewPackage = (controls: ReturnType<typeof within>, packageNumber: string) => {
@@ -957,7 +967,7 @@ describe.sequential('Provincial Application Detail Actions - items', () => {
     const addScale = screen.getByRole('button', { name: 'Add scale' })
     const deleteScale = within(
       document.getElementById('application-items-scales') as HTMLElement,
-    ).getByRole('button', { name: 'Delete' })
+    ).getByRole('button', { name: /^Delete scale / })
     for (const action of [createPackage, addScale, deleteScale]) {
       expect(action).toBeEnabled()
       await userEvent.click(action)
@@ -1175,7 +1185,7 @@ describe.sequential('Provincial Application Detail Actions - items', () => {
     expect(screen.getByRole('button', { name: 'Add scale' })).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Create package' })).not.toBeInTheDocument()
     const scaleRow = screen.getByText('TM001').closest('tr') as HTMLElement
-    expect(within(scaleRow).getByRole('button', { name: 'Delete' })).toBeEnabled()
+    expect(within(scaleRow).getByRole('button', { name: /^Delete scale / })).toBeEnabled()
   })
 
   it('adds scales without deleting them when the server allows only scale additions', async () => {
@@ -1191,7 +1201,7 @@ describe.sequential('Provincial Application Detail Actions - items', () => {
     expect(await screen.findByText('TM001')).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Add scale' })).toBeInTheDocument()
     const scaleRow = screen.getByText('TM001').closest('tr') as HTMLElement
-    expect(within(scaleRow).getByRole('button', { name: 'Delete' })).toBeDisabled()
+    expect(within(scaleRow).getByRole('button', { name: /^Delete scale / })).toBeDisabled()
   })
 
   it.each([
@@ -1929,7 +1939,7 @@ describe.sequential('Provincial Application Detail Actions - items', () => {
     expect(screen.queryByRole('button', { name: 'Delete package' })).not.toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Add scale' })).toBeDisabled()
     expect(
-      within(scalesSection as HTMLElement).getByRole('button', { name: 'Delete' }),
+      within(scalesSection as HTMLElement).getByRole('button', { name: /^Delete scale / }),
     ).toBeDisabled()
   })
 
@@ -2394,7 +2404,9 @@ describe.sequential('Provincial Application Detail Actions - items', () => {
 
     await selectApplicationDetailTab('Documents')
     const documentRow = (await screen.findByText('app-doc.pdf')).closest('tr')
-    await userEvent.click(within(documentRow as HTMLElement).getByRole('button', { name: 'Open' }))
+    await userEvent.click(
+      within(documentRow as HTMLElement).getByRole('button', { name: /^Open / }),
+    )
     expect(await screen.findByText('Unable to open the selected document.')).toBeInTheDocument()
 
     await selectApplicationDetailTab('Scale')
@@ -2478,7 +2490,11 @@ describe.sequential('Provincial Application Detail Actions - items', () => {
     )
   })
 
-  it('moves focus to the remaining package after deleting one of several', async () => {
+  it('shows the deleted package notice above the toolbar and focuses it when packages remain', async () => {
+    const visibleRects = vi
+      .spyOn(HTMLElement.prototype, 'getClientRects')
+      .mockReturnValue([new DOMRect(0, 0, 400, 100)] as unknown as DOMRectList)
+    onTestFinished(() => visibleRects.mockRestore())
     mockedFetchApplicationPackageScales.mockResolvedValue([])
     mockedFetchProvincialApplicationDetail.mockResolvedValue({
       ...applicationDetail,
@@ -2500,9 +2516,16 @@ describe.sequential('Provincial Application Detail Actions - items', () => {
     })
     await userEvent.click(within(confirmation).getByRole('button', { name: 'Delete' }))
 
-    const packageCard = document.getElementById('application-items-package')
-    await waitFor(() => expect(packageCard).toHaveFocus())
-    expect(within(packageCard as HTMLElement).getByText('Package deleted.')).toBeInTheDocument()
+    const notice = (await screen.findByText('Package deleted.')).closest('.app-inline-notification')
+    expect(notice).not.toBeNull()
+    await waitFor(() => expect(notice).toHaveFocus())
+    expect(notice?.closest('#application-items-package')).toBeNull()
+    const toolbar = document.querySelector('.application-items-package-toolbar')
+    expect(toolbar).not.toBeNull()
+    expect(
+      (notice as HTMLElement).compareDocumentPosition(toolbar as HTMLElement) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy()
   })
 
   it('keeps a failed package deletion open for retry', async () => {
@@ -2744,6 +2767,10 @@ describe.sequential('Provincial Application Detail Actions - items', () => {
   })
 
   it('adds and deletes package scales', async () => {
+    const visibleRects = vi
+      .spyOn(HTMLElement.prototype, 'getClientRects')
+      .mockReturnValue([new DOMRect(0, 0, 400, 100)] as unknown as DOMRectList)
+    onTestFinished(() => visibleRects.mockRestore())
     const initialDetail = {
       ...applicationDetail,
       packages: [{ packageNumber: 'PKG-1', volume: 100, pieceCount: 0 }],
@@ -2804,7 +2831,7 @@ describe.sequential('Provincial Application Detail Actions - items', () => {
     const scaleRow = screen.getByText('TM001').closest('tr')
     expect(scaleRow).toBeTruthy()
     expect(within(scaleRow as HTMLElement).getByText('-')).toBeInTheDocument()
-    fireEvent.click(within(scaleRow as HTMLElement).getByRole('button', { name: 'Delete' }))
+    fireEvent.click(within(scaleRow as HTMLElement).getByRole('button', { name: /^Delete scale / }))
     const confirmation = await screen.findByRole('dialog', {
       name: 'Are you sure you want to delete this scale?',
     })
@@ -2821,10 +2848,9 @@ describe.sequential('Provincial Application Detail Actions - items', () => {
         detailFetchCountAfterInitialLoad + 2,
       )
     })
-    expect(
-      (await screen.findByText('Scale deleted.')).closest('#application-items-scales'),
-    ).not.toBeNull()
-    await waitFor(() => expect(document.getElementById('application-items-scales')).toHaveFocus())
+    const notice = (await screen.findByText('Scale deleted.')).closest('.app-inline-notification')
+    expect(notice?.closest('#application-items-scales')).not.toBeNull()
+    await waitFor(() => expect(notice).toHaveFocus())
   })
 
   it.each([
@@ -3046,7 +3072,9 @@ describe.sequential('Provincial Application Detail Actions - items', () => {
 
     const scaleRow = screen.getByText('TM001').closest('tr')
     expect(scaleRow).toBeTruthy()
-    await userEvent.click(within(scaleRow as HTMLElement).getByRole('button', { name: 'Delete' }))
+    await userEvent.click(
+      within(scaleRow as HTMLElement).getByRole('button', { name: /^Delete scale / }),
+    )
     const confirmation = await screen.findByRole('dialog', {
       name: 'Are you sure you want to delete this scale?',
     })
@@ -3392,9 +3420,11 @@ describe.sequential('Provincial Application Detail Actions - items', () => {
 
     const lockedRow = (await screen.findByText('TM-DONE')).closest('tr') as HTMLElement
     const openRow = screen.getByText('TM-OPEN').closest('tr') as HTMLElement
-    expect(within(lockedRow).queryByRole('button', { name: 'Delete' })).not.toBeInTheDocument()
+    expect(
+      within(lockedRow).queryByRole('button', { name: /^Delete scale / }),
+    ).not.toBeInTheDocument()
     await waitFor(() =>
-      expect(within(openRow).getByRole('button', { name: 'Delete' })).toBeEnabled(),
+      expect(within(openRow).getByRole('button', { name: /^Delete scale / })).toBeEnabled(),
     )
     expect(screen.getByRole('columnheader', { name: 'Actions' })).toBeInTheDocument()
   })
@@ -3417,7 +3447,7 @@ describe.sequential('Provincial Application Detail Actions - items', () => {
 
     expect(await screen.findByText('TM-DONE')).toBeInTheDocument()
     expect(screen.queryByRole('columnheader', { name: 'Actions' })).not.toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: 'Delete' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /^Delete scale / })).not.toBeInTheDocument()
   })
 
   it('explains a refused scale delete as a possible completed permit', async () => {
@@ -3426,7 +3456,7 @@ describe.sequential('Provincial Application Detail Actions - items', () => {
     await selectApplicationDetailTab('Scale')
 
     const row = (await screen.findByText('TM001')).closest('tr') as HTMLElement
-    await userEvent.click(within(row).getByRole('button', { name: 'Delete' }))
+    await userEvent.click(within(row).getByRole('button', { name: /^Delete scale / }))
     const confirmation = await screen.findByRole('dialog', {
       name: 'Are you sure you want to delete this scale?',
     })
@@ -3441,6 +3471,88 @@ describe.sequential('Provincial Application Detail Actions - items', () => {
     expect(
       screen.queryByText('Scale delete failed. Refresh and try again.'),
     ).not.toBeInTheDocument()
+  })
+
+  it.each([403, 404])(
+    'explains a scale delete answered with %i as possibly already deleted',
+    async (status) => {
+      mockedDeleteApplicationScale.mockRejectedValueOnce(axiosStatusError(status))
+      renderApplicationItems()
+      await selectApplicationDetailTab('Scale')
+
+      const row = (await screen.findByText('TM001')).closest('tr') as HTMLElement
+      await userEvent.click(within(row).getByRole('button', { name: /^Delete scale / }))
+      const confirmation = await screen.findByRole('dialog', {
+        name: 'Are you sure you want to delete this scale?',
+      })
+      await userEvent.click(within(confirmation).getByRole('button', { name: 'Delete' }))
+
+      expect(await screen.findByText('Failed to delete scale')).toBeInTheDocument()
+      expect(
+        screen.getByText(
+          'Scale not deleted. It may already have been deleted. Reload the application to check.',
+        ),
+      ).toBeInTheDocument()
+      expect(screen.queryByText(/status code/)).not.toBeInTheDocument()
+    },
+  )
+
+  it.each([403, 404])(
+    'explains a package delete answered with %i as possibly already deleted',
+    async (status) => {
+      mockedFetchApplicationPackageScales.mockResolvedValue([])
+      mockedDeleteApplicationPackage.mockRejectedValueOnce(axiosStatusError(status))
+      renderApplicationItems()
+      await selectApplicationDetailTab('Scale')
+
+      await userEvent.click(await screen.findByRole('button', { name: 'Delete package' }))
+      const confirmation = await screen.findByRole('dialog', {
+        name: 'Are you sure you want to delete this package?',
+      })
+      await userEvent.click(within(confirmation).getByRole('button', { name: 'Delete' }))
+
+      expect(await screen.findByText('Failed to delete package')).toBeInTheDocument()
+      expect(
+        screen.getByText(
+          'Package not deleted. It may already have been deleted. Reload the application to check.',
+        ),
+      ).toBeInTheDocument()
+      expect(screen.queryByText(/status code/)).not.toBeInTheDocument()
+    },
+  )
+
+  it('names each scale row Delete button by its scale', async () => {
+    renderApplicationItems()
+    await selectApplicationDetailTab('Scale')
+
+    const row = (await screen.findByText('TM001')).closest('tr') as HTMLElement
+    expect(
+      within(row).getByRole('button', { name: 'Delete scale TM001, Douglas-fir, grade Sawlog' }),
+    ).toBeInTheDocument()
+  })
+
+  it('says no package has been created when the role cannot create packages', async () => {
+    render(
+      <ItemsPanelWithActionResult
+        detail={{ ...applicationDetail, packages: [] }}
+        canEditPackages={false}
+        canAddPackages={false}
+        canAddScales={false}
+        canUpdatePackageNumber={false}
+        hideMutationActions={false}
+        authoritativeOptionsAvailability="available"
+        onDetailChanged={vi.fn().mockResolvedValue(undefined)}
+      />,
+    )
+
+    expect(screen.getByText('No packages for this application')).toBeInTheDocument()
+    expect(
+      screen.getByText('No package has been created for this application.'),
+    ).toBeInTheDocument()
+    expect(
+      screen.queryByText('Create a package, then add Summary of scale.'),
+    ).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Create package' })).not.toBeInTheDocument()
   })
 
   it.each([

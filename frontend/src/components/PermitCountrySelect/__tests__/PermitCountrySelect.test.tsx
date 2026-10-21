@@ -55,6 +55,25 @@ describe('PermitCountrySelect', () => {
     expect(countryInput).toHaveAccessibleDescription('Final destination country is required')
   })
 
+  it.each([
+    { name: 'a required country with a value', required: true, value: 'CA', hidden: true },
+    { name: 'a required country without a value', required: true, value: '', hidden: false },
+    { name: 'an optional country with a value', required: false, value: 'CA', hidden: false },
+  ])('hides the clear button: $hidden for $name', ({ required, value, hidden }) => {
+    const { container } = render(
+      <PermitCountrySelect
+        id="destination-country"
+        labelText="Final destination country"
+        value={value}
+        options={countryOptions}
+        required={required}
+        onChange={() => {}}
+      />,
+    )
+
+    expect(container.querySelector('.lexis-combobox--no-clear') !== null).toBe(hidden)
+  })
+
   it('opens with the six preferred countries, a decorative divider, and every remaining country alphabetically', async () => {
     const user = userEvent.setup()
     const { container } = render(<CountrySelectHarness />)

@@ -54,7 +54,7 @@ describe('Signed-out deep links', () => {
     const view = render(app())
 
     expect(await screen.findByRole('button', { name: button })).toBeVisible()
-    expect(screen.queryByRole('heading', { name: '404' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('heading', { name: 'Page not found' })).not.toBeInTheDocument()
     expect(screen.queryByRole('heading', { name: 'Offer details' })).not.toBeInTheDocument()
     await userEvent.click(screen.getByRole('button', { name: button }))
     expect(login).toHaveBeenCalledWith(provider)
@@ -176,12 +176,12 @@ describe('Signed-out deep links', () => {
   })
 
   it.each(['/unknown', '/admin/schedules', '/indianReserve'])(
-    'keeps unsupported path %s at 404',
+    'keeps unsupported path %s on the not found page',
     async (path) => {
       window.history.replaceState({}, '', path)
       render(app())
 
-      expect(await screen.findByRole('heading', { name: '404' })).toBeVisible()
+      expect(await screen.findByRole('heading', { name: 'Page not found' })).toBeVisible()
       expect(screen.queryByRole('button', { name: 'Log in with IDIR' })).not.toBeInTheDocument()
     },
   )

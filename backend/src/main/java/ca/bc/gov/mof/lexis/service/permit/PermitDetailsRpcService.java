@@ -143,6 +143,12 @@ public interface PermitDetailsRpcService {
   PermitPersistenceRpcResponseDto removeApplicationFromPermit(
       Long permitNumber, Long applicationNumber, String userId);
 
+  PermitPersistenceRpcResponseDto updatePermitApplications(
+      Long permitNumber,
+      String addedApplicationsCsv,
+      String removedApplicationsCsv,
+      String userId);
+
   PermitPersistenceRpcResponseDto addBlanketOicScale(
       Long permitNumber,
       String packageNumber,

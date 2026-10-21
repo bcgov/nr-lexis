@@ -86,7 +86,7 @@ public class ApplicationApprovalEligibilityService {
     if (application.termDays() == null
         || application.termDays() < 1
         || application.termDays() > 99_999) {
-      errors.add("Application term days must be between 1 and 99999.");
+      errors.add("Exemption term must be between 1 and 99999.");
     }
 
     BigDecimal applicationVolume = decimal(application.applicationVolume());

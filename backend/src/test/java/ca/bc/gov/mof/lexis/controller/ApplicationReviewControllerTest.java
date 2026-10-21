@@ -361,7 +361,7 @@ class ApplicationReviewControllerTest {
             null,
             null,
             null,
-            "Remark is required when rejecting, withdrawing, or expiring an application.");
+            "Remark is required.");
     when(service.updateStatus(1000456L, body, "idir\\jsmith")).thenReturn(dto);
 
     ResponseEntity<ApplicationReviewStatusUpdateResultDto> response =
@@ -483,7 +483,7 @@ class ApplicationReviewControllerTest {
     parameters.add("appStatus", "EXP");
     parameters.add("remark", "  ");
     String message =
-        "Remark is required when rejecting, withdrawing, or expiring an application.";
+        "Remark is required.";
     ApplicationReviewStatusUpdateResultDto dto =
         new ApplicationReviewStatusUpdateResultDto(
             false, false, "EXP", null, null, null, null, null, message);

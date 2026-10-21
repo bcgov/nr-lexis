@@ -212,7 +212,7 @@ const RETIRED_REPORT_IDS = new Set([
 const REPORT_DEFINITIONS: ReportDefinition[] = [
   {
     id: 'applicationReport',
-    title: 'Application Report',
+    title: 'Application report',
     category: 'Provincial',
     action: '/applicationReport',
     description: 'Applications by status and timeline.',
@@ -242,7 +242,7 @@ const REPORT_DEFINITIONS: ReportDefinition[] = [
   },
   {
     id: 'offerReport',
-    title: 'Offers Report',
+    title: 'Offers report',
     category: 'Provincial',
     action: '/offerReport',
     description: 'Offer activity and approval outcomes.',
@@ -298,7 +298,7 @@ const REPORT_DEFINITIONS: ReportDefinition[] = [
   },
   {
     id: 'exemptionReport',
-    title: 'Exemption Report',
+    title: 'Exemption report',
     category: 'Provincial',
     action: '/exemptionReport',
     description: 'Exemption volumes, balances, and status.',
@@ -338,7 +338,7 @@ const REPORT_DEFINITIONS: ReportDefinition[] = [
   },
   {
     id: 'permitLedgerReport',
-    title: 'Permits Report',
+    title: 'Permits report',
     category: 'Provincial',
     action: '/permitLedgerReport',
     description: 'Permit issuance and ledger summary.',
@@ -380,7 +380,7 @@ const REPORT_DEFINITIONS: ReportDefinition[] = [
   },
   {
     id: 'transportReport',
-    title: 'Transport Report',
+    title: 'Transport report',
     category: 'Cross-Module',
     action: '/transportReport',
     description: 'Destination and transport statistics.',
@@ -410,7 +410,7 @@ const REPORT_DEFINITIONS: ReportDefinition[] = [
   },
   {
     id: 'speciesGradeReport',
-    title: 'Species and Grade Report',
+    title: 'Species and grade report',
     category: 'Provincial',
     action: '/speciesGradeReport',
     description: 'Species/grade composition analytics.',
@@ -456,7 +456,7 @@ const REPORT_DEFINITIONS: ReportDefinition[] = [
   },
   {
     id: 'feeReport',
-    title: 'Fee Report',
+    title: 'Fee report',
     category: 'Provincial',
     action: '/feeReport',
     description: 'Fee in lieu and invoice totals.',
@@ -486,7 +486,7 @@ const REPORT_DEFINITIONS: ReportDefinition[] = [
   },
   {
     id: 'tenureReport',
-    title: 'Tenure Analysis Report',
+    title: 'Tenure analysis report',
     category: 'Cross-Module',
     action: '/tenureReport',
     description: 'Tenure trends by region and period.',
@@ -602,7 +602,7 @@ const REPORT_DEFINITIONS: ReportDefinition[] = [
   // Legacy generateIndustryPDF/CSV shortcuts are consolidated into this filtered report.
   {
     id: 'biweeklyListing',
-    title: 'Advertising List',
+    title: 'Advertising list',
     category: 'Cross-Module',
     action: 'mofrListing',
     description: 'Advertising list output in PDF or CSV format.',
@@ -925,7 +925,7 @@ const buildReportSearchParams = (payload: {
 }
 
 const APPLICATION_REPORT_LIMITER_MESSAGE =
-  'Choose at least one Application Report filter before generating: region, jurisdiction, exemption reason, client number, growth type, or received date.'
+  'Choose at least one application report filter before generating: region, jurisdiction, exemption reason, client number, growth type, or received date.'
 
 const hasApplicationReportLimiter = (values: Record<string, string>): boolean => {
   const limiterKeys = [
@@ -1005,6 +1005,7 @@ export const ReportsPageContent = () => {
     Record<string, boolean>
   >({})
   const [launchErrorMessage, setLaunchErrorMessage] = useState('')
+  const [downloadedMessage, setDownloadedMessage] = useState('')
   const [isGenerating, setIsGenerating] = useState(false)
   const beginReportOptionsRequest = useLatestRequestGuard()
 
@@ -1226,6 +1227,7 @@ export const ReportsPageContent = () => {
         }
       })
       setLaunchErrorMessage('')
+      setDownloadedMessage('')
     })
 
     return () => {
@@ -1336,6 +1338,7 @@ export const ReportsPageContent = () => {
       [selectedReport.id]: {},
     }))
     setLaunchErrorMessage('')
+    setDownloadedMessage('')
   }
 
   const onUseCurrentAdvertisingPeriod = (): void => {
@@ -1350,10 +1353,12 @@ export const ReportsPageContent = () => {
       },
     }))
     setLaunchErrorMessage('')
+    setDownloadedMessage('')
   }
 
   const onOpenReportRequest = async (): Promise<void> => {
     setLaunchErrorMessage('')
+    setDownloadedMessage('')
 
     if (reportGenerationDisabled) {
       setLaunchErrorMessage(REPORT_OPTIONS_UNAVAILABLE_MESSAGE)
@@ -1383,6 +1388,10 @@ export const ReportsPageContent = () => {
 
       if (runResult.blob) {
         triggerBrowserDownload(runResult.blob, runResult.filename)
+      }
+      // A cancelled save picker produced no file, so it stays silent.
+      if (!runResult.cancelled) {
+        setDownloadedMessage(`${selectedReport.title} downloaded.`)
       }
     } catch (error) {
       console.error(error)
@@ -1672,6 +1681,15 @@ export const ReportsPageContent = () => {
                   subtitle={launchErrorMessage}
                   lowContrast
                   onCloseButtonClick={() => setLaunchErrorMessage('')}
+                />
+              )}
+              {downloadedMessage && (
+                <AppNotification
+                  kind="success"
+                  title="Action completed"
+                  subtitle={downloadedMessage}
+                  lowContrast
+                  onCloseButtonClick={() => setDownloadedMessage('')}
                 />
               )}
             </>

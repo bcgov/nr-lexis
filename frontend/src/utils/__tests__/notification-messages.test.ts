@@ -37,6 +37,15 @@ describe('notification message sanitization', () => {
     ).toBe('Submission failed. Try again later.')
   })
 
+  it('replaces the axios status code message with plain recovery guidance', () => {
+    expect(sanitizeNotificationText('Request failed with status code 403')).toBe(
+      'Something went wrong. Please try again. If the problem persists, contact your administrator.',
+    )
+    expect(sanitizeNotificationText('Request failed with status code 500', 'Try again.')).toBe(
+      'Try again.',
+    )
+  })
+
   it('deduplicates sanitized message lists', () => {
     expect(
       sanitizeNotificationTextList(
