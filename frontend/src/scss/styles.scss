@@ -2734,6 +2734,13 @@ $notification-types: 'error', 'info', 'success', 'warning';
   overflow-wrap: anywhere;
 }
 
+// Below Carbon's md breakpoint a rich notice keeps a 3rem gutter for the close button even when it
+// has none. Without the button, its text keeps the same 13px inset as at wider widths.
+.app-inline-notification.cds--actionable-notification--hide-close-button
+  .cds--actionable-notification__details {
+  margin-inline-end: 0.8125rem;
+}
+
 // A result that lists records shows its message and then the list below the title.
 .app-inline-notification .cds--actionable-notification__subtitle,
 .action-result-notification__records,
