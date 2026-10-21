@@ -1,4 +1,4 @@
-import { useEffect, useRef, type ReactNode } from 'react'
+import { useEffect, useRef } from 'react'
 import {
   Button,
   Table,
@@ -11,8 +11,8 @@ import {
 import { CheckmarkFilled, Upload, WarningAltFilled, WarningFilled } from '@carbon/icons-react'
 import { Link } from 'react-router-dom'
 import { displayValue } from '@/utils/display-value'
-import { REPORT_ISSUE_HREF } from '@/utils/support'
 import ApplicationUploadTableCard from './ApplicationUploadTableCard'
+import { reasonContent } from './reasonContent'
 import { createResultSummary, type ApplicationCreateOutcome } from './applicationUploadFiles'
 
 type ApplicationUploadResultProps = {
@@ -28,22 +28,6 @@ const RESULT_ICONS = {
   success: CheckmarkFilled,
   warning: WarningAltFilled,
   error: WarningFilled,
-}
-
-const REPORT_ISSUE_TEXT = 'report an issue'
-
-// A reason that ends by asking the user to report an issue links that request to support.
-const reasonContent = (reason: string): ReactNode => {
-  const linkStart = reason.lastIndexOf(REPORT_ISSUE_TEXT)
-  if (linkStart < 0 || reason.slice(linkStart + REPORT_ISSUE_TEXT.length) !== '.') {
-    return reason
-  }
-  return (
-    <>
-      {reason.slice(0, linkStart)}
-      <a href={REPORT_ISSUE_HREF}>{REPORT_ISSUE_TEXT}</a>.
-    </>
-  )
 }
 
 /** What happened to each file sent to be created, with links to the created applications. */

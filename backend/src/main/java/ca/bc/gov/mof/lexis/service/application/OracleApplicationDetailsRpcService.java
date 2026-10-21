@@ -1531,13 +1531,13 @@ public class OracleApplicationDetailsRpcService implements ApplicationDetailsRpc
     if (request.averageDiameter() == null || request.averageDiameter() <= 0.0d) {
       errors.add("The package average diameter must be greater than 0.");
     } else if (request.averageDiameter() > 99.99d) {
-      errors.add("The package average diameter must be less than or equal to 99.9.");
+      errors.add("The package average diameter must be less than or equal to 99.99.");
     }
 
     if (request.averageLength() == null || request.averageLength() <= 0.0d) {
       errors.add("The package average length must be greater than 0.");
     } else if (request.averageLength() > 99.0d) {
-      errors.add("The package average length must be less than or equal to 99.9.");
+      errors.add("The package average length must be less than or equal to 99.0.");
     }
 
     if (request.volume() == null || request.volume() < 0.0d) {

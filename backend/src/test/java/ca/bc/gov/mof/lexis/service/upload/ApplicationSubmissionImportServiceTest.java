@@ -1455,6 +1455,97 @@ class ApplicationSubmissionImportServiceTest {
   }
 
   @Test
+  void shouldAskToReportAnIssueWhenProvincialApplicationSaveFailsWithASystemError() {
+    when(applicationDetailsServiceProvider.getIfAvailable()).thenReturn(applicationDetailsService);
+    when(applicationDetailsService.addApplication(any(CreateApplicationRequest.class), eq("jsmith")))
+        .thenReturn(
+            new CreateApplicationResult(
+                false,
+                null,
+                null,
+                List.of(
+                    "We were unable to save this application. Please note the time this error occurred and report to someone."),
+                List.of()));
+
+    ApplicationSubmissionImportResultDto result =
+        service().importApplicationSubmission(sampleXml(), "jsmith");
+
+    assertThat(result.status()).isEqualTo("rejected");
+    assertThat(result.errors())
+        .containsExactly(
+            "We couldn't save this application. Try again later. If it keeps happening, report an issue.");
+  }
+
+  @Test
+  void shouldAskToTryAgainLaterWhenProvincialPackageValidityIsUnavailable() {
+    when(applicationDetailsServiceProvider.getIfAvailable()).thenReturn(applicationDetailsService);
+    when(applicationDetailsService.isPackageValid("TEST23-652-7D-2")).thenReturn(null);
+
+    ApplicationSubmissionImportResultDto result =
+        service().validateApplicationSubmission(sampleXml());
+
+    assertThat(result.status()).isEqualTo("rejected");
+    assertThat(result.errors())
+        .containsExactly(
+            "We couldn't check this file. Try again later. If it keeps happening, report an issue.");
+  }
+
+  @Test
+  void shouldRequireSummaryOfScaleWhenProvincialFileHasNoTimberRows() {
+    String xml =
+        xmlWithProductDetail(
+            """
+            <lexis:productDetail>
+              <lexis:productTypeCode>H</lexis:productTypeCode>
+              <lexis:boomNumber>TEST23-652-7D-2</lexis:boomNumber>
+              <lexis:speciesEndUseSort>HE/PL</lexis:speciesEndUseSort>
+              <lexis:productLocation>Port Alberni c/o Pacific Towing</lexis:productLocation>
+              <lexis:ageClass>O</lexis:ageClass>
+              <lexis:avgLength>6.7</lexis:avgLength>
+              <lexis:avgDiameter>12.8</lexis:avgDiameter>
+            </lexis:productDetail>
+            """);
+
+    ApplicationSubmissionImportResultDto result =
+        service().validateApplicationSubmission(xmlFile("no-scale.xml", xml));
+
+    assertThat(result.status()).isEqualTo("rejected");
+    assertThat(result.errors()).containsExactly("Summary of scale is required.");
+  }
+
+  @Test
+  void shouldOnlyAllowSummaryOfScaleLinesWhenProvincialFileMixesTimberRows() {
+    String xml =
+        SAMPLE_XML.replace(
+            "</lexis:productDetail>",
+            """
+              <lexis:standingTimber>
+                <lexis:timberMark>STAND1</lexis:timberMark>
+              </lexis:standingTimber>
+            </lexis:productDetail>""");
+
+    ApplicationSubmissionImportResultDto result =
+        service().validateApplicationSubmission(xmlFile("mixed.xml", xml));
+
+    assertThat(result.status()).isEqualTo("rejected");
+    assertThat(result.errors()).containsExactly("The file can only include summary of scale lines.");
+  }
+
+  @Test
+  void shouldAskForAValidNumberOfPiecesWhenScalePiecesAreNotAWholeNumber() {
+    String xml =
+        SAMPLE_XML.replace(
+            "<lexis:numberOfPieces>1500</lexis:numberOfPieces>",
+            "<lexis:numberOfPieces>1.5</lexis:numberOfPieces>");
+
+    ApplicationSubmissionImportResultDto result =
+        service().validateApplicationSubmission(xmlFile("pieces.xml", xml));
+
+    assertThat(result.status()).isEqualTo("rejected");
+    assertThat(result.errors()).contains("A valid number of pieces is required.");
+  }
+
+  @Test
   void shouldKeepSaveValidationErrorsWhenProvincialApplicationIsRefused() {
     when(applicationDetailsServiceProvider.getIfAvailable()).thenReturn(applicationDetailsService);
     when(applicationDetailsService.addApplication(any(CreateApplicationRequest.class), eq("jsmith")))
@@ -1466,7 +1557,8 @@ class ApplicationSubmissionImportServiceTest {
         service().importApplicationSubmission(sampleXml(), "jsmith");
 
     assertThat(result.status()).isEqualTo("rejected");
-    assertThat(result.errors()).containsExactly("Package TEST23-652-7D-2 already exists.");
+    assertThat(result.errors()).containsExactly(
+            "Package TEST23-652-7D-2 already exists. If this is a new package, use a different package number.");
   }
 
   @Test
@@ -1480,8 +1572,7 @@ class ApplicationSubmissionImportServiceTest {
 
     assertThat(result.status()).isEqualTo("rejected");
     assertThat(result.errors())
-        .containsExactly(
-            "Boom/package number must not be provided for harvested timber without summary of scale.");
+        .containsExactly("Summary of scale is required.");
     verify(applicationDetailsServiceProvider, never()).getIfAvailable();
   }
 
@@ -1495,9 +1586,9 @@ class ApplicationSubmissionImportServiceTest {
         service().importApplicationSubmission(xmlFile("without-summary.xml", xml), "jsmith");
 
     assertThat(validation.status()).isEqualTo("rejected");
-    assertThat(validation.errors()).containsExactly("Boom/package number is required.");
+    assertThat(validation.errors()).containsExactly("Summary of scale is required.");
     assertThat(importResult.status()).isEqualTo("rejected");
-    assertThat(importResult.errors()).containsExactly("Boom/package number is required.");
+    assertThat(importResult.errors()).containsExactly("Summary of scale is required.");
     verify(applicationDetailsServiceProvider, never()).getIfAvailable();
   }
 
@@ -1510,12 +1601,12 @@ class ApplicationSubmissionImportServiceTest {
 
     assertThat(result.status()).isEqualTo("rejected");
     assertThat(result.packageNumber()).isNull();
-    assertThat(result.errors()).containsExactly("Boom/package number is required.");
+    assertThat(result.errors()).containsExactly("Summary of scale is required.");
     verify(applicationDetailsServiceProvider, never()).getIfAvailable();
   }
 
   @Test
-  void shouldRejectProvincialStandingTimberWithABoomBecauseItsScalesHaveNoSpeciesOrGrade() {
+  void shouldRejectProvincialStandingTimberWithABoomBecauseItHasNoSummaryOfScale() {
     String xml =
         xmlWithProductDetail(
             provincialStandingProductDetail("<lexis:boomNumber>STAND1</lexis:boomNumber>"));
@@ -1525,7 +1616,7 @@ class ApplicationSubmissionImportServiceTest {
 
     assertThat(result.status()).isEqualTo("rejected");
     assertThat(result.errors())
-        .containsExactly("Scale species is required.", "Scale grade is required.");
+        .containsExactly("Summary of scale is required.");
     verify(applicationDetailsServiceProvider, never()).getIfAvailable();
   }
 
@@ -1709,7 +1800,7 @@ class ApplicationSubmissionImportServiceTest {
     assertThat(result.status()).isEqualTo("rejected");
     assertThat(result.errors())
         .containsExactly(
-            "Submission forest region is outside the authenticated organization-unit scope.");
+            "You can only upload applications for regions you have access to.");
     assertThat(result.submissionSummary()).isNotNull();
     assertThat(result.submissionSummary().orgUnitNumber()).isEqualTo(1909L);
     verify(applicationDetailsServiceProvider, never()).getIfAvailable();
@@ -1731,7 +1822,7 @@ class ApplicationSubmissionImportServiceTest {
     assertThat(result.status()).isEqualTo("rejected");
     assertThat(result.errors())
         .containsExactly(
-            "Submission forest region is outside the authenticated organization-unit scope.");
+            "You can only upload applications for regions you have access to.");
     verify(applicationDetailsServiceProvider, never()).getIfAvailable();
     verify(scheduleRepositoryProvider, never()).getIfAvailable();
     verify(applicationDetailsService, never())
@@ -1749,7 +1840,7 @@ class ApplicationSubmissionImportServiceTest {
     assertThat(result.status()).isEqualTo("rejected");
     assertThat(result.errors())
         .containsExactly(
-            "Submission owner or agent must match the authenticated forest-client scope.");
+            "You can only upload applications where your client is the owner or the agent.");
     assertThat(result.submissionSummary()).isNotNull();
     verify(applicationDetailsServiceProvider, never()).getIfAvailable();
     verify(scheduleRepositoryProvider, never()).getIfAvailable();
@@ -1840,7 +1931,8 @@ class ApplicationSubmissionImportServiceTest {
 
     assertThat(result.uploadType()).isEqualTo("applicationSubmission");
     assertThat(result.status()).isEqualTo("rejected");
-    assertThat(result.errors()).containsExactly("Package TEST23-652-7D-2 already exists.");
+    assertThat(result.errors()).containsExactly(
+            "Package TEST23-652-7D-2 already exists. If this is a new package, use a different package number.");
     verify(applicationDetailsService).isPackageValid("TEST23-652-7D-2");
     verify(applicationDetailsService, never()).validateApplication(any(CreateApplicationRequest.class));
     verify(applicationDetailsService, never()).addApplication(any(CreateApplicationRequest.class), any());
@@ -1969,7 +2061,7 @@ class ApplicationSubmissionImportServiceTest {
 
     assertThat(result.status()).isEqualTo("rejected");
     assertThat(result.errors())
-        .containsExactly("The LEXIS application submission file must be 20 MB or smaller.");
+        .containsExactly("The file must be 20 MB or smaller.");
     verify(virusScanService, never()).assertClean(oversizedFile);
     verify(applicationDetailsServiceProvider, never()).getIfAvailable();
   }
@@ -2135,7 +2227,8 @@ class ApplicationSubmissionImportServiceTest {
     ApplicationSubmissionImportResultDto result = service().importApplicationSubmission(sampleXml(), "jsmith");
 
     assertThat(result.status()).isEqualTo("rejected");
-    assertThat(result.errors()).containsExactly("Package TEST23-652-7D-2 already exists.");
+    assertThat(result.errors()).containsExactly(
+            "Package TEST23-652-7D-2 already exists. If this is a new package, use a different package number.");
     assertThat(result.submissionSummary()).isNotNull();
     verify(applicationDetailsService).isPackageValid("TEST23-652-7D-2");
     verify(applicationDetailsService, never()).addApplication(any(CreateApplicationRequest.class), any());
@@ -2331,7 +2424,8 @@ class ApplicationSubmissionImportServiceTest {
     assertThat(result.applicationNumber()).isNull();
     assertThat(result.packageNumber()).isNull();
     assertThat(result.scaleRows()).isZero();
-    assertThat(result.errors()).containsExactly("Package TEST23-652-7D-2 already exists.");
+    assertThat(result.errors()).containsExactly(
+            "Package TEST23-652-7D-2 already exists. If this is a new package, use a different package number.");
     verify(applicationDetailsService, times(2)).isPackageValid("TEST23-652-7D-2");
     verify(applicationDetailsService, never()).addImportedScaleToPackage(any(ScaleMutationRequest.class), eq("jsmith"), anyBoolean());
   }
@@ -2372,10 +2466,10 @@ class ApplicationSubmissionImportServiceTest {
     assertThat(result.status()).isEqualTo("rejected");
     assertThat(result.errors())
         .contains(
-            "The LEXIS application submission file must be an XML, GeoJSON, JSON, or ZIP file.");
+            "The file must be an XML, ZIP, GeoJSON, or JSON file.");
     assertThat(result.message())
         .contains(
-            "The LEXIS application submission file must be an XML, GeoJSON, JSON, or ZIP file.");
+            "The file must be an XML, ZIP, GeoJSON, or JSON file.");
   }
 
   @Test
@@ -2426,6 +2520,21 @@ class ApplicationSubmissionImportServiceTest {
   }
 
   @Test
+  void shouldRejectAZipFileThatIsCutOffInsideItsFirstEntry() {
+    byte[] cutOff =
+        ("PK\u0003\u0004" + "test-2026-10-20".repeat(20)).getBytes(StandardCharsets.ISO_8859_1);
+
+    ApplicationSubmissionImportResultDto result =
+        service()
+            .validateApplicationSubmission(
+                new MockMultipartFile("formFile", "cut-off.zip", "application/zip", cutOff));
+
+    assertThat(result.status()).isEqualTo("rejected");
+    assertThat(result.errors())
+        .containsExactly("The ZIP file is damaged and can't be opened. Create the ZIP file again.");
+  }
+
+  @Test
   void shouldRejectCorruptZipFiles() {
     ApplicationSubmissionImportService service = service();
     MockMultipartFile file =
@@ -2435,7 +2544,7 @@ class ApplicationSubmissionImportServiceTest {
     ApplicationSubmissionImportResultDto result = service.importApplicationSubmission(file, "jsmith");
 
     assertThat(result.status()).isEqualTo("rejected");
-    assertThat(result.errors()).contains("The uploaded Zip file is corrupt, and cannot be read.");
+    assertThat(result.errors()).contains("The ZIP file is damaged and can't be opened. Create the ZIP file again.");
   }
 
   @Test
@@ -2495,7 +2604,7 @@ class ApplicationSubmissionImportServiceTest {
     assertThat(result.errors())
         .anySatisfy(
             error -> {
-              assertThat(error).contains("Line:");
+              assertThat(error).startsWith("Line ").contains(", column ");
               assertThat(error)
                   .contains(
                       "The tag '<lexis:productDetail>' must be terminated with a matching "
@@ -2650,10 +2759,7 @@ class ApplicationSubmissionImportServiceTest {
 
     assertThat(result.status()).isEqualTo("rejected");
     assertThat(result.errors())
-        .contains(
-            "The XML schema location must use a supported LEXIS schema version "
-                + "http://www.for.gov.bc.ca/schema/lexis/2/xsd/MOF/mof-lexis.xsd or "
-                + "http://www.for.gov.bc.ca/schema/lexis/3/xsd/MOF/mof-lexis.xsd.");
+        .contains("The file uses a LEXIS schema version that isn't supported. Use version 2 or 3.");
   }
 
   @Test

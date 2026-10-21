@@ -254,7 +254,7 @@ describe('Upload applications', () => {
     ).toBeInTheDocument()
     expect(
       within(issuesTable).getByRole('row', {
-        name: 'test-2026-10-20-03.xml File must be 20 MB or smaller.',
+        name: 'test-2026-10-20-03.xml The file must be 20 MB or smaller.',
       }),
     ).toBeInTheDocument()
     const download = screen.getByRole('link', { name: 'Download issues (.csv)' })
@@ -531,12 +531,13 @@ describe('Upload applications', () => {
     expect(screen.queryByRole('table', { name: /^Created/ })).not.toBeInTheDocument()
     const notCreated = screen.getByRole('table', { name: 'Not created (1)' })
     expect(
-      within(notCreated).getByText(
-        'Submission failed. Please try again. If the problem persists, contact your administrator.',
-      ),
+      within(notCreated).getByText(/We couldn't save this application\. Try again later\./),
     ).toBeVisible()
     expect(within(notCreated).queryByText(/Database/)).not.toBeInTheDocument()
-    expect(within(notCreated).queryByRole('link')).not.toBeInTheDocument()
+    expect(within(notCreated).getByRole('link', { name: 'report an issue' })).toHaveAttribute(
+      'href',
+      'mailto:Heartwood@gov.bc.ca',
+    )
     expect(screen.getByRole('button', { name: 'Upload applications' })).toHaveClass(
       'cds--btn--primary',
     )
@@ -587,10 +588,32 @@ describe('Upload applications', () => {
 
     const issuesTable = await screen.findByRole('table', { name: 'Validation issues (1)' })
     expect(
-      within(issuesTable).getByText(
-        'Submission validation failed. Please try again. If the problem persists, contact your administrator.',
-      ),
+      within(issuesTable).getByText(/We couldn't check this file\. Try again later\./),
     ).toBeVisible()
+    expect(within(issuesTable).getByRole('link', { name: 'report an issue' })).toHaveAttribute(
+      'href',
+      'mailto:Heartwood@gov.bc.ca',
+    )
+    expect(within(issuesTable).queryByText(/LEXIS could not complete/)).not.toBeInTheDocument()
+  })
+
+  it('shows the size limit when the server turns a file down as too large', async () => {
+    mockedValidateApplicationSubmissionUpload.mockRejectedValue({
+      response: {
+        status: 413,
+        data: { message: 'The selected file is too large. Choose a smaller file and try again.' },
+      },
+    })
+    renderPage()
+
+    await addFiles(xmlFile('test-2026-10-20.xml'))
+
+    const issuesTable = await screen.findByRole('table', { name: 'Validation issues (1)' })
+    expect(
+      within(issuesTable).getByRole('row', {
+        name: 'test-2026-10-20.xml The file must be 20 MB or smaller.',
+      }),
+    ).toBeInTheDocument()
   })
 
   it('asks before leaving while files are on the page', async () => {
