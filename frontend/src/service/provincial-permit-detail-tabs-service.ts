@@ -87,8 +87,17 @@ type ProvincialPermitGbmsInvoiceHistoryRow = {
   updateDate: string
 }
 
+/** An application's pieces and volume on this permit, from the permit's own scale rows. */
+export type PermitApplicationTotals = {
+  applicationNumber: string
+  pieces: number
+  volume: number
+}
+
 export type ProvincialPermitDetailTabsData = {
   applications: string[]
+  /** Each listed application's pieces and volume on this permit; empty for Blanket OIC. */
+  applicationTotals: PermitApplicationTotals[]
   packages: ProvincialPermitPackageInfoRow[]
   items: ProvincialPermitItemRow[]
   fees: ProvincialPermitFeeRow[]
@@ -180,6 +189,12 @@ type RemoveApplicationFromPermitRequest = {
   applicationNumber: string
 }
 
+type UpdatePermitApplicationsRequest = {
+  permitNumber: string
+  addedApplications: string[]
+  removedApplications: string[]
+}
+
 type UpdatePermitScaleAttachmentResult = {
   success: boolean
   message: string
@@ -192,6 +207,7 @@ const PERMIT_TAB_ARRAY_KEYS = ['scaleList', ...DEFAULT_PAYLOAD_ARRAY_KEYS]
 
 export const EMPTY_PROVINCIAL_PERMIT_DETAIL_TABS: ProvincialPermitDetailTabsData = {
   applications: [],
+  applicationTotals: [],
   packages: [],
   items: [],
   fees: [],
@@ -392,9 +408,30 @@ const normalizePackageDetailsFields = (
 
 type ProvincialPermitCoreTabs = Pick<
   ProvincialPermitDetailTabsData,
-  'applications' | 'packages' | 'items'
+  'applications' | 'applicationTotals' | 'packages' | 'items'
 > & {
   packageNumbers: string[]
+}
+
+// A response without totals has none; a malformed entry makes the whole response invalid.
+const parseApplicationTotals = (value: unknown, path: string): PermitApplicationTotals[] => {
+  if (value === undefined || value === null) return []
+  if (!Array.isArray(value)) throw new Error(`Invalid core tab response from ${path}`)
+  return value.map((entry) => {
+    const source = recordOrEmpty(entry)
+    const applicationNumber = asString(source.applicationNumber)
+    const { pieces, volume } = source
+    if (
+      !applicationNumber ||
+      typeof pieces !== 'number' ||
+      !Number.isFinite(pieces) ||
+      typeof volume !== 'number' ||
+      !Number.isFinite(volume)
+    ) {
+      throw new Error(`Invalid core tab response from ${path}`)
+    }
+    return { applicationNumber, pieces, volume }
+  })
 }
 
 const fetchCoreTabs = async (
@@ -463,6 +500,7 @@ const fetchCoreTabs = async (
 
     return {
       applications: payload.applicationList.map(asString).filter(Boolean),
+      applicationTotals: parseApplicationTotals(payload.applicationTotals, path),
       packageNumbers: corePackages.map((corePackage) => corePackage.packageNumber),
       packages: corePackages.map((corePackage) => corePackage.package),
       items: corePackages.flatMap((corePackage) => corePackage.items),
@@ -584,6 +622,7 @@ const fetchProvincialPermitDetailTabsData = async (
 
   return {
     applications: coreTabs.applications,
+    applicationTotals: coreTabs.applicationTotals,
     packages: coreTabs.packages,
     items: coreTabs.items,
     fees: feeData?.fees ?? [],
@@ -806,6 +845,37 @@ export const removeApplicationFromPermit = async (
       (success
         ? 'Application was removed from the permit.'
         : 'Unable to remove application from the permit.'),
+    errors: asStringArray(payload.errors),
+    warnings: asStringArray(payload.warnings),
+  }
+}
+
+/** Adds and removes the permit's applications together, as one save. */
+export const updatePermitApplications = async (
+  request: UpdatePermitApplicationsRequest,
+): Promise<UpdatePermitScaleAttachmentResult> => {
+  const applicationCsv = (applicationNumbers: string[]) =>
+    applicationNumbers
+      .map((applicationNumber) => applicationNumber.trim())
+      .filter(Boolean)
+      .join(',')
+  const response = await apiService.getAxiosInstance().post<unknown>(
+    '/lexis/rpc/permit-details/update-permit-applications',
+    toUrlEncodedParams({
+      permitNumber: request.permitNumber.trim(),
+      addedApplications: applicationCsv(request.addedApplications),
+      removedApplications: applicationCsv(request.removedApplications),
+    }),
+    { headers: { 'Content-Type': LEGACY_FORM_CONTENT_TYPE } },
+  )
+  const payload = recordOrEmpty(response.data)
+  const success = asBoolean(payload.success ?? payload.valid)
+  const message = asString(payload.message)
+  return {
+    success,
+    message:
+      message ||
+      (success ? 'Application changes were saved.' : 'Unable to save the application changes.'),
     errors: asStringArray(payload.errors),
     warnings: asStringArray(payload.warnings),
   }

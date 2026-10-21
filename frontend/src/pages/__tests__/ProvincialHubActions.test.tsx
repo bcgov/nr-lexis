@@ -89,6 +89,14 @@ describe('Provincial hub actions', () => {
     expect(screen.getByText('15')).toBeInTheDocument()
   })
 
+  it('names each Open button after its workflow', () => {
+    renderPage()
+
+    expect(screen.getByRole('button', { name: 'Open Applications' })).toBeVisible()
+    expect(screen.getByRole('button', { name: 'Open Review queue' })).toBeVisible()
+    expect(screen.queryByRole('button', { name: 'Open' })).not.toBeInTheDocument()
+  })
+
   it('hides provincial areas the user cannot access', () => {
     mockedUseAuth.mockReturnValue(
       createTestAuthContext({

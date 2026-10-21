@@ -186,32 +186,32 @@ const NAVIGATION_SECTIONS: NavigationSection[] = [
     links: [
       {
         to: '/reports/biweeklyListing',
-        label: 'Advertising List',
+        label: 'Advertising list',
         requiredActions: ['mofrListing'],
       },
       {
         to: '/reports/offerReport',
-        label: 'Offers Report',
+        label: 'Offers report',
         requiredActions: ['/offerReport'],
       },
       {
         to: '/reports/permitLedgerReport',
-        label: 'Permits Report',
+        label: 'Permits report',
         requiredActions: ['/permitLedgerReport'],
       },
       {
         to: '/reports/transportReport',
-        label: 'Transport Report',
+        label: 'Transport report',
         requiredActions: ['/transportReport'],
       },
       {
         to: '/reports/speciesGradeReport',
-        label: 'Species and Grade Report',
+        label: 'Species and grade report',
         requiredActions: ['/speciesGradeReport'],
       },
       {
         to: '/reports/tenureReport',
-        label: 'Tenure Analysis',
+        label: 'Tenure analysis report',
         requiredActions: ['/tenureReport'],
       },
     ],
@@ -610,7 +610,7 @@ function Layout({ children }: LayoutProps) {
         inert={isConflictOpen}
       >
         <SkipToContent />
-        <header className="cds--header csp-app-header" aria-label="NR LEXIS">
+        <header className="cds--header csp-app-header" aria-label="LEXIS">
           <HeaderMenuButton
             id="navigation-toggle"
             className="csp-navigation-toggle"

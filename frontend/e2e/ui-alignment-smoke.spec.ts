@@ -589,13 +589,13 @@ test.describe('FSPTS-aligned LEXIS shell', () => {
     await expect(page.getByRole('button', { name: 'Close menu' })).toBeVisible()
 
     await provincial.click()
-    await page.getByRole('link', { name: 'Offers Report', exact: true }).click()
-    await expect(page.getByRole('heading', { name: 'Offers Report', exact: true })).toBeVisible()
+    await page.getByRole('link', { name: 'Offers report', exact: true }).click()
+    await expect(page.getByRole('heading', { name: 'Offers report', exact: true })).toBeVisible()
     await expect(provincial).toHaveAttribute('aria-expanded', 'true')
     await expect(reports).toHaveAttribute('aria-expanded', 'true')
     await expect(provincial).not.toHaveAttribute('aria-current')
     await expect(reports).not.toHaveAttribute('aria-current')
-    await expect(page.getByRole('link', { name: 'Offers Report', exact: true })).toHaveAttribute(
+    await expect(page.getByRole('link', { name: 'Offers report', exact: true })).toHaveAttribute(
       'aria-current',
       'page',
     )
@@ -614,7 +614,7 @@ test.describe('FSPTS-aligned LEXIS shell', () => {
       }),
     })
 
-    await expect(page).toHaveTitle('Log Exemption Information System')
+    await expect(page).toHaveTitle('Application search')
     await expect(page.locator('link[rel="icon"]')).toHaveAttribute('type', 'image/png')
     await expect(page.locator('link[rel="icon"]')).toHaveAttribute('href', '/bcid-192x192.png')
     await expect(page.getByRole('heading', { level: 1, name: 'Application search' })).toBeVisible()
@@ -827,7 +827,7 @@ test.describe('FSPTS-aligned LEXIS shell', () => {
       '.legacy-search-table-toolbar--with-actions .cds--toolbar-content',
     )
     await expect(resultActionToolbar).toHaveCSS('align-items', 'center')
-    await expect(resultActionToolbar).toHaveCSS('height', '56px')
+    await expect(resultActionToolbar).toHaveCSS('height', '40px')
     await expect(resultActionToolbar).toHaveCSS('padding-left', '16px')
     const batchActions = page.locator('.cds--batch-actions--active')
     await expect(batchActions).toContainText('1 application selected')
@@ -900,7 +900,7 @@ test.describe('FSPTS-aligned LEXIS shell', () => {
       if ((await groupToggle.getAttribute('aria-expanded')) === 'false') await groupToggle.click()
       await expect(groupToggle).toHaveAttribute('aria-expanded', 'true')
     }
-    for (const longLabel of ['Species and Grade Report', 'Non-appraised Sec.3 FIL%']) {
+    for (const longLabel of ['Species and grade report', 'Non-appraised Sec.3 FIL%']) {
       await expect(page.getByRole('link', { name: longLabel, exact: true })).toBeVisible()
     }
     const groupItemLabels = page.locator(
@@ -914,14 +914,14 @@ test.describe('FSPTS-aligned LEXIS shell', () => {
       ),
     ).toEqual([])
     for (const retiredReport of [
-      'Application Report',
-      'TEAC Package',
-      'Exemptions Report',
-      'Fees Report',
+      /^application report$/i,
+      /^teac package$/i,
+      /^exemptions report$/i,
+      /^fees report$/i,
     ]) {
-      await expect(page.getByRole('link', { name: retiredReport, exact: true })).toHaveCount(0)
+      await expect(page.getByRole('link', { name: retiredReport })).toHaveCount(0)
     }
-    await expect(page.getByRole('link', { name: 'Advertising List', exact: true })).toBeVisible()
+    await expect(page.getByRole('link', { name: 'Advertising list', exact: true })).toBeVisible()
 
     const typographyFoundation = await page.evaluate(() => {
       const rootStyle = getComputedStyle(document.documentElement)
@@ -2379,7 +2379,7 @@ test.describe('FSPTS-aligned LEXIS shell', () => {
     await expect(page.getByRole('heading', { level: 1, name: 'Offer 81001' })).toBeVisible({
       timeout: 30_000,
     })
-    await expect(page.getByText('Check and manage this provincial offer')).toBeVisible()
+    await expect(page.getByText('Check and manage this provincial offer')).toHaveCount(0)
     const backLink = page.getByRole('link', { name: 'Back to Offer search' })
     await expect(backLink).toHaveAttribute('href', '/provincial/offers')
     await expect(backLink.locator('svg')).toBeVisible()
@@ -2888,11 +2888,11 @@ test.describe('FSPTS-aligned LEXIS shell', () => {
     await page.setViewportSize({ width: 1440, height: 900 })
     await gotoSyntheticRoute(page, '/reports/offerReport', {
       waitUntil: 'domcontentloaded',
-      ready: page.getByRole('heading', { level: 1, name: 'Offers Report', exact: true }),
+      ready: page.getByRole('heading', { level: 1, name: 'Offers report', exact: true }),
     })
 
-    await expect(page.getByRole('heading', { level: 1, name: 'Offers Report' })).toBeVisible()
-    const reportPanel = page.getByRole('region', { name: 'Offers Report' })
+    await expect(page.getByRole('heading', { level: 1, name: 'Offers report' })).toBeVisible()
+    const reportPanel = page.getByRole('region', { name: 'Offers report' })
     const reportFields = reportPanel.locator('.report-config-fields')
     const reportActions = page.getByRole('group', { name: 'Report actions' })
     await expect(reportPanel).toHaveCSS('border-top-width', '1px')
@@ -3067,9 +3067,11 @@ test.describe('FSPTS-aligned LEXIS shell', () => {
         })
       })
       await gotoSyntheticRoute(page, '/admin/policies/fee', {
-        ready: page.getByRole('button', { name: 'Delete', exact: true }),
+        ready: page.getByRole('button', { name: 'Delete fee policy RCO 2099-01-01', exact: true }),
       })
-      await page.getByRole('button', { name: 'Delete', exact: true }).click()
+      await page
+        .getByRole('button', { name: 'Delete fee policy RCO 2099-01-01', exact: true })
+        .click()
       const dialog = page.getByRole('dialog', { name: 'Delete fee policy?' })
       await dialog.getByRole('button', { name: 'Delete', exact: true }).click()
       const failure = dialog.locator('.app-inline-notification')
@@ -3125,9 +3127,11 @@ test.describe('FSPTS-aligned LEXIS shell', () => {
       await route.fulfill({ json: { success: false, errors: [longError] } })
     })
     await gotoSyntheticRoute(page, '/admin/policies/fee', {
-      ready: page.getByRole('button', { name: 'Delete', exact: true }),
+      ready: page.getByRole('button', { name: 'Delete fee policy RCO 2099-01-01', exact: true }),
     })
-    await page.getByRole('button', { name: 'Delete', exact: true }).click()
+    await page
+      .getByRole('button', { name: 'Delete fee policy RCO 2099-01-01', exact: true })
+      .click()
     const dialog = page.getByRole('dialog', { name: 'Delete fee policy?' })
     await dialog.getByRole('button', { name: 'Delete', exact: true }).click()
     const failure = dialog.locator('.app-inline-notification')
@@ -3150,7 +3154,9 @@ test.describe('FSPTS-aligned LEXIS shell', () => {
       )
       .toBe(true)
     await dialog.getByRole('button', { name: 'Cancel', exact: true }).click()
-    await page.getByRole('button', { name: 'Delete', exact: true }).click()
+    await page
+      .getByRole('button', { name: 'Delete fee policy RCO 2099-01-01', exact: true })
+      .click()
     await expect(dialog.locator('.app-inline-notification')).toHaveCount(0)
   })
 

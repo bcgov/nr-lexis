@@ -24,6 +24,11 @@ type ConfirmationModalProps = {
   size?: 'xs' | 'sm' | 'md' | 'lg'
   className?: string
   launcherButtonRef?: RefObject<HTMLElement | null>
+  /**
+   * False when confirming or cancelling moves focus itself, so the dialog leaves focus alone.
+   * Closing with the X button or Escape still returns focus.
+   */
+  restoreFocusAfterAction?: boolean
   errorTitle?: string
   errorMessage?: string
   onConfirm: () => Promise<void> | void
@@ -51,6 +56,7 @@ const ConfirmationModal = ({
   size = 'sm',
   className,
   launcherButtonRef,
+  restoreFocusAfterAction = true,
   errorTitle = 'Action failed',
   errorMessage,
   onConfirm,
@@ -60,7 +66,10 @@ const ConfirmationModal = ({
 }: ConfirmationModalProps) => {
   const [pending, setPending] = useState(false)
   const [failureMessage, setFailureMessage] = useState('')
+  // Counts failed confirmations so the in-dialog error takes focus only after an attempt.
+  const [failedAttempts, setFailedAttempts] = useState(0)
   const modalRef = useRef<HTMLDivElement>(null)
+  const confirmButtonRef = useRef<HTMLButtonElement>(null)
   const generatedId = useId().replaceAll(':', '')
   const cancelButtonId = `lexis-confirmation-cancel-${generatedId}`
   const descriptionId = `lexis-confirmation-description-${generatedId}`
@@ -68,55 +77,67 @@ const ConfirmationModal = ({
   const openerRef = useRef<HTMLElement | null>(null)
   useModalCloseDisabled(modalRef, pending)
 
+  const findDialog = () => {
+    const modalNode = modalRef.current
+    return modalNode?.matches('[role="dialog"]')
+      ? modalNode
+      : modalNode?.querySelector<HTMLElement>('[role="dialog"]')
+  }
+
   useLayoutEffect(() => {
     if (open) openerRef.current = focusedElement()
   }, [open])
 
   useLayoutEffect(() => {
     if (!open || !description) return
-    const modalNode = modalRef.current
-    const dialog = modalNode?.matches('[role="dialog"]')
-      ? modalNode
-      : modalNode?.querySelector<HTMLElement>('[role="dialog"]')
+    const dialog = findDialog()
     dialog?.setAttribute('aria-describedby', descriptionId)
     return () => dialog?.removeAttribute('aria-describedby')
   }, [description, descriptionId, open])
 
   // Without a launcherButtonRef, dismissing the dialog returns focus to the control that opened it.
-  const closeAndRestoreFocus = (dismissed: boolean) => {
-    const launcherButton = launcherButtonRef
-      ? launcherButtonRef.current
-      : dismissed
-        ? openerRef.current
-        : null
+  const returnTarget = (dismissed: boolean) =>
+    launcherButtonRef ? launcherButtonRef.current : dismissed ? openerRef.current : null
+
+  const closeAndRestoreFocus = (dismissed: boolean, byAction = false) => {
+    const launcherButton = byAction && !restoreFocusAfterAction ? null : returnTarget(dismissed)
     onClose()
     if (launcherButton) {
       window.setTimeout(() => launcherButton.focus())
     }
   }
 
+  const clearFailure = () => {
+    setFailureMessage('')
+    setFailedAttempts(0)
+  }
+
   const requestClose = () => {
     if (pending) return
-    setFailureMessage('')
+    clearFailure()
     closeAndRestoreFocus(true)
   }
 
   const requestCancel = () => {
     if (pending) return
-    setFailureMessage('')
+    clearFailure()
     onCancel?.()
-    closeAndRestoreFocus(true)
+    closeAndRestoreFocus(true, true)
   }
 
   const confirm = async () => {
     if (pending || confirmDisabled) return
 
     setFailureMessage('')
+    // The confirm button is disabled while pending, which would drop focus to the page body.
+    if (document.activeElement === confirmButtonRef.current) findDialog()?.focus()
     setPending(true)
     try {
       await onConfirm()
-      closeAndRestoreFocus(false)
+      setFailedAttempts(0)
+      closeAndRestoreFocus(false, true)
     } catch (error) {
+      setFailedAttempts((attempts) => attempts + 1)
       if (onError) {
         onError(error)
       } else {
@@ -159,6 +180,8 @@ const ConfirmationModal = ({
             kind="error"
             title={errorTitle}
             subtitle={errorMessage || failureMessage}
+            focusOnReveal={failedAttempts > 0}
+            revealKey={failedAttempts}
             onCloseButtonClick={errorMessage ? undefined : () => setFailureMessage('')}
           />
         ) : null}
@@ -173,6 +196,7 @@ const ConfirmationModal = ({
             {cancelLabel}
           </Button>
           <Button
+            ref={confirmButtonRef}
             kind={danger ? 'danger' : 'primary'}
             size="md"
             disabled={pending || confirmDisabled}

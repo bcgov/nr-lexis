@@ -2450,6 +2450,46 @@ $notification-types: 'error', 'info', 'success', 'warning';
   }
 }
 
+// Above the phone layout, the batch bar fills the toolbar at its resting height, so selecting
+// rows doesn't move the table.
+@media (min-width: 672px) {
+  .legacy-search-table-toolbar--with-actions:has(.cds--batch-actions) {
+    .cds--table-toolbar,
+    .cds--toolbar-content {
+      block-size: 2.5rem;
+      min-block-size: 2.5rem;
+      padding-block: 0;
+    }
+
+    .cds--batch-summary {
+      min-block-size: 2.5rem;
+    }
+
+    .cds--action-list .cds--btn {
+      block-size: 2.5rem;
+      min-block-size: 2.5rem;
+      padding-block: 0.625rem;
+    }
+
+    .cds--btn--primary.cds--batch-summary__cancel::before {
+      inset-block-start: 0.75rem;
+    }
+  }
+}
+
+// The md row actions fill the row, so their labels sit on the same line as the row's text.
+.provincial-review-search-page .legacy-search-table-frame .cds--data-table tbody td {
+  vertical-align: middle;
+}
+
+.provincial-review-search-page
+  .legacy-search-table-frame
+  .cds--data-table
+  tbody
+  td:has(> .provincial-review-row-actions) {
+  padding-block: 0;
+}
+
 .provincial-review-row-actions {
   display: flex;
   flex-wrap: wrap;
@@ -2692,6 +2732,13 @@ $notification-types: 'error', 'info', 'success', 'warning';
 
 .app-inline-notification .cds--inline-notification__subtitle {
   overflow-wrap: anywhere;
+}
+
+// Below Carbon's md breakpoint a rich notice keeps a 3rem gutter for the close button even when it
+// has none. Without the button, its text keeps the same 13px inset as at wider widths.
+.app-inline-notification.cds--actionable-notification--hide-close-button
+  .cds--actionable-notification__details {
+  margin-inline-end: 0.8125rem;
 }
 
 // A result that lists records shows its message and then the list below the title.
@@ -5638,24 +5685,6 @@ $notification-types: 'error', 'info', 'success', 'warning';
   padding: 0;
 }
 
-.application-items-package-edit-panel {
-  display: flex;
-  flex-direction: column;
-  gap: 0.75rem;
-  min-width: 0;
-}
-
-.application-items-form {
-  display: grid;
-  gap: 0.75rem 1rem;
-  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-  margin-bottom: 0.75rem;
-}
-
-.application-items-section--create-package .application-items-form {
-  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
-}
-
 .exemption-application-add-form {
   align-items: start;
   display: grid;
@@ -6114,9 +6143,12 @@ $notification-types: 'error', 'info', 'success', 'warning';
   margin-block-start: 2rem;
 }
 
-// A disabled combo box can't be cleared, so it shows no clear button. Nor does a filter on All.
+// A disabled or read-only combo box can't be cleared, so it shows no clear button. Nor does a
+// filter on All, a required select with a value, or a select that isn't clearable.
 .cds--list-box--disabled .cds--list-box__selection,
-.searchable-select--all .cds--list-box__selection {
+.cds--combo-box--readonly .cds--list-box__selection,
+.searchable-select--all .cds--list-box__selection,
+.lexis-combobox--no-clear .cds--list-box__selection {
   display: none;
 }
 

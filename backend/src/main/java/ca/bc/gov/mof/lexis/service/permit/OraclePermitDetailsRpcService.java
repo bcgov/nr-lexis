@@ -15,6 +15,7 @@ import ca.bc.gov.mof.lexis.dto.application.ApplicationAccessContextDto;
 import ca.bc.gov.mof.lexis.dto.exemption.ExemptionDetailDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitAllScaleFeesRpcResponseDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitApplicationListRpcResponseDto;
+import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitApplicationTotalsRpcResponseDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitApprovedExemptionVolumeRpcResponseDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitAvailableApplicationItemRpcResponseDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitAvailableApplicationListRpcResponseDto;
@@ -136,6 +137,10 @@ public class OraclePermitDetailsRpcService implements PermitDetailsRpcService {
       "Email was not sent. " + REGIONAL_OFFICE_NOTIFY_WARNING;
   private static final String APPLICATION_ADDITION_LOCKED_MESSAGE =
       "Applications cannot be added to a completed, payment-pending, expired, or cancelled permit.";
+  private static final String APPLICATION_REMOVAL_LOCKED_MESSAGE =
+      "Applications cannot be removed from a completed, expired, or cancelled permit.";
+  private static final String BLANKET_OIC_APPLICATION_ASSOCIATION_MESSAGE =
+      "Application associations are not changed this way for Blanket OIC permits.";
   private static final String APPLICATION_STATUS_PERMITTED = "PMT";
   private static final String APPLICATION_STATUS_EXEMPTED = "EXE";
   private static final String EXEMPTION_STATUS_ACTIVE = "ACT";
@@ -859,10 +864,12 @@ public class OraclePermitDetailsRpcService implements PermitDetailsRpcService {
             .map(ApplicationAccessContextDto::applicationNumber)
             .map(String::valueOf)
             .toList();
+    List<PermitCoreScaleRow> coreScaleRows =
+        nonNullList(repository.findCoreScaleRows(packageNumbers, permitNumber, blanketOic));
     PermitCoreLookupContext lookupContext =
         buildCoreLookupContext(
             contextRows,
-            nonNullList(repository.findCoreScaleRows(packageNumbers, permitNumber, blanketOic)),
+            coreScaleRows,
             nonNullList(repository.findCoreEndUseRows(
                 contextRows.stream()
                     .map(PermitCorePackageContextRow::packageRow)
@@ -874,7 +881,44 @@ public class OraclePermitDetailsRpcService implements PermitDetailsRpcService {
 
     return new PermitCoreTabsRpcResponseDto(
         applicationList,
-        loadCorePackages(permitNumber, blanketOic, packageRows, lookupContext));
+        loadCorePackages(permitNumber, blanketOic, packageRows, lookupContext),
+        blanketOic
+            ? List.of()
+            : permitApplicationTotals(permitNumber, applicationList, coreScaleRows));
+  }
+
+  /**
+   * Each listed application's pieces and volume on this permit, summed from the scale rows assigned
+   * to it. Unassigned rows and rows on other permits don't count.
+   */
+  private List<PermitApplicationTotalsRpcResponseDto> permitApplicationTotals(
+      Long permitNumber, List<String> applicationList, List<PermitCoreScaleRow> coreScaleRows) {
+    String permitNumberText = String.valueOf(permitNumber);
+    Map<String, Long> piecesByApplication = new HashMap<>();
+    Map<String, BigDecimal> volumeByApplication = new HashMap<>();
+    for (PermitCoreScaleRow coreScale : coreScaleRows) {
+      PermitScaleDetailRow scale = coreScale == null ? null : coreScale.scaleRow();
+      if (scale == null
+          || scale.applicationNumber() == null
+          || !permitNumberText.equals(trimToNull(scale.exportPermitDetailNumber()))) {
+        continue;
+      }
+      String applicationNumber = String.valueOf(scale.applicationNumber());
+      piecesByApplication.merge(applicationNumber, scale.piecesCount(), Long::sum);
+      volumeByApplication.merge(
+          applicationNumber, BigDecimal.valueOf(scale.speciesGradeVolume()), BigDecimal::add);
+    }
+    return applicationList.stream()
+        .map(
+            applicationNumber ->
+                new PermitApplicationTotalsRpcResponseDto(
+                    applicationNumber,
+                    piecesByApplication.getOrDefault(applicationNumber, 0L),
+                    volumeByApplication
+                        .getOrDefault(applicationNumber, BigDecimal.ZERO)
+                        .setScale(2, RoundingMode.HALF_UP)
+                        .doubleValue()))
+        .toList();
   }
 
   private ApplicationAccessContextDto toApplicationAccessContext(
@@ -1080,13 +1124,17 @@ public class OraclePermitDetailsRpcService implements PermitDetailsRpcService {
         applicationNumber ->
             canAccessApplication(applicationNumber, applicationAccess, applicationAccessByNumber);
     // Every accessible application with a package in the exemption is a candidate, whatever its
-    // status, unless it is already on the permit.
+    // status. Applications already on the permit are left out.
     Map<Long, List<ScaleMutationRow>> unassignedScalesByApplication =
-        findUnassignedScalesByApplication(normalizedExemptionNumber, cachedApplicationAccess);
+        findUnassignedScalesByApplication(
+            normalizedExemptionNumber,
+            applicationNumber ->
+                !selectedApplications.contains(String.valueOf(applicationNumber))
+                    && cachedApplicationAccess.test(applicationNumber));
 
     List<PermitAvailableApplicationItemRpcResponseDto> applicationItems =
         unassignedScalesByApplication.entrySet().stream()
-            .map(entry -> toAvailableApplicationItem(entry, selectedApplications))
+            .map(this::toAvailableApplicationItem)
             .sorted(Comparator.comparing(PermitAvailableApplicationItemRpcResponseDto::applicationNumber))
             .toList();
     List<String> applicationList =
@@ -1102,21 +1150,14 @@ public class OraclePermitDetailsRpcService implements PermitDetailsRpcService {
   }
 
   private PermitAvailableApplicationItemRpcResponseDto toAvailableApplicationItem(
-      Map.Entry<Long, List<ScaleMutationRow>> entry, Set<String> selectedApplications) {
-    String applicationNumber = String.valueOf(entry.getKey());
+      Map.Entry<Long, List<ScaleMutationRow>> entry) {
     List<ScaleMutationRow> unassignedScales = entry.getValue();
-    Long unassignedPieces = sumUnassignedPieces(unassignedScales);
-    Double unassignedVolume = sumUnassignedVolume(unassignedScales);
-    if (selectedApplications.contains(applicationNumber)) {
-      return new PermitAvailableApplicationItemRpcResponseDto(
-          applicationNumber,
-          true,
-          "Already associated with this permit.",
-          unassignedPieces,
-          unassignedVolume);
-    }
     return new PermitAvailableApplicationItemRpcResponseDto(
-        applicationNumber, false, null, unassignedPieces, unassignedVolume);
+        String.valueOf(entry.getKey()),
+        false,
+        null,
+        sumUnassignedPieces(unassignedScales),
+        sumUnassignedVolume(unassignedScales));
   }
 
   private Long sumUnassignedPieces(List<ScaleMutationRow> unassignedScales) {
@@ -2527,20 +2568,11 @@ public class OraclePermitDetailsRpcService implements PermitDetailsRpcService {
                     new DataRetrievalFailureException(
                         "Permit " + permitNumber + " was unavailable after validation."));
     // An application with no unassigned scale rows has nothing to attach and is left as it is.
-    Map<Long, List<ScaleMutationRow>> eligibleScalesByApplication =
-        findUnassignedScalesByApplication(permit.exemptionNumber(), ignored -> true);
-    List<ApplicationScaleAttachmentPlan> attachmentPlans = new ArrayList<>();
-    for (Long applicationNumber : applicationNumbers) {
-      attachmentPlans.add(
-          new ApplicationScaleAttachmentPlan(
-              applicationNumber,
-              eligibleScalesByApplication.getOrDefault(applicationNumber, List.of())));
-    }
-    BigDecimal addedVolume =
-        attachmentPlans.stream()
-            .flatMap(plan -> plan.unassignedScales().stream())
-            .map(OraclePermitDetailsRpcService::scaleVolume)
-            .reduce(BigDecimal.ZERO, BigDecimal::add);
+    List<ApplicationScalePlan> attachmentPlans =
+        unassignedScalePlans(
+            applicationNumbers,
+            findUnassignedScalesByApplication(permit.exemptionNumber(), ignored -> true));
+    BigDecimal addedVolume = planVolume(attachmentPlans);
     Optional<String> balanceError =
         balanceRemainingForAddedScales(permit)
             .flatMap(remaining -> addedScalesBalanceError(remaining, addedVolume));
@@ -2548,40 +2580,17 @@ public class OraclePermitDetailsRpcService implements PermitDetailsRpcService {
       return failurePersistenceResponse(List.of(balanceError.get()), permitNumber);
     }
 
-    int attachedScaleCount = 0;
-    for (ApplicationScaleAttachmentPlan plan : attachmentPlans) {
-      for (ScaleMutationRow scale : plan.unassignedScales()) {
-        if (!updateScalePermitAssignment(scale, permitNumber, normalizedUserId)) {
-          markRollbackOnly();
-          return failurePersistenceResponse(
-              List.of("Unable to add application " + plan.applicationNumber() + " to the permit."),
-              permitNumber);
-        }
-        attachedScaleCount++;
-      }
-
-      if (!plan.unassignedScales().isEmpty()
-          && !markApplicationPermitted(plan.applicationNumber(), normalizedUserId)) {
-        markRollbackOnly();
-        return failurePersistenceResponse(
-            List.of(
-                "Unable to reconcile application "
-                    + plan.applicationNumber()
-                    + " status."),
-            permitNumber);
-      }
+    Optional<PermitPersistenceRpcResponseDto> attachFailure =
+        attachApplicationScales(permitNumber, attachmentPlans, normalizedUserId);
+    if (attachFailure.isPresent()) {
+      return attachFailure.get();
     }
-
-    if (!synchronizePermitClientsWithFirstApplication(permitNumber, normalizedUserId)) {
-      markRollbackOnly();
-      return failurePersistenceResponse(
-          List.of("Unable to update the permit owner and agent."), permitNumber);
+    Optional<PermitPersistenceRpcResponseDto> refreshFailure =
+        refreshPermitAfterApplicationChange(permitNumber, normalizedUserId);
+    if (refreshFailure.isPresent()) {
+      return refreshFailure.get();
     }
-    if (!updatePermitTotals(permitNumber, normalizedUserId)) {
-      markRollbackOnly();
-      return failurePersistenceResponse(
-          List.of("Unable to recalculate permit totals."), permitNumber);
-    }
+    int attachedScaleCount = planScaleCount(attachmentPlans);
     return new PermitPersistenceRpcResponseDto(
         true,
         attachedScaleCount == 0
@@ -2616,45 +2625,257 @@ public class OraclePermitDetailsRpcService implements PermitDetailsRpcService {
     PermitMutationRow permit = existing.get();
     if (isBlanketOicPermit(permit)) {
       return failurePersistenceResponse(
-          List.of("Application associations are not changed this way for Blanket OIC permits."), permitNumber);
+          List.of(BLANKET_OIC_APPLICATION_ASSOCIATION_MESSAGE), permitNumber);
     }
     if (isScaleAttachmentLockedStatus(permit.permitStatusCode())) {
       return failurePersistenceResponse(
-          List.of("Applications cannot be removed from a completed, expired, or cancelled permit."),
-          permitNumber);
+          List.of(APPLICATION_REMOVAL_LOCKED_MESSAGE), permitNumber);
     }
 
-    int removedScaleCount = 0;
-    for (ScaleMutationRow scale : repository.findScaleMutationDetailsByApplicationNumber(applicationNumber)) {
-      if (!permitNumber.equals(scale.exportPermitDetailNumber())) {
-        continue;
-      }
-      if (!updateScalePermitAssignment(scale, null, normalizedUserId)) {
-        markRollbackOnly();
-        return failurePersistenceResponse(
-            List.of("Unable to remove application " + applicationNumber + " from the permit."), permitNumber);
-      }
-      removedScaleCount++;
+    ApplicationScalePlan detachmentPlan = permitScalePlan(permitNumber, applicationNumber);
+    Optional<PermitPersistenceRpcResponseDto> detachFailure =
+        detachApplicationScales(permitNumber, List.of(detachmentPlan), normalizedUserId);
+    if (detachFailure.isPresent()) {
+      return detachFailure.get();
     }
-
-    if (!synchronizePermitClientsWithFirstApplication(permitNumber, normalizedUserId)) {
-      markRollbackOnly();
-      return failurePersistenceResponse(
-          List.of("Unable to update the permit owner and agent."), permitNumber);
-    }
-    if (!updatePermitTotals(permitNumber, normalizedUserId)) {
-      markRollbackOnly();
-      return failurePersistenceResponse(
-          List.of("Unable to recalculate permit totals."), permitNumber);
+    Optional<PermitPersistenceRpcResponseDto> refreshFailure =
+        refreshPermitAfterApplicationChange(permitNumber, normalizedUserId);
+    if (refreshFailure.isPresent()) {
+      return refreshFailure.get();
     }
     return new PermitPersistenceRpcResponseDto(
         true,
-        removedScaleCount == 1
+        detachmentPlan.scales().size() == 1
             ? "Application scale row was removed from the permit."
             : "Application scale rows were removed from the permit.",
         List.of(),
         List.of(),
         permitNumber);
+  }
+
+  /**
+   * Adds and removes a permit's applications in one transaction.
+   * Every check runs before the first write, so a refusal changes nothing. Removed applications
+   * detach first and keep their status; added applications then attach their unassigned scale rows
+   * and become Permitted. The scale volume added, less the volume removed, must fit the
+   * exemption's balance remaining.
+   */
+  @Override
+  @Transactional
+  public PermitPersistenceRpcResponseDto updatePermitApplications(
+      Long permitNumber,
+      String addedApplicationsCsv,
+      String removedApplicationsCsv,
+      String userId) {
+    String normalizedUserId = trimToNull(userId);
+    if (normalizedUserId == null) {
+      return failurePersistenceResponse(List.of("A valid user identifier is required."), permitNumber);
+    }
+    if (permitNumber == null || permitNumber < 1) {
+      return failurePersistenceResponse(List.of("A valid permit number is required."), permitNumber);
+    }
+    List<Long> addedApplications = parsePositiveApplicationNumbers(addedApplicationsCsv);
+    List<Long> removedApplications = parsePositiveApplicationNumbers(removedApplicationsCsv);
+    if (addedApplications.isEmpty() && removedApplications.isEmpty()) {
+      return failurePersistenceResponse(
+          List.of("Select at least one application to add or remove."), permitNumber);
+    }
+    if (addedApplications.stream().anyMatch(removedApplications::contains)) {
+      return failurePersistenceResponse(
+          List.of("An application can't be added and removed in the same save."), permitNumber);
+    }
+
+    Optional<PermitMutationRow> existing = repository.findPermitMutationByPermitNumber(permitNumber);
+    if (existing.isEmpty()) {
+      return failurePersistenceResponse(List.of("Permit not found."), permitNumber);
+    }
+    PermitMutationRow permit = existing.get();
+    if (isBlanketOicPermit(permit)) {
+      return failurePersistenceResponse(
+          List.of(BLANKET_OIC_APPLICATION_ASSOCIATION_MESSAGE), permitNumber);
+    }
+    if (!removedApplications.isEmpty()
+        && isScaleAttachmentLockedStatus(permit.permitStatusCode())) {
+      return failurePersistenceResponse(
+          List.of(APPLICATION_REMOVAL_LOCKED_MESSAGE), permitNumber);
+    }
+    if (!addedApplications.isEmpty()) {
+      List<String> validationErrors =
+          validateApplicationAssociationRequest(
+              permitNumber, normalizedUserId, addedApplications);
+      if (!validationErrors.isEmpty()) {
+        return failurePersistenceResponse(validationErrors, permitNumber);
+      }
+    }
+
+    List<ApplicationScalePlan> attachmentPlans =
+        addedApplications.isEmpty()
+            ? List.of()
+            : unassignedScalePlans(
+                addedApplications,
+                findUnassignedScalesByApplication(
+                    permit.exemptionNumber(), addedApplications::contains));
+    List<ApplicationScalePlan> detachmentPlans =
+        removedApplications.stream()
+            .map(applicationNumber -> permitScalePlan(permitNumber, applicationNumber))
+            .toList();
+    if (!attachmentPlans.isEmpty()) {
+      BigDecimal netAddedVolume =
+          planVolume(attachmentPlans).subtract(planVolume(detachmentPlans));
+      Optional<String> balanceError =
+          balanceRemainingForAddedScales(permit)
+              .flatMap(remaining -> addedScalesBalanceError(remaining, netAddedVolume));
+      if (balanceError.isPresent()) {
+        return failurePersistenceResponse(List.of(balanceError.get()), permitNumber);
+      }
+    }
+
+    Optional<PermitPersistenceRpcResponseDto> detachFailure =
+        detachApplicationScales(permitNumber, detachmentPlans, normalizedUserId);
+    if (detachFailure.isPresent()) {
+      return detachFailure.get();
+    }
+    Optional<PermitPersistenceRpcResponseDto> attachFailure =
+        attachApplicationScales(permitNumber, attachmentPlans, normalizedUserId);
+    if (attachFailure.isPresent()) {
+      return attachFailure.get();
+    }
+    // Nothing to attach or detach leaves the permit as it is.
+    if (planScaleCount(attachmentPlans) + planScaleCount(detachmentPlans) > 0) {
+      Optional<PermitPersistenceRpcResponseDto> refreshFailure =
+          refreshPermitAfterApplicationChange(permitNumber, normalizedUserId);
+      if (refreshFailure.isPresent()) {
+        return refreshFailure.get();
+      }
+    }
+    List<String> warnings =
+        attachmentPlans.stream()
+            .filter(plan -> plan.scales().isEmpty())
+            .map(
+                plan ->
+                    "Application "
+                        + plan.applicationNumber()
+                        + " has no unassigned scale rows, so it was not added to the permit.")
+            .toList();
+    return new PermitPersistenceRpcResponseDto(
+        true, "Application changes were saved.", List.of(), warnings, permitNumber);
+  }
+
+  private List<Long> parsePositiveApplicationNumbers(String csv) {
+    return parseCsvSet(csv).stream()
+        .map(ca.bc.gov.mof.lexis.util.ValueUtils::parsePositiveLong)
+        .filter(java.util.Objects::nonNull)
+        .distinct()
+        .sorted()
+        .toList();
+  }
+
+  /** Each application's unassigned scale rows in the exemption, the rows adding it attaches. */
+  private List<ApplicationScalePlan> unassignedScalePlans(
+      List<Long> applicationNumbers,
+      Map<Long, List<ScaleMutationRow>> unassignedScalesByApplication) {
+    List<ApplicationScalePlan> plans = new ArrayList<>(applicationNumbers.size());
+    for (Long applicationNumber : applicationNumbers) {
+      plans.add(
+          new ApplicationScalePlan(
+              applicationNumber,
+              unassignedScalesByApplication.getOrDefault(applicationNumber, List.of())));
+    }
+    return plans;
+  }
+
+  /** The application's scale rows on this permit, the rows removing it detaches. */
+  private ApplicationScalePlan permitScalePlan(Long permitNumber, Long applicationNumber) {
+    return new ApplicationScalePlan(
+        applicationNumber,
+        repository.findScaleMutationDetailsByApplicationNumber(applicationNumber).stream()
+            .filter(scale -> permitNumber.equals(scale.exportPermitDetailNumber()))
+            .toList());
+  }
+
+  private static BigDecimal planVolume(List<ApplicationScalePlan> plans) {
+    return plans.stream()
+        .flatMap(plan -> plan.scales().stream())
+        .map(OraclePermitDetailsRpcService::scaleVolume)
+        .reduce(BigDecimal.ZERO, BigDecimal::add);
+  }
+
+  private static int planScaleCount(List<ApplicationScalePlan> plans) {
+    return plans.stream().mapToInt(plan -> plan.scales().size()).sum();
+  }
+
+  /**
+   * Attaches each plan's scale rows to the permit and sets an application that gained a row to
+   * Permitted, whatever status it had. A failed write marks the transaction for rollback.
+   */
+  private Optional<PermitPersistenceRpcResponseDto> attachApplicationScales(
+      Long permitNumber, List<ApplicationScalePlan> plans, String userId) {
+    for (ApplicationScalePlan plan : plans) {
+      for (ScaleMutationRow scale : plan.scales()) {
+        if (!updateScalePermitAssignment(scale, permitNumber, userId)) {
+          markRollbackOnly();
+          return Optional.of(
+              failurePersistenceResponse(
+                  List.of(
+                      "Unable to add application " + plan.applicationNumber() + " to the permit."),
+                  permitNumber));
+        }
+      }
+
+      if (!plan.scales().isEmpty() && !markApplicationPermitted(plan.applicationNumber(), userId)) {
+        markRollbackOnly();
+        return Optional.of(
+            failurePersistenceResponse(
+                List.of("Unable to reconcile application " + plan.applicationNumber() + " status."),
+                permitNumber));
+      }
+    }
+    return Optional.empty();
+  }
+
+  /**
+   * Detaches each plan's scale rows from the permit. The applications keep their status. A failed
+   * write marks the transaction for rollback.
+   */
+  private Optional<PermitPersistenceRpcResponseDto> detachApplicationScales(
+      Long permitNumber, List<ApplicationScalePlan> plans, String userId) {
+    for (ApplicationScalePlan plan : plans) {
+      for (ScaleMutationRow scale : plan.scales()) {
+        if (!updateScalePermitAssignment(scale, null, userId)) {
+          markRollbackOnly();
+          return Optional.of(
+              failurePersistenceResponse(
+                  List.of(
+                      "Unable to remove application "
+                          + plan.applicationNumber()
+                          + " from the permit."),
+                  permitNumber));
+        }
+      }
+    }
+    return Optional.empty();
+  }
+
+  /**
+   * After the permit's applications change, its owner and agent follow its first application and
+   * its totals are recalculated from its scale rows. A failed write marks the transaction for
+   * rollback.
+   */
+  private Optional<PermitPersistenceRpcResponseDto> refreshPermitAfterApplicationChange(
+      Long permitNumber, String userId) {
+    if (!synchronizePermitClientsWithFirstApplication(permitNumber, userId)) {
+      markRollbackOnly();
+      return Optional.of(
+          failurePersistenceResponse(
+              List.of("Unable to update the permit owner and agent."), permitNumber));
+    }
+    if (!updatePermitTotals(permitNumber, userId)) {
+      markRollbackOnly();
+      return Optional.of(
+          failurePersistenceResponse(
+              List.of("Unable to recalculate permit totals."), permitNumber));
+    }
+    return Optional.empty();
   }
 
   private boolean transitionApplicationStatus(
@@ -4189,7 +4410,7 @@ public class OraclePermitDetailsRpcService implements PermitDetailsRpcService {
     }
     PermitMutationRow permit = existing.get();
     if (isBlanketOicPermit(permit)) {
-      return List.of("Application associations are not changed this way for Blanket OIC permits.");
+      return List.of(BLANKET_OIC_APPLICATION_ASSOCIATION_MESSAGE);
     }
     if (isApplicationAdditionLockedStatus(permit.permitStatusCode())) {
       return List.of(APPLICATION_ADDITION_LOCKED_MESSAGE);
@@ -5050,22 +5271,19 @@ public class OraclePermitDetailsRpcService implements PermitDetailsRpcService {
       String exemptionNumber, Long regionNumber, List<String> errors) {
     List<Long> exemptionRegions =
         exemptionDetailsRpcRepository.findExemptionOrgUnitNumbers(exemptionNumber);
-    Set<Long> allowedRegions = null;
+    // Every area group that holds one of the exemption's regions is open to the permit.
+    Set<Long> allowedRegions = new HashSet<>();
     if (exemptionRegions != null) {
       for (Long exemptionRegion : exemptionRegions) {
         for (Set<Long> regionGroup : BLANKET_OIC_REGION_GROUPS) {
           if (regionGroup.contains(exemptionRegion)) {
-            allowedRegions = regionGroup;
-            break;
+            allowedRegions.addAll(regionGroup);
           }
-        }
-        if (allowedRegions != null) {
-          break;
         }
       }
     }
 
-    if (allowedRegions == null) {
+    if (allowedRegions.isEmpty()) {
       errors.add("No recognized region is available for this exemption.");
     } else if (regionNumber == null || !allowedRegions.contains(regionNumber)) {
       errors.add("The selected region is not available for this exemption.");
@@ -5263,6 +5481,6 @@ public class OraclePermitDetailsRpcService implements PermitDetailsRpcService {
       String agentClientNumber,
       String agentClientLocation) {}
 
-  private record ApplicationScaleAttachmentPlan(
-      Long applicationNumber, List<ScaleMutationRow> unassignedScales) {}
+  /** The scale rows an application change attaches to or detaches from the permit. */
+  private record ApplicationScalePlan(Long applicationNumber, List<ScaleMutationRow> scales) {}
 }

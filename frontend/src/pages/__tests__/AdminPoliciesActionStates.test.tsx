@@ -144,7 +144,7 @@ describe('Admin policy action states', () => {
     { area: 'schedule' as const, save: 'Update Export Schedule' },
   ])('closes unchanged $area editing without updating a policy', async ({ area, save }) => {
     renderPage(area)
-    const edit = await screen.findByRole('button', { name: 'Edit' })
+    const edit = await screen.findByRole('button', { name: /^Edit / })
     await userEvent.click(edit)
     await userEvent.click(screen.getByRole('button', { name: save }))
     await waitFor(() => expect(edit).toHaveFocus())
@@ -310,13 +310,19 @@ describe('Admin policy action states', () => {
       expect(historicalRow).not.toBeNull()
       expect(futureRow).not.toBeNull()
       expect(
-        within(historicalRow as HTMLElement).queryByRole('button', { name: 'Edit' }),
+        within(historicalRow as HTMLElement).queryByRole('button', { name: /^Edit / }),
       ).not.toBeInTheDocument()
       expect(
-        within(historicalRow as HTMLElement).queryByRole('button', { name: 'Delete' }),
+        within(historicalRow as HTMLElement).queryByRole('button', { name: /^Delete / }),
       ).not.toBeInTheDocument()
-      expect(within(futureRow as HTMLElement).getByRole('button', { name: 'Edit' })).toBeEnabled()
-      expect(within(futureRow as HTMLElement).getByRole('button', { name: 'Delete' })).toBeEnabled()
+      const policyName =
+        area === 'fee' ? 'fee policy RCO 2099-01-01' : 'fee in lieu policy 2099-01-01'
+      expect(
+        within(futureRow as HTMLElement).getByRole('button', { name: `Edit ${policyName}` }),
+      ).toBeEnabled()
+      expect(
+        within(futureRow as HTMLElement).getByRole('button', { name: `Delete ${policyName}` }),
+      ).toBeEnabled()
     },
   )
 
@@ -347,7 +353,7 @@ describe('Admin policy action states', () => {
       const policyRow = (await screen.findByText('2099-01-01')).closest('tr')
       expect(policyRow).not.toBeNull()
       await userEvent.click(
-        within(policyRow as HTMLElement).getByRole('button', { name: 'Delete' }),
+        within(policyRow as HTMLElement).getByRole('button', { name: /^Delete / }),
       )
 
       let dialog = screen.getByRole('dialog', { name: dialogName })
@@ -358,7 +364,7 @@ describe('Admin policy action states', () => {
       expect(deleteRequest).not.toHaveBeenCalled()
 
       await userEvent.click(
-        within(policyRow as HTMLElement).getByRole('button', { name: 'Delete' }),
+        within(policyRow as HTMLElement).getByRole('button', { name: /^Delete / }),
       )
       dialog = screen.getByRole('dialog', { name: dialogName })
       await userEvent.click(within(dialog).getByRole('button', { name: 'Delete' }))
@@ -376,7 +382,9 @@ describe('Admin policy action states', () => {
     expect(policyRow).not.toBeNull()
     mockedFetchFeePolicyPage.mockRejectedValueOnce(new Error('Refresh unavailable'))
 
-    await userEvent.click(within(policyRow as HTMLElement).getByRole('button', { name: 'Delete' }))
+    await userEvent.click(
+      within(policyRow as HTMLElement).getByRole('button', { name: /^Delete / }),
+    )
     const dialog = screen.getByRole('dialog', { name: 'Delete fee policy?' })
     await userEvent.click(within(dialog).getByRole('button', { name: 'Delete' }))
 
@@ -423,7 +431,9 @@ describe('Admin policy action states', () => {
 
     const policyRow = (await screen.findByText('2099-01-01')).closest('tr')
     expect(policyRow).not.toBeNull()
-    await userEvent.click(within(policyRow as HTMLElement).getByRole('button', { name: 'Delete' }))
+    await userEvent.click(
+      within(policyRow as HTMLElement).getByRole('button', { name: /^Delete / }),
+    )
     const dialog = screen.getByRole('dialog', { name: 'Delete fee policy?' })
     await userEvent.click(within(dialog).getByRole('button', { name: 'Delete' }))
 
@@ -572,7 +582,7 @@ describe('Admin policy action states', () => {
     })
     const policyRow = screen.getByText('RCO').closest('tr')
     expect(policyRow).not.toBeNull()
-    await userEvent.click(within(policyRow as HTMLElement).getByRole('button', { name: 'Edit' }))
+    await userEvent.click(within(policyRow as HTMLElement).getByRole('button', { name: /^Edit / }))
 
     const dialog = screen.getByRole('complementary', { name: 'Edit fee policy' })
     expect(within(dialog).getByLabelText('Region')).toHaveValue('1904')
@@ -669,7 +679,7 @@ describe('Admin policy action states', () => {
     })
     const policyRow = screen.getByText('2099-01-01').closest('tr')
     expect(policyRow).not.toBeNull()
-    await userEvent.click(within(policyRow as HTMLElement).getByRole('button', { name: 'Edit' }))
+    await userEvent.click(within(policyRow as HTMLElement).getByRole('button', { name: /^Edit / }))
 
     const dialog = screen.getByRole('complementary', { name: 'Edit fee in lieu policy' })
     expect(within(dialog).getByLabelText('Policy effective date')).toHaveValue('2099-01-01')
@@ -702,8 +712,8 @@ describe('Admin policy action states', () => {
       )
       expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
       expect(launcher).toBeDisabled()
-      expect(screen.getByRole('button', { name: 'Edit' })).toBeDisabled()
-      expect(screen.getByRole('button', { name: 'Delete' })).toBeDisabled()
+      expect(screen.getByRole('button', { name: /^Edit / })).toBeDisabled()
+      expect(screen.getByRole('button', { name: /^Delete / })).toBeDisabled()
       await userEvent.type(within(panel).getByLabelText(percentageLabel), '7')
       const cancelButton = within(panel).getByRole('button', { name: 'Cancel' })
       await userEvent.click(cancelButton)
@@ -1125,8 +1135,8 @@ describe('Admin policy action states', () => {
       )
     })
     expect(screen.getByLabelText('Advertising date')).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'Edit' })).toBeEnabled()
-    expect(screen.getByRole('button', { name: 'Delete' })).toBeEnabled()
+    expect(screen.getByRole('button', { name: /^Edit / })).toBeEnabled()
+    expect(screen.getByRole('button', { name: /^Delete / })).toBeEnabled()
 
     await userEvent.click(screen.getByRole('button', { name: 'TEAC meeting' }))
 
@@ -1602,12 +1612,14 @@ describe('Admin policy action states', () => {
     await screen.findByRole('heading', { level: 1, name: 'Export schedule administration' })
     const lockedRow = screen.getByText('1002').closest('tr')
     expect(lockedRow).not.toBeNull()
-    expect(within(lockedRow as HTMLElement).getByRole('button', { name: 'Edit' })).toBeDisabled()
-    expect(within(lockedRow as HTMLElement).getByRole('button', { name: 'Delete' })).toBeDisabled()
+    expect(within(lockedRow as HTMLElement).getByRole('button', { name: /^Edit / })).toBeDisabled()
+    expect(
+      within(lockedRow as HTMLElement).getByRole('button', { name: /^Delete / }),
+    ).toBeDisabled()
 
     const mutableRow = screen.getByText('1001').closest('tr')
     expect(mutableRow).not.toBeNull()
-    await userEvent.click(within(mutableRow as HTMLElement).getByRole('button', { name: 'Edit' }))
+    await userEvent.click(within(mutableRow as HTMLElement).getByRole('button', { name: /^Edit / }))
     fireEvent.change(screen.getByLabelText('Application receipt date'), {
       target: { value: '2026-06-21' },
     })
@@ -1628,9 +1640,13 @@ describe('Admin policy action states', () => {
     const updatedRow = screen.getByText('1001').closest('tr')
     expect(updatedRow).not.toBeNull()
     await waitFor(() =>
-      expect(within(updatedRow as HTMLElement).getByRole('button', { name: 'Edit' })).toHaveFocus(),
+      expect(
+        within(updatedRow as HTMLElement).getByRole('button', { name: /^Edit / }),
+      ).toHaveFocus(),
     )
-    await userEvent.click(within(updatedRow as HTMLElement).getByRole('button', { name: 'Delete' }))
+    await userEvent.click(
+      within(updatedRow as HTMLElement).getByRole('button', { name: /^Delete / }),
+    )
 
     const deleteDialog = screen.getByRole('dialog', { name: 'Delete export schedule?' })
     expect(deleteDialog).toHaveTextContent(
@@ -1668,7 +1684,7 @@ describe('Admin policy action states', () => {
     renderPage('schedule')
 
     const row = (await screen.findByText('1001')).closest('tr') as HTMLElement
-    const editButton = within(row).getByRole('button', { name: 'Edit' })
+    const editButton = within(row).getByRole('button', { name: /^Edit / })
     await userEvent.click(editButton)
     await waitFor(() => expect(screen.getByLabelText('Advertising date')).toHaveFocus())
 
@@ -1700,7 +1716,7 @@ describe('Admin policy action states', () => {
     renderPage('fee')
 
     const row = (await screen.findByText('2099-01-01')).closest('tr') as HTMLElement
-    const editButton = within(row).getByRole('button', { name: 'Edit' })
+    const editButton = within(row).getByRole('button', { name: /^Edit / })
     await waitFor(() => expect(editButton).toBeEnabled())
     await userEvent.click(editButton)
     const panel = screen.getByRole('complementary', { name: 'Edit fee policy' })
@@ -1742,7 +1758,9 @@ describe('Admin policy action states', () => {
     const scheduleRow = (await screen.findByText('1001')).closest('tr')
     expect(scheduleRow).not.toBeNull()
     await userEvent.click(
-      within(scheduleRow as HTMLElement).getByRole('button', { name: 'Delete' }),
+      within(scheduleRow as HTMLElement).getByRole('button', {
+        name: 'Delete export schedule 1001',
+      }),
     )
     const dialog = screen.getByRole('dialog', { name: 'Delete export schedule?' })
     await userEvent.click(within(dialog).getByRole('button', { name: 'Delete' }))

@@ -43,6 +43,8 @@ const rows: DocumentRowBase[] = [
   },
 ]
 
+const permitFileName = rows[0].name
+
 const renderSection = (
   props: Partial<Parameters<typeof RecordDocumentsSection<DocumentRowBase>>[0]> = {},
 ) =>
@@ -96,12 +98,18 @@ describe('RecordDocumentsSection', () => {
     expect(within(permitRow).getByText('Permit')).toBeVisible()
     expect(within(invoiceRow).getByText('—')).toBeVisible()
     expect(within(invoiceRow).getByText('Invoice')).toBeVisible()
-    expect(within(permitRow).getByRole('button', { name: 'Delete' })).toBeEnabled()
-    expect(within(invoiceRow).queryByRole('button', { name: 'Delete' })).not.toBeInTheDocument()
-    expect(within(applicationRow).queryByRole('button', { name: 'Delete' })).not.toBeInTheDocument()
+    expect(
+      within(permitRow).getByRole('button', { name: `Delete ${permitFileName}` }),
+    ).toBeEnabled()
+    expect(within(invoiceRow).queryByRole('button', { name: /^Delete / })).not.toBeInTheDocument()
+    expect(
+      within(applicationRow).queryByRole('button', { name: /^Delete / }),
+    ).not.toBeInTheDocument()
 
-    await userEvent.click(within(permitRow).getByRole('button', { name: 'Open' }))
-    await userEvent.click(within(permitRow).getByRole('button', { name: 'Download' }))
+    await userEvent.click(within(permitRow).getByRole('button', { name: `Open ${permitFileName}` }))
+    await userEvent.click(
+      within(permitRow).getByRole('button', { name: `Download ${permitFileName}` }),
+    )
     expect(onOpen).toHaveBeenNthCalledWith(1, rows[0], true)
     expect(onOpen).toHaveBeenNthCalledWith(2, rows[0], false)
     expect(screen.getByRole('button', { name: 'Add documents' })).toBeVisible()
@@ -109,7 +117,7 @@ describe('RecordDocumentsSection', () => {
 
   it('hides Delete from users who cannot delete and shows the row being deleted', () => {
     const { rerender } = renderSection({ canDelete: false })
-    expect(screen.queryByRole('button', { name: 'Delete' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /^Delete / })).not.toBeInTheDocument()
 
     rerender(
       <RecordDocumentsSection
@@ -123,7 +131,7 @@ describe('RecordDocumentsSection', () => {
         onDelete={vi.fn()}
       />,
     )
-    expect(screen.getByRole('button', { name: 'Deleting…' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: `Deleting… ${permitFileName}` })).toBeDisabled()
   })
 
   it('confirms deletion with the file name and any extra consequence', async () => {
@@ -139,7 +147,9 @@ describe('RecordDocumentsSection', () => {
     })
 
     const [, permitRow, invoiceRow] = screen.getAllByRole('row')
-    await userEvent.click(within(invoiceRow).getByRole('button', { name: 'Delete' }))
+    await userEvent.click(
+      within(invoiceRow).getByRole('button', { name: 'Delete sales-contract.pdf' }),
+    )
     const confirmation = await screen.findByRole('dialog', {
       name: 'Are you sure you want to delete this document?',
     })
@@ -149,7 +159,9 @@ describe('RecordDocumentsSection', () => {
     await userEvent.click(within(confirmation).getByRole('button', { name: 'Cancel' }))
     await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
 
-    await userEvent.click(within(permitRow).getByRole('button', { name: 'Delete' }))
+    await userEvent.click(
+      within(permitRow).getByRole('button', { name: `Delete ${permitFileName}` }),
+    )
     const permitConfirmation = await screen.findByRole('dialog', {
       name: 'Are you sure you want to delete this document?',
     })
@@ -187,7 +199,7 @@ describe('RecordDocumentsSection', () => {
     }
     render(<DeletingHost />)
 
-    await userEvent.click(screen.getByRole('button', { name: 'Delete' }))
+    await userEvent.click(screen.getByRole('button', { name: `Delete ${permitFileName}` }))
     const confirmation = await screen.findByRole('dialog', {
       name: 'Are you sure you want to delete this document?',
     })

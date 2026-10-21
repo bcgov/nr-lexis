@@ -202,6 +202,21 @@ const mockCaribooApprover = () => {
   )
 }
 
+const permitCreationRoutes = () => [
+  {
+    path: '/provincial/exemption/:exemptionNumber/permit/new',
+    element: <ProvincialBlanketOicPermitCreatePage />,
+  },
+  {
+    path: '/provincial/exemption/:exemptionNumber',
+    element: <ProvincialExemptionDetailsPage />,
+  },
+  {
+    path: '/provincial/permit/:permitNumber',
+    element: <p>New permit destination</p>,
+  },
+]
+
 const renderPage = (
   detail: ProvincialExemptionDetail,
   initialSearch = '',
@@ -209,33 +224,27 @@ const renderPage = (
 ) => {
   vi.mocked(fetchProvincialExemptionDetail).mockResolvedValue(detail)
   const detailPath = `/provincial/exemption/${detail.exemptionNumber}${initialSearch}`
-  const router = createMemoryRouter(
-    [
-      {
-        path: '/provincial/exemption/:exemptionNumber/permit/new',
-        element: <ProvincialBlanketOicPermitCreatePage />,
-      },
-      {
-        path: '/provincial/exemption/:exemptionNumber',
-        element: <ProvincialExemptionDetailsPage />,
-      },
-      {
-        path: '/provincial/permit/:permitNumber',
-        element: <p>New permit destination</p>,
-      },
+  const router = createMemoryRouter(permitCreationRoutes(), {
+    initialEntries: [
+      initialState
+        ? {
+            pathname: `/provincial/exemption/${detail.exemptionNumber}`,
+            search: initialSearch,
+            state: initialState,
+          }
+        : detailPath,
     ],
-    {
-      initialEntries: [
-        initialState
-          ? {
-              pathname: `/provincial/exemption/${detail.exemptionNumber}`,
-              search: initialSearch,
-              state: initialState,
-            }
-          : detailPath,
-      ],
-    },
-  )
+  })
+  render(<RouterProvider router={router} />)
+  return router
+}
+
+// Opens the create route itself, with no navigation state saying where the user came from.
+const renderCreateRouteWithoutState = (detail: ProvincialExemptionDetail) => {
+  vi.mocked(fetchProvincialExemptionDetail).mockResolvedValue(detail)
+  const router = createMemoryRouter(permitCreationRoutes(), {
+    initialEntries: [`/provincial/exemption/${detail.exemptionNumber}/permit/new`],
+  })
   render(<RouterProvider router={router} />)
   return router
 }
@@ -603,6 +612,64 @@ describe('permit creation from an exemption', () => {
     expect(within(table).getByRole('cell', { name: '2.0' })).toBeVisible()
   })
 
+  it('says permits wait for approval above the table while the exemption is New', async () => {
+    vi.mocked(fetchExemptionPermits).mockResolvedValue([
+      {
+        permitNumber: '9020937',
+        permitVolume: '0.0',
+        permitStatus: 'Cancelled',
+        permitIssueDate: '2026-03-19',
+        canViewPermit: true,
+      },
+    ])
+    renderPage({
+      ...activeMinisterialExemption,
+      exemptionStatusCode: 'NEW',
+      exemptionStatusDescription: 'New',
+    })
+    await openPermitsTab()
+
+    const table = await screen.findByRole('region', { name: 'Related exemption permits' })
+    const note = screen.getByText('Permits can be requested once the exemption is approved.')
+    expect(note.compareDocumentPosition(table) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    expect(screen.queryByRole('heading', { name: 'No permits for this exemption' })).toBeNull()
+  })
+
+  it('says the same once when a New exemption has no permits', async () => {
+    renderPage({
+      ...activeMinisterialExemption,
+      exemptionStatusCode: 'NEW',
+      exemptionStatusDescription: 'New',
+    })
+    await openPermitsTab()
+
+    expect(
+      await screen.findByRole('heading', { name: 'No permits for this exemption' }),
+    ).toBeInTheDocument()
+    expect(
+      screen.getAllByText('Permits can be requested once the exemption is approved.'),
+    ).toHaveLength(1)
+  })
+
+  it('leaves out the approval line once the exemption is no longer New', async () => {
+    vi.mocked(fetchExemptionPermits).mockResolvedValue([
+      {
+        permitNumber: '9020938',
+        permitVolume: '2.0',
+        permitStatus: 'Complete',
+        permitIssueDate: '2026-03-19',
+        canViewPermit: true,
+      },
+    ])
+    renderPage(activeMinisterialExemption)
+    await openPermitsTab()
+
+    await screen.findByRole('region', { name: 'Related exemption permits' })
+    expect(
+      screen.queryByText('Permits can be requested once the exemption is approved.'),
+    ).not.toBeInTheDocument()
+  })
+
   it('renders the permit issue date in words without shifting its day', async () => {
     const actualService = await vi.importActual<{
       fetchExemptionPermits: typeof fetchExemptionPermits
@@ -708,6 +775,41 @@ describe('permit creation from an exemption', () => {
       expect(screen.getByRole('button', { name: 'Apply for new permit' })).toHaveFocus(),
     )
   })
+
+  it.each([
+    { description: 'unchanged', draft: false },
+    { description: 'changed', draft: true },
+  ])(
+    'returns a directly opened create page to the Permits tab, with $description details',
+    async ({ draft }) => {
+      mockRole(['ADMIN'], ['createPermit', 'savePermit'])
+      configureBlanketOicCreationDependencies()
+      const router = renderCreateRouteWithoutState(activeBlanketOicExemption)
+
+      const page = await screen.findByRole('region', { name: 'Blanket OIC permit details' })
+      if (draft) await userEvent.type(within(page).getByLabelText('Permit request pieces'), '4')
+      await userEvent.click(screen.getByRole('button', { name: 'Cancel' }))
+      if (draft) {
+        await userEvent.click(
+          within(await screen.findByRole('dialog', { name: 'Discard this permit?' })).getByRole(
+            'button',
+            { name: 'Discard' },
+          ),
+        )
+      }
+
+      await waitFor(() =>
+        expect(router.state.location.pathname).toBe('/provincial/exemption/TEST13E2'),
+      )
+      expect(await screen.findByRole('tab', { name: 'Permits' })).toHaveAttribute(
+        'aria-selected',
+        'true',
+      )
+      await waitFor(() =>
+        expect(screen.getByRole('button', { name: 'Apply for new permit' })).toHaveFocus(),
+      )
+    },
+  )
 
   it('shows no empty Permits state until a successful empty request completes', async () => {
     mockRole(['ADMIN'], ['createPermit', 'savePermit'])
@@ -976,14 +1078,10 @@ describe('permit creation from an exemption', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Save permit' }))
 
     expect(
-      await within(page).findAllByText(
-        'Permit request pieces must be a whole number no greater than 9999999999',
-      ),
+      await within(page).findAllByText('Permit request pieces must be a whole number'),
     ).not.toHaveLength(0)
     expect(
-      within(page).getAllByText(
-        'Permit request volume must be a non-negative number of 9 characters or fewer',
-      ),
+      within(page).getAllByText('Permit request volume must be 9 characters or fewer'),
     ).not.toHaveLength(0)
     expect(addPermitDetail).not.toHaveBeenCalled()
     expect(router.state.location.pathname).toBe('/provincial/exemption/TEST13E2/permit/new')

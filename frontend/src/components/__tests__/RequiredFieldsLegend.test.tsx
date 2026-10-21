@@ -10,4 +10,12 @@ describe('RequiredFieldsLegend', () => {
     expect(legend).toHaveClass('required-fields-legend', 'boic-permit-required-hint')
     expect(legend?.querySelector('.required-label__marker')).toHaveAttribute('aria-hidden', 'true')
   })
+  it('reads "Required field" for a single required field', () => {
+    render(<RequiredFieldsLegend single />)
+
+    const legend = screen.getByText('Required field').closest('p')
+    expect(legend).toHaveClass('required-fields-legend')
+    expect(legend?.querySelector('.required-label__marker')).toHaveAttribute('aria-hidden', 'true')
+    expect(screen.queryByText('Required fields')).toBeNull()
+  })
 })

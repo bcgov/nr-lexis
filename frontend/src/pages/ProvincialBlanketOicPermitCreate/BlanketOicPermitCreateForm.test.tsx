@@ -285,23 +285,36 @@ describe('BlanketOicPermitCreateForm', () => {
     },
   )
 
-  it.each(['-5', '1.2.3', '12a', '1234567890'])(
-    'refuses %s as the permit request volume',
-    async (volume) => {
-      const user = userEvent.setup()
-      renderForm()
+  it.each([
+    { volume: '-5', message: 'Permit request volume must be numeric' },
+    { volume: '1.2.3', message: 'Permit request volume must be numeric' },
+    { volume: '12a', message: 'Permit request volume must be numeric' },
+    { volume: '1234567890', message: 'Permit request volume must be 9 characters or fewer' },
+  ])('refuses $volume as the permit request volume', async ({ volume, message }) => {
+    const user = userEvent.setup()
+    renderForm()
 
-      await user.type(screen.getByLabelText('Permit request volume (m³)'), volume)
-      await user.click(screen.getByRole('button', { name: 'Save permit' }))
+    await user.type(screen.getByLabelText('Permit request volume (m³)'), volume)
+    await user.click(screen.getByRole('button', { name: 'Save permit' }))
 
-      expect(
-        await screen.findByText(
-          'Permit request volume must be a non-negative number of 9 characters or fewer',
-        ),
-      ).toBeInTheDocument()
-      expect(addPermitDetail).not.toHaveBeenCalled()
-    },
-  )
+    expect(await screen.findByText(message)).toBeInTheDocument()
+    expect(addPermitDetail).not.toHaveBeenCalled()
+  })
+
+  it.each([
+    { pieces: '-1', message: 'Permit request pieces must be a whole number' },
+    { pieces: '1.5', message: 'Permit request pieces must be a whole number' },
+    { pieces: '10000000000', message: 'Permit request pieces must be 9999999999 or less' },
+  ])('refuses $pieces as the permit request pieces', async ({ pieces, message }) => {
+    const user = userEvent.setup()
+    renderForm()
+
+    await user.type(screen.getByLabelText('Permit request pieces'), pieces)
+    await user.click(screen.getByRole('button', { name: 'Save permit' }))
+
+    expect(await screen.findByText(message)).toBeInTheDocument()
+    expect(addPermitDetail).not.toHaveBeenCalled()
+  })
 
   it('names the tab of an optional date error and shows the error only on its field', async () => {
     const user = userEvent.setup()
@@ -816,6 +829,29 @@ describe('BlanketOicPermitCreateForm', () => {
           `Resolved client ${SUBMITTER_CLIENT} (FCC) · ${SUBMITTER_CLIENT}`,
         ),
       )
+    })
+
+    it('shows the agent client in full while its own lookup is still pending', async () => {
+      vi.mocked(fetchApplicationClientLocations).mockImplementation((_clientNumber, kind) =>
+        kind === 'agent'
+          ? new Promise(() => undefined)
+          : Promise.resolve([{ locationCode: '00', locationName: 'Head office', selected: false }]),
+      )
+      const user = userEvent.setup()
+      renderForm()
+      await user.click(screen.getByRole('tab', { name: 'Applicant' }))
+      const fullName = `Resolved client ${SUBMITTER_CLIENT} · ${SUBMITTER_CLIENT}`
+      await waitFor(() => expect(clientControl('owner')).toHaveValue(fullName))
+
+      await user.click(screen.getByRole('checkbox', { name: "I'm an agent" }))
+
+      expect(fetchApplicationClientLocations).toHaveBeenCalledWith(
+        SUBMITTER_CLIENT,
+        'agent',
+        '',
+        SUBMITTER_CLIENT,
+      )
+      expect(clientControl('agent')).toHaveValue(fullName)
     })
 
     it('starts with their own client as an editable owner and leaves without asking', async () => {

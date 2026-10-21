@@ -750,6 +750,7 @@ export default function NotificationsPage() {
                             size="md"
                             renderIcon={Edit}
                             disabled={saving || showEditor}
+                            aria-label={`Edit notification ${notification.title}`}
                             onClick={() => startEdit(adminNotification)}
                           >
                             Edit
@@ -759,6 +760,7 @@ export default function NotificationsPage() {
                             size="md"
                             renderIcon={TrashCan}
                             disabled={saving || showEditor}
+                            aria-label={`Delete notification ${notification.title}`}
                             onClick={() => {
                               setMessage(null)
                               setNotificationPendingDeletion(adminNotification)

@@ -1,5 +1,6 @@
 import type { ReactNode } from 'react'
 import type { ApplicationClientData } from '@/service/application-client-lookup-service'
+import { formatPhoneNumber } from '@/utils/text'
 import { RecordField, RecordFieldGroup, RecordFieldRow } from './RecordFieldGrid'
 
 type ClientField = {
@@ -50,8 +51,8 @@ export function ClientDetailsRows({
           <RecordField label="Postal code" value={detail(clientData?.postalCode)} />
         </RecordFieldRow>
         <RecordFieldRow hidden={hidden}>
-          <RecordField label="Phone number" value={detail(clientData?.phone)} />
-          <RecordField label="Fax number" value={detail(clientData?.fax)} />
+          <RecordField label="Phone number" value={detail(formatPhoneNumber(clientData?.phone))} />
+          <RecordField label="Fax number" value={detail(formatPhoneNumber(clientData?.fax))} />
           <RecordField label="Email address" value={detail(clientData?.email)} />
         </RecordFieldRow>
       </RecordFieldGroup>

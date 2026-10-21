@@ -112,6 +112,27 @@ describe('RegionMultiSelect', () => {
     ).toBeVisible()
   })
 
+  it('keeps the given region order, including after regions are selected', async () => {
+    const user = userEvent.setup()
+    const unsorted = [regions[2], regions[0], regions[1]]
+    render(
+      <RegionMultiSelect
+        id="ordered-regions"
+        titleText="Region"
+        items={unsorted}
+        selectedItems={[regions[1]]}
+        onChange={vi.fn()}
+      />,
+    )
+
+    const combobox = screen.getByRole('combobox', { name: /^Region/ })
+    await user.click(combobox)
+
+    expect(screen.getAllByRole('option').map((option) => option.textContent)).toEqual(
+      unsorted.map((region) => region.text),
+    )
+  })
+
   it('uses Carbon filtering and clears the current selection from the built-in summary', async () => {
     const user = userEvent.setup()
     render(<RegionHarness />)

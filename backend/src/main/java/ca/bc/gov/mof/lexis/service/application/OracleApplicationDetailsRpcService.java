@@ -2840,9 +2840,9 @@ public class OracleApplicationDetailsRpcService implements ApplicationDetailsRpc
       errors.add(required("application date"));
     }
     if (request.termDays() == null || request.termDays() <= 0) {
-      errors.add("The application term days must be greater than 0.");
+      errors.add("The exemption term must be greater than 0.");
     } else if (request.termDays() > MAX_APPLICATION_TERM_DAYS) {
-      errors.add("The application term days must be no more than 99999.");
+      errors.add("The exemption term must be no more than 99999.");
     }
     if (request.receivedDate() == null) {
       errors.add(required("application received date"));
@@ -2975,9 +2975,9 @@ public class OracleApplicationDetailsRpcService implements ApplicationDetailsRpc
       errors.add(required("application date"));
     }
     if (record.termDays() == null || record.termDays() <= 0) {
-      errors.add("The application term days must be greater than 0.");
+      errors.add("The exemption term must be greater than 0.");
     } else if (record.termDays() > MAX_APPLICATION_TERM_DAYS) {
-      errors.add("The application term days must be no more than 99999.");
+      errors.add("The exemption term must be no more than 99999.");
     }
     if (record.receivedDate() == null) {
       errors.add(required("application received date"));
@@ -3197,9 +3197,9 @@ public class OracleApplicationDetailsRpcService implements ApplicationDetailsRpc
       errors.add(required("application date"));
     }
     if (record.termDays() == null || record.termDays() <= 0) {
-      errors.add("The application term days must be greater than 0.");
+      errors.add("The exemption term must be greater than 0.");
     } else if (record.termDays() > MAX_APPLICATION_TERM_DAYS) {
-      errors.add("The application term days must be no more than 99999.");
+      errors.add("The exemption term must be no more than 99999.");
     }
     if (record.receivedDate() == null) {
       errors.add(required("application received date"));

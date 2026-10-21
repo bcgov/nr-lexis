@@ -487,6 +487,16 @@ class ProvincialPermitMutationValidatorTest {
   }
 
   @Test
+  void shouldWordThePaymentPendingWarningAndTheShippingRefusalAsTheSameSentence() {
+    String sentence =
+        "Receipt number should not be empty for a complete permit so it will be saved as Payment pending.";
+
+    assertThat(ProvincialPermitMutationValidator.PAYMENT_PENDING_WARNING).isEqualTo(sentence);
+    assertThat(ProvincialPermitMutationValidator.PAYMENT_PENDING_SHIPPING_MESSAGE)
+        .isEqualTo(sentence);
+  }
+
+  @Test
   void shouldKeepRskMu44CompletionCompleteWithoutReceipt() {
     when(repository.isPermitMu44Required(7000123L)).thenReturn(true);
 

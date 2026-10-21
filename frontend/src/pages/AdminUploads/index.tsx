@@ -335,6 +335,8 @@ function AdminUploadsPage() {
   const [successMessage, setSuccessMessage] = useState('')
   const uploadResultsRef = useRef<HTMLDivElement>(null)
   const [uploadResultsFocusRequest, setUploadResultsFocusRequest] = useState(0)
+  const stepHeadingRef = useRef<HTMLHeadingElement>(null)
+  const [stepFocusRequest, setStepFocusRequest] = useState(0)
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [touchedFields, setTouchedFields] = useState<TouchedFields<UploadField>>({})
   const [showValidationErrors, setShowValidationErrors] = useState(false)
@@ -596,6 +598,22 @@ function AdminUploadsPage() {
     return () => cancelAnimationFrame(frame)
   }, [uploadResultsFocusRequest])
 
+  // Review and Back remove the button that was pressed, so focus moves to the new step's heading.
+  useEffect(() => {
+    if (stepFocusRequest === 0) {
+      return
+    }
+    const frame = requestAnimationFrame(() =>
+      stepHeadingRef.current?.focus({ preventScroll: true }),
+    )
+    return () => cancelAnimationFrame(frame)
+  }, [stepFocusRequest])
+
+  const onReviewDocumentUpload = (): void => {
+    setDocumentUploadStep('review')
+    setStepFocusRequest((current) => current + 1)
+  }
+
   const onSubmitUpload = async (): Promise<void> => {
     setErrorMessage('')
     setSuccessMessage('')
@@ -829,6 +847,7 @@ function AdminUploadsPage() {
         <PageHeader
           title="Data Upload"
           subtitle="Upload documents and review selected files before submitting."
+          focusTitle="whenFocusLost"
           style={{ marginBlockEnd: '1.5rem' }}
         />
         <UploadWorkflowProgress
@@ -851,7 +870,9 @@ function AdminUploadsPage() {
           {documentUploadStep === 'upload' ? (
             <>
               <div className="admin-upload-section-heading">
-                <h2 id="admin-upload-step-title">Upload</h2>
+                <h2 id="admin-upload-step-title" ref={stepHeadingRef} tabIndex={-1}>
+                  Upload
+                </h2>
                 <p>Select documents to prepare before reviewing and submitting the upload.</p>
               </div>
 
@@ -867,7 +888,7 @@ function AdminUploadsPage() {
                   currentStepId={documentUploadStep}
                   actionsPlacement="footer"
                   emptyDescription="Upload files to validate before review."
-                  onReview={() => setDocumentUploadStep('review')}
+                  onReview={onReviewDocumentUpload}
                   onSubmit={() => void onSubmitUpload()}
                   onReset={onReset}
                   onClear={clearQueuedFiles}
@@ -879,14 +900,16 @@ function AdminUploadsPage() {
                 <UploadStepReviewButton
                   label="Review upload"
                   disabled
-                  onReview={() => setDocumentUploadStep('review')}
+                  onReview={onReviewDocumentUpload}
                 />
               )}
             </>
           ) : (
             <>
               <div className="admin-upload-section-heading">
-                <h2 id="admin-upload-review-title">Review</h2>
+                <h2 id="admin-upload-review-title" ref={stepHeadingRef} tabIndex={-1}>
+                  Review
+                </h2>
                 <p>Review selected files and target details before submitting.</p>
               </div>
 
@@ -900,7 +923,10 @@ function AdminUploadsPage() {
                 currentStepId="review"
                 actionsPlacement="footer"
                 previewTitle="Data preview"
-                onBack={() => setDocumentUploadStep('upload')}
+                onBack={() => {
+                  setDocumentUploadStep('upload')
+                  setStepFocusRequest((current) => current + 1)
+                }}
                 onSubmit={() => void onSubmitUpload()}
                 onReset={onReset}
                 onClear={clearQueuedFiles}

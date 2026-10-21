@@ -318,15 +318,15 @@ class ApplicationReviewOracleServiceTest {
     assertThat(rejectedResult.valid()).isFalse();
     assertThat(rejectedResult.updated()).isFalse();
     assertThat(rejectedResult.message())
-        .isEqualTo("Remark is required when rejecting, withdrawing, or expiring an application.");
+        .isEqualTo("Remark is required.");
     assertThat(withdrawnResult.valid()).isFalse();
     assertThat(withdrawnResult.updated()).isFalse();
     assertThat(withdrawnResult.message())
-        .isEqualTo("Remark is required when rejecting, withdrawing, or expiring an application.");
+        .isEqualTo("Remark is required.");
     assertThat(expiredResult.valid()).isFalse();
     assertThat(expiredResult.updated()).isFalse();
     assertThat(expiredResult.message())
-        .isEqualTo("Remark is required when rejecting, withdrawing, or expiring an application.");
+        .isEqualTo("Remark is required.");
     verifyNoInteractions(repository);
   }
 

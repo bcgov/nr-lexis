@@ -140,6 +140,34 @@ describe('IsoDatePicker', () => {
     expect(onBlur).toHaveBeenCalledOnce()
   })
 
+  it('keeps an impossible typed date visible when Enter makes Flatpickr empty the input', async () => {
+    const onChange = vi.fn()
+    const StatefulDatePicker = () => {
+      const [value, setValue] = useState('')
+
+      return (
+        <IsoDatePicker
+          id="approvalDate"
+          labelText="Approval date"
+          value={value}
+          onChange={(next) => {
+            onChange(next)
+            setValue(next)
+          }}
+        />
+      )
+    }
+
+    render(<StatefulDatePicker />)
+
+    const input = screen.getByLabelText('Approval date')
+    await userEvent.type(input, '2026-02-30{Enter}')
+
+    await waitFor(() => expect(input).toHaveValue('2026-02-30'))
+    expect(onChange).not.toHaveBeenCalledWith('')
+    expect(onChange).toHaveBeenLastCalledWith('2026-02-30')
+  })
+
   it('does not emit a change when Carbon repeats the controlled date value', () => {
     const onChange = vi.fn()
     render(

@@ -103,6 +103,19 @@ export default function DetailSidePanel({
     return () => cancelAnimationFrame(frame)
   }, [open, busy, launcherRef, fallbackFocusSelector])
 
+  // The panel's close icon has no prop to disable it, so it is disabled while a save is running.
+  useEffect(() => {
+    if (!open || !busy) return
+    const closeButton = panelRef.current?.querySelector<HTMLButtonElement>(
+      '.c4p--side-panel__close-button',
+    )
+    if (!closeButton) return
+    closeButton.disabled = true
+    return () => {
+      closeButton.disabled = false
+    }
+  }, [open, busy])
+
   useLayoutEffect(() => {
     // IBM pushes the page aside with these inline styles. Only the panel that pushed it restores
     // them, on close or when it moves over the page, so a closed panel can't undo an open one.

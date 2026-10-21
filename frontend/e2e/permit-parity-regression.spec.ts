@@ -257,6 +257,7 @@ const installPermitParityFixtures = async (
 
   const coreTabs = {
     applicationList: blanketOic ? [] : ['111'],
+    applicationTotals: blanketOic ? [] : [{ applicationNumber: '111', pieces: 3, volume: 3 }],
     packageList: scenario === 'blanket-oic-empty' ? [] : packageList,
   }
 
@@ -870,6 +871,11 @@ test.describe('Provincial permit parity regressions', () => {
       ready: page.getByRole('heading', { level: 1, name: 'Permit 91001 (Pending)', exact: true }),
     })
 
+    const applications = page.getByRole('region', { name: 'Application number(s)', exact: true })
+    await expect(applications.getByRole('link', { name: '111', exact: true })).toBeVisible()
+    await expect(applications).toContainText('3.0')
+    await expect(applications.getByRole('checkbox')).toHaveCount(0)
+
     await selectTab(page, 'Scale')
     const scaleRows = page.getByRole('region', { name: 'Scale rows', exact: true })
     await expect(scaleRows).toContainText('TM-A')
@@ -1111,7 +1117,7 @@ test.describe('Provincial permit parity regressions', () => {
 
     const confirmation = page.getByRole('dialog', { name: 'Save as Payment pending?', exact: true })
     await expect(confirmation).toContainText(
-      'Fee Receipt Number should not be empty for a complete Permit so it will be saved as Payment Pending.',
+      'Receipt number should not be empty for a complete permit so it will be saved as Payment pending.',
     )
     await confirmation.getByRole('button', { name: 'Discard', exact: true }).click()
     await expect(confirmation).toHaveCount(0)
