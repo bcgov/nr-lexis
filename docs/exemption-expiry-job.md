@@ -55,8 +55,8 @@ The legacy LEXIS web application runs its own expiry monitor against the same ta
 while it is deployed and its WebADE application is enabled; lexisvc and lexisws do not start it.
 PROD keeps `LEXIS_EXPIRY_ENABLED` false while legacy web runs there, so one job owns expiry. Set
 it to true in the change that retires legacy web, so that no night passes with neither job or
-both. Before enabling, confirm that the LEXIS role holds SELECT, INSERT and UPDATE on
-`THE.LEXIS_SHEDLOCK`. Without them every run is skipped with only a log line.
+both. Before enabling, confirm that `FSA_LEXIS_READ_WRITE_ROLE` holds SELECT, INSERT and UPDATE
+on `THE.LEXIS_SHEDLOCK`. Without them every run is skipped with only a log line.
 
 ## Operations
 
