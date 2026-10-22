@@ -1273,14 +1273,15 @@ describe('Application review', () => {
 
       await userEvent.click(status)
       expect(status).toHaveAttribute('aria-expanded', 'true')
-      await userEvent.keyboard('{Escape}')
+      const escape = { key: 'Escape', code: 'Escape', keyCode: 27, which: 27 }
+      fireEvent.keyDown(status, escape)
 
       expect(status).toHaveAttribute('aria-expanded', 'false')
       expect(screen.getByRole('dialog', { name: 'Disapprove application 1000123' })).toBeVisible()
       await act(async () => {
         await new Promise((resolve) => setTimeout(resolve))
       })
-      await userEvent.keyboard('{Escape}')
+      fireEvent.keyDown(status, escape)
       await waitFor(() =>
         expect(screen.queryByRole('dialog', { name: 'Disapprove application 1000123' })).toBeNull(),
       )
