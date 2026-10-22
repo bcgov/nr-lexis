@@ -14,9 +14,7 @@ import ca.bc.gov.mof.lexis.service.permit.PermitInvoiceOrchestrationService.Gbms
 import ca.bc.gov.mof.lexis.service.permit.PermitInvoiceOrchestrationService.GbmsInvoiceSnapshot;
 import ca.bc.gov.mof.lexis.service.permit.PermitInvoiceOrchestrationService.InternalInvoiceSnapshot;
 import java.math.BigDecimal;
-import java.util.HashSet;
 import java.util.List;
-import java.util.Set;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
@@ -138,7 +136,7 @@ public class OracleLegacyPermitInvoiceOrchestrationService
       GbmsInvoiceSnapshot snapshot = validateGbmsSnapshot(transition);
       List<GbmsInvoiceHistoryRow> history = gbmsHistory.findRequiredWithoutReceipt(transition);
       gbmsHistory.validateActiveAlignment(internalHistory, history);
-      GbmsInvoiceHistoryRow replacement = replacementCandidate(internalHistory, history);
+      GbmsInvoiceHistoryRow replacement = replacementCandidate(history);
 
       stage = "gbms_create";
       gbmsWriteStarted = true;
@@ -220,22 +218,10 @@ public class OracleLegacyPermitInvoiceOrchestrationService
     return snapshot;
   }
 
-  private GbmsInvoiceHistoryRow replacementCandidate(
-      List<PermitInvoiceRow> internalHistory, List<GbmsInvoiceHistoryRow> gbmsHistory) {
-    Set<String> linkedInvoices = new HashSet<>();
-    for (PermitInvoiceRow row : internalHistory) {
-      String invoiceNumber = trimToNull(row.gbmsInvoiceNumber());
-      if (invoiceNumber != null) {
-        linkedInvoices.add(invoiceNumber.toUpperCase(java.util.Locale.ROOT));
-      }
-    }
+  private GbmsInvoiceHistoryRow replacementCandidate(List<GbmsInvoiceHistoryRow> gbmsHistory) {
     return gbmsHistory.stream()
         .filter(row -> BigDecimal.valueOf(row.invoiceAmount()).compareTo(BigDecimal.ZERO) > 0)
         .filter(row -> trimToNull(row.replacedByInvoice()) == null)
-        .filter(
-            row ->
-                linkedInvoices.contains(
-                    trimToNull(row.invoiceNumber()).toUpperCase(java.util.Locale.ROOT)))
         .findFirst()
         .orElse(null);
   }

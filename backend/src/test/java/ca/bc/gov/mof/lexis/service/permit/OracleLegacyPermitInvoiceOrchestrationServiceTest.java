@@ -660,6 +660,30 @@ class OracleLegacyPermitInvoiceOrchestrationServiceTest {
     verify(gbmsInvoices).replaceInvoice("GBMS-NEW", "GBMS-OLD", "idir\\jsmith");
   }
 
+  @Test
+  void shouldReplaceACancelledPriorGbmsInvoiceThatNoLexisInvoiceLinks() {
+    stubNewInvoicePersistence("GBMS-NEW", List.of(), List.of());
+    GbmsInvoiceHistoryRow oldBefore =
+        history("GBMS-OLD", 8.0d, "GBMS-CANCEL", null, LocalDate.of(2010, 3, 1));
+    GbmsInvoiceHistoryRow oldAfter =
+        history("GBMS-OLD", 8.0d, "GBMS-CANCEL", "GBMS-NEW", LocalDate.of(2010, 3, 1));
+    GbmsInvoiceHistoryRow credit = history("GBMS-CANCEL", -8.0d, null, null, null);
+    GbmsInvoiceHistoryRow created = history("GBMS-NEW", 10.0d, null, null, null);
+    when(permitRepository.findGbmsInvoiceHistoryRequired("", PERMIT_NUMBER))
+        .thenReturn(
+            List.of(oldBefore, credit),
+            List.of(created, oldBefore, credit),
+            List.of(created, oldAfter, credit));
+    when(gbmsInvoices.createInvoice(PERMIT_NUMBER, gbmsSnapshot(), "idir\\jsmith"))
+        .thenReturn("GBMS-NEW");
+
+    TransitionResult result = service.orchestrate(enteringTransition(), "idir\\jsmith");
+
+    assertThat(result.success()).isTrue();
+    verify(gbmsInvoices).replaceInvoice("GBMS-NEW", "GBMS-OLD", "idir\\jsmith");
+    verify(gbmsInvoices, never()).replaceInvoice(any(), eq("GBMS-CANCEL"), any());
+  }
+
   private void stubNewInvoicePersistence(
       String gbmsInvoiceNumber,
       List<PermitInvoiceRow> firstInternalHistory,

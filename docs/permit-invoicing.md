@@ -47,7 +47,8 @@ application changes in the surrounding transaction. It then performs the legacy 
 1. Create the GBMS header, general record, detail lines, and notation.
 2. Verify the new invoice through GBMS history.
 3. Create the internal LEXIS invoice and scale-level details linked to the GBMS number.
-4. Link the first eligible prior invoice in GBMS history order as replaced when applicable.
+4. Link the first positive, unreplaced prior invoice in GBMS history order as replaced, whether or
+   not a LEXIS invoice links to it.
 5. Commit the staged permit, invoice, and linked-application changes.
 
 Cancellation and reactivation do not depend on the permit's current country. LEXIS marks every
