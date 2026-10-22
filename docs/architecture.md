@@ -438,10 +438,12 @@ conflict instead of silently replacing newer work. Short multi-row mutations tak
 in a consistent order and rely on Oracle transactions, constraints, and conditional updates for
 correctness across replicas.
 
-The daily expiry process is disabled by default and is enabled per environment. JDBC ShedLock uses
-`THE.LEXIS_SHEDLOCK` and the existing Oracle datasource so only one backend replica executes a
-trigger. It processes each eligible exemption independently, leaves unsuccessful aggregates
-eligible for a later run, and publishes metrics for operational monitoring.
+The daily expiry process runs where `LEXIS_EXPIRY_ENABLED` is true. The backend defaults to
+enabled; when the GitHub environment variable is unset, the deploy workflows default PROD and DEV
+to disabled and TEST to enabled (see above and [Exemption expiry job](exemption-expiry-job.md)).
+JDBC ShedLock uses `THE.LEXIS_SHEDLOCK` and the existing Oracle datasource so only one backend
+replica executes a trigger. It processes each eligible exemption independently, leaves unsuccessful
+aggregates eligible for a later run, and publishes metrics for operational monitoring.
 
 Federal validation and CREATE are replica-safe for the NEXCOL contract. CREATE uses best-effort
 same-replica replay, while the Oracle package primary key and the application/package/scale
