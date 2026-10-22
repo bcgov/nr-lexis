@@ -9325,10 +9325,45 @@ class OraclePermitDetailsRpcServiceTest {
         .contains(
             "A scale with the same timber mark/species/grade combination already exists.",
             "The total scale volume exceeds the package volume.",
-            "The total scale pieces exceed the permit request pieces.",
-            "The total scale volume exceeds the permit request volume.");
+            "The total scale pieces exceed the permit request pieces.");
     verify(repository, never())
         .insertBoicScaleDetail(org.mockito.ArgumentMatchers.any(BoicScaleMutationRecord.class));
+  }
+
+  @Test
+  void addBlanketOicScaleShouldAllowScalesOverThePermitRequestVolumeWithinThePackage() {
+    permitTotalsUpdateSucceeds();
+    when(repository.findPermitMutationByPermitNumber(7000123L))
+        .thenReturn(Optional.of(blanketOicPermitMutationRowWithStatus("ACT", 100L, 5.0d)));
+    when(repository.findExemptionTypeCode("EX-700")).thenReturn(Optional.of("B"));
+    when(repository.findPackageNumbersByOicPermitNumber(7000123L)).thenReturn(List.of("PKG-903"));
+    when(repository.findValidBoicTimberMarkRequired("TM3", "EX-700"))
+        .thenReturn(Optional.of(boicTimberMark("ACT", "B01")));
+    when(repository.isSpeciesCodeValidRequired("HE")).thenReturn(true);
+    when(repository.isGradeCodeValidRequired("A")).thenReturn(true);
+    when(repository.findScaleDetailsByPackageNumber("PKG-903")).thenReturn(List.of());
+    when(repository.findPackageDetailsByPackageNumberRequired("PKG-903"))
+        .thenReturn(
+            Optional.of(
+                new PackageDetailsRow(
+                    "PKG-903", 100.0d, 10.0d, 20.0d, "ACT", null, "N", "S")));
+    stubOicApplicationBinding("EX-700");
+    when(repository.insertBoicScaleDetail(any(BoicScaleMutationRecord.class)))
+        .thenReturn(
+            Optional.of(
+                scale("103", "TM3", "HE", "A", 12.5d, 7L, "7000123", "PKG-903", 1000999L)));
+    when(repository.findScaleDetailsByPermitNumber(7000123L))
+        .thenReturn(
+            List.of(),
+            List.of(scale("103", "TM3", "HE", "A", 12.5d, 7L, "7000123", "PKG-903", 1000999L)));
+
+    PermitPersistenceRpcResponseDto response =
+        service.addBlanketOicScale(
+            7000123L, "PKG-903", "TM3", "12.5", 7L, "HE", "A", "idir\\jsmith");
+
+    assertThat(response.success()).isTrue();
+    assertThat(response.errors()).isEmpty();
+    verify(repository).insertBoicScaleDetail(any(BoicScaleMutationRecord.class));
   }
 
   @Test

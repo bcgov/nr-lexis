@@ -3139,12 +3139,6 @@ public class OraclePermitDetailsRpcService implements PermitDetailsRpcService {
         permitScales, scalePieces, current.oicRequestPieces())) {
       errors.add("The total scale pieces exceed the permit request pieces.");
     }
-    if (current.oicRequestVolume() == null) {
-      errors.add("The permit request volume limit is unavailable.");
-    } else if (ScaleDomainValidator.exceedsVolume(
-        permitScales, normalizedVolume, current.oicRequestVolume())) {
-      errors.add("The total scale volume exceeds the permit request volume.");
-    }
     if (!errors.isEmpty()) {
       return failurePersistenceResponse(errors, permitNumber);
     }
