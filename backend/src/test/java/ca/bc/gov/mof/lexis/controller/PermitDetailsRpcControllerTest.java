@@ -795,7 +795,8 @@ class PermitDetailsRpcControllerTest {
         List.of(
             new PermitGbmsInvoiceHistoryItemRpcResponseDto(
                 "GBMS-1", "", "", "125.00", "2026-03-01", "2026-03-01", "2026-03-02"));
-    when(service.getGbmsInvoiceHistory("RCPT-1", 7000123L, true)).thenReturn(dto);
+    when(service.getGbmsInvoiceHistory(eq("RCPT-1"), eq(7000123L), eq(true), any()))
+        .thenReturn(dto);
 
     TestingAuthenticationToken authentication =
         new TestingAuthenticationToken(
@@ -807,14 +808,40 @@ class PermitDetailsRpcControllerTest {
 
     assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
     assertThat(response.getBody()).isEqualTo(dto);
-    verify(service).getGbmsInvoiceHistory("RCPT-1", 7000123L, true);
+    verify(service).getGbmsInvoiceHistory(eq("RCPT-1"), eq(7000123L), eq(true), any());
+  }
+
+  @Test
+  void gbmsInvoiceHistoryShouldOnlyAcceptFallbackPermitsTheCallerCanAccess() {
+    when(serviceProvider.getIfAvailable()).thenReturn(service);
+    TestingAuthenticationToken authentication = scopedSubmitterWithSavePermit();
+    when(service.getGbmsInvoiceHistory(eq("RCPT-OTHER"), eq(7000123L), eq(false), any()))
+        .thenReturn(List.of());
+
+    controller.getGbmsInvoiceHistory("RCPT-OTHER", 7000123L, authentication);
+
+    verify(provincialAuthorizationService).requirePermit(authentication, 7000123L);
+    @SuppressWarnings("unchecked")
+    org.mockito.ArgumentCaptor<Predicate<Long>> accessCaptor =
+        org.mockito.ArgumentCaptor.forClass(Predicate.class);
+    verify(service)
+        .getGbmsInvoiceHistory(eq("RCPT-OTHER"), eq(7000123L), eq(false), accessCaptor.capture());
+    when(provincialAuthorizationService.canAccessPermit(authentication, 7000888L))
+        .thenReturn(true);
+    when(provincialAuthorizationService.canAccessPermit(authentication, 7000999L))
+        .thenReturn(false);
+    assertThat(accessCaptor.getValue().test(7000888L)).isTrue();
+    assertThat(accessCaptor.getValue().test(7000999L)).isFalse();
+    assertThat(accessCaptor.getValue().test(7000999L)).isFalse();
+    verify(provincialAuthorizationService).canAccessPermit(authentication, 7000999L);
   }
 
   @Test
   void gbmsInvoiceHistoryShouldUseStandardHistoryForApplicationApproverWithReadOnlyRole() {
     when(serviceProvider.getIfAvailable()).thenReturn(service);
     List<PermitGbmsInvoiceHistoryItemRpcResponseDto> dto = List.of();
-    when(service.getGbmsInvoiceHistory("RCPT-1", 7000123L, false)).thenReturn(dto);
+    when(service.getGbmsInvoiceHistory(eq("RCPT-1"), eq(7000123L), eq(false), any()))
+        .thenReturn(dto);
 
     TestingAuthenticationToken authentication =
         authenticationWithRoles(
@@ -825,7 +852,7 @@ class PermitDetailsRpcControllerTest {
 
     assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
     assertThat(response.getBody()).isEqualTo(dto);
-    verify(service).getGbmsInvoiceHistory("RCPT-1", 7000123L, false);
+    verify(service).getGbmsInvoiceHistory(eq("RCPT-1"), eq(7000123L), eq(false), any());
   }
 
   @Test

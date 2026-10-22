@@ -1261,10 +1261,19 @@ public class OraclePermitDetailsRpcService implements PermitDetailsRpcService {
 
   @Override
   public List<PermitGbmsInvoiceHistoryItemRpcResponseDto> getGbmsInvoiceHistory(
-      String receiptNumber, Long permitNumber, boolean readOnlyUser) {
+      String receiptNumber,
+      Long permitNumber,
+      boolean readOnlyUser,
+      Predicate<Long> permitAccess) {
+    // Keeps the requested permit's rows, and receipt-fallback rows from another permit only when
+    // that permit is accessible.
     return repository
         .findGbmsInvoiceHistoryForDisplay(receiptNumber, permitNumber, readOnlyUser)
         .stream()
+        .filter(
+            row ->
+                java.util.Objects.equals(permitNumber, row.permitNumber())
+                    || permitAccess.test(row.permitNumber()))
         .map(this::toGbmsInvoiceHistoryItem)
         .toList();
   }

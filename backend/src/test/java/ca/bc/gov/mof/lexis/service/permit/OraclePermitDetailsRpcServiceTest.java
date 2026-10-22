@@ -1991,7 +1991,7 @@ class OraclePermitDetailsRpcServiceTest {
                     LocalDate.of(2026, 3, 2))));
 
     List<PermitGbmsInvoiceHistoryItemRpcResponseDto> response =
-        service.getGbmsInvoiceHistory("RCPT-1", 7000123L, true);
+        service.getGbmsInvoiceHistory("RCPT-1", 7000123L, true, permitNumber -> false);
 
     assertThat(response).hasSize(1);
     assertThat(response.get(0).gbmsInvoiceNumber()).isEqualTo("GBMS-1");
@@ -2028,7 +2028,7 @@ class OraclePermitDetailsRpcServiceTest {
                     LocalDate.of(2022, 2, 15))));
 
     List<PermitGbmsInvoiceHistoryItemRpcResponseDto> response =
-        service.getGbmsInvoiceHistory("RCPT-1", 7000123L, true);
+        service.getGbmsInvoiceHistory("RCPT-1", 7000123L, true, permitNumber -> false);
 
     assertThat(response)
         .extracting(
@@ -2049,8 +2049,43 @@ class OraclePermitDetailsRpcServiceTest {
     when(repository.findGbmsInvoiceHistoryForDisplay("RCPT-1", 7000123L, true))
         .thenThrow(failure);
 
-    assertThatThrownBy(() -> service.getGbmsInvoiceHistory("RCPT-1", 7000123L, true))
+    assertThatThrownBy(
+            () -> service.getGbmsInvoiceHistory("RCPT-1", 7000123L, true, permitNumber -> true))
         .isSameAs(failure);
+  }
+
+  @ParameterizedTest
+  @ValueSource(booleans = {true, false})
+  void gbmsInvoiceHistoryShouldKeepReceiptFallbackRowsOnlyForAnAccessiblePermit(
+      boolean accessible) {
+    when(repository.findGbmsInvoiceHistoryForDisplay("RCPT-OTHER", 7000123L, false))
+        .thenReturn(
+            List.of(
+                new GbmsInvoiceHistoryRow(
+                    "GBMS-9",
+                    null,
+                    null,
+                    7000999L,
+                    125.0d,
+                    LocalDate.of(2026, 3, 1),
+                    LocalDate.of(2026, 3, 1),
+                    LocalDate.of(2026, 3, 2))));
+    List<Long> checkedPermits = new java.util.ArrayList<>();
+
+    List<PermitGbmsInvoiceHistoryItemRpcResponseDto> response =
+        service.getGbmsInvoiceHistory(
+            "RCPT-OTHER",
+            7000123L,
+            false,
+            permitNumber -> {
+              checkedPermits.add(permitNumber);
+              return accessible;
+            });
+
+    assertThat(response)
+        .extracting(PermitGbmsInvoiceHistoryItemRpcResponseDto::gbmsInvoiceNumber)
+        .containsExactlyElementsOf(accessible ? List.of("GBMS-9") : List.of());
+    assertThat(checkedPermits).containsExactly(7000999L);
   }
 
   @Test

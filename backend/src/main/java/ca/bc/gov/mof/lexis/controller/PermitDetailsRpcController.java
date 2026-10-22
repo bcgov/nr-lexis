@@ -46,8 +46,10 @@ import jakarta.servlet.http.HttpServletRequest;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.Set;
 import java.util.TreeSet;
 import java.util.function.Predicate;
@@ -510,7 +512,11 @@ public class PermitDetailsRpcController {
     requirePermitAccess(permitNumber, authentication);
 
     return ResponseEntity.ok(
-        service.getGbmsInvoiceHistory(receiptNumber, permitNumber, isReadOnlyUser(authentication)));
+        service.getGbmsInvoiceHistory(
+            receiptNumber,
+            permitNumber,
+            isReadOnlyUser(authentication),
+            permitAccessPredicate(authentication)));
   }
 
   @PostMapping("/add-permit")
@@ -1688,6 +1694,13 @@ public class PermitDetailsRpcController {
       }
     }
     requireApplicationAccess(applicationNumber, authentication);
+  }
+
+  private Predicate<Long> permitAccessPredicate(Authentication authentication) {
+    Map<Long, Boolean> accessByPermit = new HashMap<>();
+    return permitNumber ->
+        accessByPermit.computeIfAbsent(
+            permitNumber, number -> authorization().canAccessPermit(authentication, number));
   }
 
   private Predicate<Long> applicationAccessPredicate(Authentication authentication) {
