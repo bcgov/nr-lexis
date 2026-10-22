@@ -165,7 +165,9 @@ $P{P_EXEMPTION_TYPE}== null || $P{P_EXEMPTION_TYPE}.isEmpty()
         ?   "OIC"
         :   $P{P_EXEMPTION_TYPE}.equalsIgnoreCase( "F" )
             ?   "Federal"
-            :   "All"]]></variableExpression>
+            :   $P{P_EXEMPTION_TYPE}.equalsIgnoreCase( "B" )
+                ?   "Blanket OIC"
+                :   "All"]]></variableExpression>
 	</variable>
 	<variable name="CCF7_F_EXEMPT_REASON" class="java.lang.String" resetType="None">
 		<variableExpression><![CDATA[//if ({?P_EXEMPTION_REASON} = 'S') then
