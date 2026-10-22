@@ -4,6 +4,7 @@ import { createMemoryRouter, MemoryRouter, Route, RouterProvider, Routes } from 
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { useAuth } from '@/context/auth/useAuth'
 import ProvincialApplicationUploadPage from '@/pages/ProvincialApplicationUpload'
+import { buildValidationIssuesCsv } from '@/pages/ProvincialApplicationUpload/applicationUploadFiles'
 import {
   submitAdminUpload,
   validateApplicationSubmissionUpload,
@@ -635,5 +636,38 @@ describe('Upload applications', () => {
 
     expect(await screen.findByRole('dialog', { name: 'Discard changes?' })).toBeVisible()
     expect(router.state.location.pathname).toBe('/provincial/application/upload')
+  })
+})
+
+describe('Upload issues CSV', () => {
+  const csvRows = (...cells: Array<[fileName: string, detail: string]>): string[] => {
+    const href = buildValidationIssuesCsv(
+      cells.map(([fileName, detail], index) => ({ key: String(index), fileName, detail })),
+    )
+    return decodeURIComponent(href.replace('data:text/csv;charset=utf-8,', '')).split('\r\n')
+  }
+
+  it('prefixes cells that start like a formula', () => {
+    expect(
+      csvRows(
+        ['=HYPERLINK("https://example.test").xml', '+1 is not valid.'],
+        ['-test-2026-10-20.xml', '@SUM(1+1) is not valid.'],
+        ['test-2026-10-20.xml', '\t=1+1'],
+        ['test-2026-10-21.xml', '  \n=1+1'],
+      ),
+    ).toEqual([
+      '"Application file","Detail"',
+      '"\'=HYPERLINK(""https://example.test"").xml","\'+1 is not valid."',
+      '"\'-test-2026-10-20.xml","\'@SUM(1+1) is not valid."',
+      '"test-2026-10-20.xml","\'\t=1+1"',
+      '"test-2026-10-21.xml","\'  \n=1+1"',
+    ])
+  })
+
+  it('leaves ordinary cells unchanged', () => {
+    expect(csvRows(['test-2026-10-20.xml', 'Line 2: a "quoted" value = 1.'])).toEqual([
+      '"Application file","Detail"',
+      '"test-2026-10-20.xml","Line 2: a ""quoted"" value = 1."',
+    ])
   })
 })
