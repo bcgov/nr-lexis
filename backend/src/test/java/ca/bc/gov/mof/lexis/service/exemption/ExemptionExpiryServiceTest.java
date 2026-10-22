@@ -344,6 +344,40 @@ class ExemptionExpiryServiceTest {
   }
 
   @Test
+  void shouldDeferWithoutWritingWhenCandidateWasCancelledBeforeItsLockWasTaken() {
+    when(exemptionRepository.findAllExpiringExemptionNumbers()).thenReturn(List.of("EX-100"));
+    when(exemptionRepository.findExemptionRecord("EX-100"))
+        .thenReturn(Optional.of(exemption("CAN", LocalDate.of(2026, 7, 9))));
+
+    ExemptionExpiryService.ExpiryRunResult result = service.expireDueExemptions();
+
+    assertThat(result.expiredExemptions()).isEmpty();
+    assertThat(result.deferredExemptions()).containsExactly("EX-100");
+    verify(exemptionRepository, never()).findApplicationSummariesByExemptionNumber(any());
+    verify(applicationRepository, never()).updateApplication(any());
+    verify(permitRepository, never()).updatePermitDetail(any(), any(), any());
+    verify(exemptionRepository, never()).updateExemption(any());
+  }
+
+  @Test
+  void shouldDeferWithoutWritingWhenCandidateExpiryWasMovedToTodayOrLater() {
+    when(exemptionRepository.findAllExpiringExemptionNumbers())
+        .thenReturn(List.of("EX-100", "EX-100"));
+    when(exemptionRepository.findExemptionRecord("EX-100"))
+        .thenReturn(
+            Optional.of(exemption("ACT", LocalDate.of(2026, 7, 10))),
+            Optional.of(exemption("ACT", LocalDate.of(2026, 12, 31))));
+
+    ExemptionExpiryService.ExpiryRunResult result = service.expireDueExemptions();
+
+    assertThat(result.expiredExemptions()).isEmpty();
+    assertThat(result.deferredExemptions()).containsExactly("EX-100", "EX-100");
+    verify(applicationRepository, never()).updateApplication(any());
+    verify(permitRepository, never()).updatePermitDetail(any(), any(), any());
+    verify(exemptionRepository, never()).updateExemption(any());
+  }
+
+  @Test
   void shouldDeferBeforeWritingWhenParentDriftsWhileChildLocksAreAcquired() {
     when(exemptionRepository.findAllExpiringExemptionNumbers()).thenReturn(List.of("EX-100"));
     when(exemptionRepository.findExemptionRecord("EX-100"))
@@ -537,9 +571,18 @@ class ExemptionExpiryServiceTest {
   }
 
   private ExemptionRecord exemption(String otherConditions) {
+    return exemption(otherConditions, "ACT", LocalDate.of(2026, 7, 9));
+  }
+
+  private ExemptionRecord exemption(String statusCode, LocalDate expiryDate) {
+    return exemption(null, statusCode, expiryDate);
+  }
+
+  private ExemptionRecord exemption(
+      String otherConditions, String statusCode, LocalDate expiryDate) {
     return new ExemptionRecord(
-        "EX-100", 10.0, LocalDate.of(2026, 1, 1), LocalDate.of(2026, 7, 9), otherConditions,
-        "M", "ACT", "CREATOR", Timestamp.from(NOW.minusSeconds(3600)), null, null);
+        "EX-100", 10.0, LocalDate.of(2026, 1, 1), expiryDate, otherConditions,
+        "M", statusCode, "CREATOR", Timestamp.from(NOW.minusSeconds(3600)), null, null);
   }
 
   private ApplicationUpdateRecord application() {

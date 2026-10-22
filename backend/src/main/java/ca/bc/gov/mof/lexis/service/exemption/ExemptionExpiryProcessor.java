@@ -38,6 +38,8 @@ public class ExemptionExpiryProcessor {
   static final String EXPIRED_STATUS = "EXP";
   static final String EXPIRY_REMARK_PREFIX = "Exemption expired,";
 
+  private static final String ACTIVE_STATUS = "ACT";
+
   private static final Logger LOGGER = LoggerFactory.getLogger(ExemptionExpiryProcessor.class);
 
   private final ExemptionDetailsRpcRepository exemptionRepository;
@@ -102,6 +104,12 @@ public class ExemptionExpiryProcessor {
       if (EXPIRED_STATUS.equalsIgnoreCase(exemption.get().exemptionStatusCode())) {
         return true;
       }
+      if (!isDueForExpiry(exemption.get())) {
+        LOGGER.info(
+            "event=lexis_exemption_expiry operation=expire_one outcome=deferred reason=candidate_not_due exemptionFingerprint={}",
+            fingerprint(exemptionNumber));
+        return false;
+      }
 
       List<Long> applicationNumbers =
           applicationNumbers(
@@ -164,6 +172,12 @@ public class ExemptionExpiryProcessor {
           acquiredApplicationLocks,
           acquiredPermitLocks);
     }
+  }
+
+  private boolean isDueForExpiry(ExemptionRecord exemption) {
+    return ACTIVE_STATUS.equalsIgnoreCase(normalize(exemption.exemptionStatusCode()))
+        && exemption.expiryDate() != null
+        && exemption.expiryDate().isBefore(LocalDate.now(clock));
   }
 
   private boolean acquireApplicationLocks(
