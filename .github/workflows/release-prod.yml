@@ -90,6 +90,10 @@ jobs:
       backend_memory_request: "1Gi"
       backend_cpu_limit: "1500m"
       backend_memory_limit: "1536Mi"
+      frontend_cpu_request: "100m"
+      frontend_memory_request: "128Mi"
+      frontend_cpu_limit: "500m"
+      frontend_memory_limit: "256Mi"
       # Default off if the PROD environment LEXIS_EXPIRY_ENABLED variable is unset.
       expiry_enabled: false
 
