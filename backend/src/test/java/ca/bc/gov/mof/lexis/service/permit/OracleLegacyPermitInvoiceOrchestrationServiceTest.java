@@ -69,6 +69,7 @@ class OracleLegacyPermitInvoiceOrchestrationServiceTest {
         ArgumentCaptor.forClass(PermitInvoiceInsert.class);
     order.verify(invoiceRepository).insertPermitInvoiceRequired(internal.capture());
     assertThat(internal.getValue().gbmsInvoiceNumber()).isEqualTo("GBMS-100");
+    verify(gbmsInvoices, never()).replaceInvoice(any(), any(), any());
   }
 
   @Test
@@ -682,6 +683,33 @@ class OracleLegacyPermitInvoiceOrchestrationServiceTest {
     assertThat(result.success()).isTrue();
     verify(gbmsInvoices).replaceInvoice("GBMS-NEW", "GBMS-OLD", "idir\\jsmith");
     verify(gbmsInvoices, never()).replaceInvoice(any(), eq("GBMS-CANCEL"), any());
+  }
+
+  @Test
+  void shouldSkipAnEarlierInvoiceThatIsAlreadyReplacedOnASecondCycle() {
+    stubNewInvoicePersistence("GBMS-NEW", List.of(), List.of());
+    GbmsInvoiceHistoryRow firstBefore =
+        history("GBMS-OLD-1", 8.0d, "GBMS-CANCEL-1", "GBMS-OLD-2", LocalDate.of(2010, 3, 1));
+    GbmsInvoiceHistoryRow firstCredit = history("GBMS-CANCEL-1", -8.0d, null, null, null);
+    GbmsInvoiceHistoryRow secondBefore =
+        history("GBMS-OLD-2", 8.0d, "GBMS-CANCEL-2", null, LocalDate.of(2010, 3, 1));
+    GbmsInvoiceHistoryRow secondAfter =
+        history("GBMS-OLD-2", 8.0d, "GBMS-CANCEL-2", "GBMS-NEW", LocalDate.of(2010, 3, 1));
+    GbmsInvoiceHistoryRow secondCredit = history("GBMS-CANCEL-2", -8.0d, null, null, null);
+    GbmsInvoiceHistoryRow created = history("GBMS-NEW", 10.0d, null, null, null);
+    when(permitRepository.findGbmsInvoiceHistoryRequired("", PERMIT_NUMBER))
+        .thenReturn(
+            List.of(firstBefore, firstCredit, secondBefore, secondCredit),
+            List.of(created, firstBefore, firstCredit, secondBefore, secondCredit),
+            List.of(created, firstBefore, firstCredit, secondAfter, secondCredit));
+    when(gbmsInvoices.createInvoice(PERMIT_NUMBER, gbmsSnapshot(), "idir\\jsmith"))
+        .thenReturn("GBMS-NEW");
+
+    TransitionResult result = service.orchestrate(enteringTransition(), "idir\\jsmith");
+
+    assertThat(result.success()).isTrue();
+    verify(gbmsInvoices).replaceInvoice("GBMS-NEW", "GBMS-OLD-2", "idir\\jsmith");
+    verify(gbmsInvoices, never()).replaceInvoice(any(), eq("GBMS-OLD-1"), any());
   }
 
   private void stubNewInvoicePersistence(
