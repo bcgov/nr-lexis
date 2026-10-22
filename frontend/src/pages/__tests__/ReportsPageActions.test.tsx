@@ -1029,6 +1029,48 @@ describe('Reports Page Actions', () => {
     })
   })
 
+  it('restores the short destination country list when clearing all fields', async () => {
+    mockReportPermissions()
+    mockedFetchReportOptions.mockResolvedValueOnce({
+      ...emptyReportOptions(),
+      destinationCountries: [
+        { value: '', label: 'All' },
+        { value: 'US', label: 'United States' },
+      ],
+      allDestinationCountries: [
+        { value: 'US', label: 'United States' },
+        { value: 'NZ', label: 'New Zealand' },
+      ],
+    })
+
+    render(
+      <MemoryRouter initialEntries={['/reports?report=transportReport']}>
+        <Routes>
+          <Route path="/reports" element={<ReportsPage />} />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    await screen.findByRole('heading', { name: 'Transport report' })
+    await userEvent.click(screen.getByRole('button', { name: 'More...' }))
+    expect(screen.queryByRole('button', { name: 'More...' })).not.toBeInTheDocument()
+    await waitFor(() => {
+      expect(getComboBox('Final destination country')).toHaveValue('United States')
+    })
+
+    await userEvent.click(screen.getByRole('button', { name: 'Clear all' }))
+
+    await waitFor(() => {
+      expect(getComboBox('Final destination country')).toHaveValue('All')
+    })
+    expect(screen.getByRole('button', { name: 'More...' })).toBeInTheDocument()
+    await userEvent.click(screen.getByRole('button', { name: 'Generate report' }))
+    await waitFor(() => {
+      expect(mockedRunReport).toHaveBeenCalled()
+    })
+    expect(mockedRunReport.mock.calls[0][0].values).not.toHaveProperty('destinationCountry')
+  })
+
   it('defaults tenure analysis dates like legacy Struts', async () => {
     mockReportPermissions()
     const defaultDates = legacyTenureDefaultDates()
