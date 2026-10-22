@@ -8077,10 +8077,14 @@ const ProvincialPermitDetailsPage = () => {
                     )}
                     {ownerEditMode && permitForm && (
                       <Column sm={4} md={8} lg={16}>
-                        {/* Focus waits for the owner's locations, so it lands on the owner's
-                        fields rather than the fields after them. */}
+                        {/* Editing the applicant, focus waits for the owner's locations, so it
+                        lands on the owner's fields rather than the fields after them. */}
                         <Tile
-                          data-edit-focus-pending={isOwnerClientLookupLoading ? 'true' : undefined}
+                          data-edit-focus-pending={
+                            permitEditSection === 'applicant' && isOwnerClientLookupLoading
+                              ? 'true'
+                              : undefined
+                          }
                         >
                           <DetailCardTitle icon={Enterprise}>Applicant details</DetailCardTitle>
                           {renderSectionSaveResult('applicant')}

@@ -9928,6 +9928,42 @@ describe('Provincial Permit Detail Action Smoke', () => {
     )
   })
 
+  it("focuses a new Ministerial permit's fields while its owner locations still load", async () => {
+    configureMinisterialActivePermit()
+    mockedFetchApplicationClientLocations.mockImplementation(() => new Promise(() => undefined))
+    const loadShippingReferences = mockedFetchShippingReferenceOptions.getMockImplementation()!
+    let releaseShippingReferences: () => void = () => undefined
+    mockedFetchShippingReferenceOptions.mockImplementation(
+      () =>
+        new Promise((resolve, reject) => {
+          releaseShippingReferences = () => void loadShippingReferences().then(resolve, reject)
+        }),
+    )
+    render(
+      <MemoryRouter
+        initialEntries={[{ pathname: '/provincial/permit/777', state: { permitCreated: true } }]}
+      >
+        <Routes>
+          <Route
+            path="/provincial/permit/:permitNumber"
+            element={<ProvincialPermitDetailsPage />}
+          />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    // The new permit opens for editing once shipping options load; focus is on the page by then.
+    const pageTitle = await screen.findByRole('heading', { level: 1 })
+    await waitFor(() => expect(pageTitle).toHaveFocus())
+    act(() => pageTitle.blur())
+    await act(async () => releaseShippingReferences())
+
+    const permitPanel = (await screen.findByLabelText('Remarks')).closest(
+      '[role="tabpanel"]',
+    ) as HTMLElement
+    await waitFor(() => expect(permitPanel).toContainElement(document.activeElement as HTMLElement))
+  })
+
   it('finishes the first Ministerial save from Shipping and stays busy through both saves', async () => {
     configureMinisterialActivePermit()
     let resolveShipping!: (result: Awaited<ReturnType<typeof updatePermitShipping>>) => void
