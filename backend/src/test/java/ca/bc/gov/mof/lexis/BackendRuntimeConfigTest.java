@@ -302,6 +302,10 @@ class BackendRuntimeConfigTest {
 
     assertThat(oracleConfig).contains("javax.net.ssl.trustStore: ${TRUSTSTORE_PATH:/cert/jssecacerts}");
     assertThat(initContainer)
+        .contains(
+            "image: ghcr.io/bcgov/nr-forest-client/common@sha256:"
+                + "3df2482866b1b7fa37726469ac90f73a820e36f0149029b1af7a3e4ac09ee129")
+        .contains("imagePullPolicy: IfNotPresent")
         .contains(certificateMount)
         .doesNotContain(certificateMount + "\n                  readOnly: true");
     assertThat(applicationContainer)
