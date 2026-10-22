@@ -311,17 +311,18 @@ concrete federal operations and denies unrecognized paths. The gateway accepts J
 Authorization header; query-string and cookie token extraction are disabled. Current
 configuration requires the environment's `forests` issuer,
 RS256 signature verification, expiry, and `lexis:federal-submission:submit`. `allowed_aud` is
-currently unset; neither the gateway configuration nor backend adds a dedicated audience/client-ID
-binding. Access therefore depends on valid issuer-signed tokens and the federal-submission scope.
-The [provisioning script](../.github/scripts/ensure-keycloak-scopes.sh) restricts that scope to the
-approved NEXCOL client. A client ID is used for provisioning and caller identity, but it is not an
-extra runtime allowlist check.
+currently unset at the gateway. The backend also requires a Bearer access token from
+`NEXCOL_KEYCLOAK_CLIENT_ID`: `azp` (or `client_id` when `azp` is absent) must equal it, and a
+`client_id` that is present must match too. When the machine issuer is configured without this
+client ID, the backend starts, logs a warning, and rejects every machine token. The
+[provisioning script](../.github/scripts/ensure-keycloak-scopes.sh) independently restricts the
+submission scope to the approved NEXCOL client and stops on an incomplete client listing.
 
 The [backend token configuration](../backend/src/main/java/ca/bc/gov/mof/lexis/security/Oauth2SecurityCustomizer.java)
 registers `LEXIS_OIDC_ISSUER_URI` for interactive users and the separate `KEYCLOAK_ISSUER_URI`
 for machine clients. Interactive tokens produce compatible FAM role authorities; machine tokens
-produce scope authorities. The interactive client is bound through `LEXIS_OIDC_CLIENT_ID`; this
-does not change the machine-client trust model described above.
+produce scope authorities. The interactive client is bound through `LEXIS_OIDC_CLIENT_ID`,
+separately from the machine-client binding described above.
 `SCOPE_lexis:federal-submission:submit` maps only to `uploadFederalSubmission`, which
 protects the three federal endpoints. It grants no interactive LEXIS role or general record-read
 access. The backend trusts one configured Keycloak issuer for machine clients.
@@ -406,8 +407,8 @@ endpoint; `LEXIS_OIDC_SITEMINDER_LOGOUT_URL` can override it. FAM must grant use
 LEXIS roles, including forest-client scopes where required.
 
 The `KEYCLOAK_ISSUER_URI`, `NEXCOL_KEYCLOAK_CLIENT_ID`, `keycloak_sa_client_id`, and
-`keycloak_sa_client_secret` settings belong to the separate machine-client provisioning path.
-They are not browser BCeID credentials.
+`keycloak_sa_client_secret` settings belong to the separate machine-client path. They are not
+browser BCeID credentials.
 
 ### PROD vanity route
 

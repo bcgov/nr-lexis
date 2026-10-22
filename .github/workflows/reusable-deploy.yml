@@ -282,6 +282,7 @@ jobs:
             -p LEXIS_OIDC_ISSUER_URI="${{ vars.LEXIS_OIDC_ISSUER_URI }}"
             -p LEXIS_OIDC_CLIENT_ID="${{ vars.LEXIS_OIDC_CLIENT_ID }}"
             -p KEYCLOAK_ISSUER_URI="${{ vars.KEYCLOAK_ISSUER_URI }}"
+            -p NEXCOL_KEYCLOAK_CLIENT_ID="${{ vars.NEXCOL_KEYCLOAK_CLIENT_ID }}"
             -p ALLOWED_ORIGINS="${{ vars.ALLOWED_ORIGINS || 'https://openapi.apps.gov.bc.ca' }}"
             -p DATABASE_HOST="$DATABASE_HOST"
             -p DATABASE_SERVICE_NAME="$DATABASE_SERVICE_NAME"

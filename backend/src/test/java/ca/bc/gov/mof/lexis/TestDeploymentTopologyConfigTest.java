@@ -278,6 +278,8 @@ class TestDeploymentTopologyConfigTest {
         .contains("value: ${LEXIS_EXPIRY_LOCK_AT_LEAST_FOR}")
         .contains("value: ${LEXIS_REPORT_STATISTICS_LOG_LEVEL}")
         .contains("value: ${LEXIS_FAILURE_DIAGNOSTICS_LOG_LEVEL}")
+        .contains("- name: NEXCOL_KEYCLOAK_CLIENT_ID\n    description:")
+        .contains("- name: NEXCOL_KEYCLOAK_CLIENT_ID\n                  value: ${NEXCOL_KEYCLOAK_CLIENT_ID}")
         .contains("type: RollingUpdate\n        rollingUpdate:\n          maxUnavailable: 1\n          maxSurge: 0")
         .contains("averageUtilization: 70")
         .contains("topologySpreadConstraints:")
@@ -487,7 +489,8 @@ class TestDeploymentTopologyConfigTest {
     assertThat(backendDeployStep)
         .contains("-p LEXIS_OIDC_ISSUER_URI=\"${{ vars.LEXIS_OIDC_ISSUER_URI }}\"")
         .contains("-p LEXIS_OIDC_CLIENT_ID=\"${{ vars.LEXIS_OIDC_CLIENT_ID }}\"")
-        .contains("-p KEYCLOAK_ISSUER_URI=\"${{ vars.KEYCLOAK_ISSUER_URI }}\"");
+        .contains("-p KEYCLOAK_ISSUER_URI=\"${{ vars.KEYCLOAK_ISSUER_URI }}\"")
+        .contains("-p NEXCOL_KEYCLOAK_CLIENT_ID=\"${{ vars.NEXCOL_KEYCLOAK_CLIENT_ID }}\"");
     assertThat(frontendDeployStep)
         .contains("-p VITE_OIDC_ISSUER_URI=\"${{ vars.LEXIS_OIDC_ISSUER_URI }}\"")
         .contains("-p VITE_OIDC_CLIENT_ID=\"${{ vars.LEXIS_OIDC_CLIENT_ID }}\"")

@@ -23,6 +23,8 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.core.convert.converter.Converter;
 import org.springframework.security.core.GrantedAuthority;
@@ -48,6 +50,7 @@ import org.springframework.util.StringUtils;
 public class Oauth2SecurityCustomizer
     implements Customizer<OAuth2ResourceServerConfigurer<HttpSecurity>> {
 
+  private static final Logger LOGGER = LoggerFactory.getLogger(Oauth2SecurityCustomizer.class);
   private static final Set<String> STAFF_IDENTITY_PROVIDERS = Set.of("idir", "azureidir");
   private static final String IDP_BCEID_BUSINESS = "bceidbusiness";
   private static final String ROLE_PROVINCIAL_SUBMITTER = "LEXIS_PROVINCIAL_SUBMITTER";
@@ -62,6 +65,7 @@ public class Oauth2SecurityCustomizer
   private final String interactiveIssuerUri;
   private final String expectedClientId;
   private final String keycloakIssuerUri;
+  private final OAuth2TokenValidator<Jwt> machineValidator;
 
   public Oauth2SecurityCustomizer(
       @Value("${spring.security.oauth2.resourceserver.jwt.jwk-set-uri}") String interactiveJwkSetUri,
@@ -69,6 +73,7 @@ public class Oauth2SecurityCustomizer
       @Value("${lexis.auth.oidc.client-id}") String expectedClientId,
       @Value("${lexis.auth.keycloak.issuer-uri:}") String keycloakIssuerUri,
       @Value("${lexis.auth.keycloak.jwk-set-uri:}") String keycloakJwkSetUri,
+      @Value("${lexis.auth.keycloak.client-id:}") String expectedMachineClientId,
       LexisSessionService sessionService) {
 
     this.interactiveIssuerUri = normalizeIssuerUri(interactiveIssuerUri);
@@ -76,6 +81,8 @@ public class Oauth2SecurityCustomizer
       throw new IllegalStateException("lexis.auth.oidc.client-id must be configured");
     }
     this.expectedClientId = expectedClientId;
+    String machineClientId = expectedMachineClientId == null ? "" : expectedMachineClientId.trim();
+    this.machineValidator = machineTokenValidator(machineClientId);
     Map<String, JwtDecoder> decoders = new LinkedHashMap<>();
     decoders.put(
         this.interactiveIssuerUri,
@@ -88,6 +95,11 @@ public class Oauth2SecurityCustomizer
 
     String normalizedKeycloakIssuerUri = null;
     if (StringUtils.hasText(keycloakIssuerUri)) {
+      if (machineClientId.isEmpty()) {
+        // The backend still starts, but the machine validator rejects every token from this issuer.
+        LOGGER.warn(
+            "lexis.auth.keycloak.client-id is not configured; machine issuer tokens will be rejected");
+      }
       normalizedKeycloakIssuerUri = normalizeIssuerUri(keycloakIssuerUri);
       if (this.interactiveIssuerUri.equals(normalizedKeycloakIssuerUri)) {
         throw new IllegalStateException("Interactive and machine JWT issuers must be distinct");
@@ -101,7 +113,7 @@ public class Oauth2SecurityCustomizer
               resolvedKeycloakJwkSetUri,
               "lexis.auth.keycloak.issuer-uri",
               "lexis.auth.keycloak.jwk-set-uri",
-              accessTokenUseValidator()));
+              machineValidator));
     }
 
     this.keycloakIssuerUri = normalizedKeycloakIssuerUri;
@@ -136,7 +148,9 @@ public class Oauth2SecurityCustomizer
             sessionService.parseGrantedAuthorities(
                 identityCompatibleFamRoles(roles, identityProvider)));
       }
-    } else if (keycloakIssuerUri != null && keycloakIssuerUri.equals(tokenIssuer)) {
+    } else if (keycloakIssuerUri != null
+        && keycloakIssuerUri.equals(tokenIssuer)
+        && !machineValidator.validate(jwt).hasErrors()) {
       authorities.addAll(normalizedScopeAuthorities(jwt));
     }
 
@@ -316,6 +330,30 @@ public class Oauth2SecurityCustomizer
     processor.setJWSKeySelector(new JWSVerificationKeySelector<>(JWSAlgorithm.RS256, jwkSource));
     processor.setJWTClaimsSetVerifier((claims, context) -> {});
     return processor;
+  }
+
+  /**
+   * Machine tokens must be Bearer access tokens from the configured client: {@code azp}, or
+   * {@code client_id} when {@code azp} is absent, must equal it, and a present {@code client_id}
+   * must agree. A blank client ID rejects every token.
+   */
+  static OAuth2TokenValidator<Jwt> machineTokenValidator(String clientId) {
+    return new DelegatingOAuth2TokenValidator<>(
+        accessTokenUseValidator(),
+        token -> {
+          String authorizedParty = token.getClaimAsString("azp");
+          String tokenClientId = token.getClaimAsString("client_id");
+          if (!StringUtils.hasText(clientId)
+              || !(clientId.equals(authorizedParty)
+                  || (authorizedParty == null && clientId.equals(tokenClientId)))
+              || (tokenClientId != null && !clientId.equals(tokenClientId))
+              || !"Bearer".equals(token.getClaimAsString("typ"))) {
+            return OAuth2TokenValidatorResult.failure(
+                new OAuth2Error(
+                    "invalid_token", "A token from the configured machine client is required.", null));
+          }
+          return OAuth2TokenValidatorResult.success();
+        });
   }
 
   static OAuth2TokenValidator<Jwt> accessTokenUseValidator() {

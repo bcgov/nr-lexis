@@ -114,6 +114,8 @@ lexis:
       # Optional second JWT issuer for machine-to-machine clients such as NEXCOL.
       issuer-uri: ${KEYCLOAK_ISSUER_URI:}
       jwk-set-uri: ${KEYCLOAK_JWK_SET_URI:}
+      # Machine tokens are accepted only from this client; blank rejects every machine token.
+      client-id: ${NEXCOL_KEYCLOAK_CLIENT_ID:}
     # Mirrors legacy WebADE "industry-roles" behaviour with renamed submitter roles.
     industry-roles: "LEXIS_PROVINCIAL_SUBMITTER"
   authz:

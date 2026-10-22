@@ -197,7 +197,7 @@ class FederalReadOnlyAuthorizationIntegrationTest {
             .build();
     var converter =
         new Oauth2SecurityCustomizer(
-            issuer + "/protocol/openid-connect/certs", issuer, "lexis-test", "", "", sessionService);
+            issuer + "/protocol/openid-connect/certs", issuer, "lexis-test", "", "", "", sessionService);
     return jwt().jwt(token).authorities(converter.normalizedAuthorities(token));
   }
 }

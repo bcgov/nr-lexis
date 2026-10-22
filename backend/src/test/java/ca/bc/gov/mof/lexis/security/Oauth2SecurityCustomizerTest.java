@@ -23,21 +23,27 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicInteger;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
+import org.springframework.boot.test.system.CapturedOutput;
+import org.springframework.boot.test.system.OutputCaptureExtension;
 import org.springframework.security.core.GrantedAuthority;
 import org.springframework.security.oauth2.core.OAuth2TokenValidatorResult;
 import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.security.oauth2.jwt.JwtDecoder;
 
+@ExtendWith(OutputCaptureExtension.class)
 class Oauth2SecurityCustomizerTest {
   private static final String ISSUER = "https://loginproxy.example.test/auth/realms/standard";
   private static final String MACHINE_ISSUER = "https://loginproxy.example.test/auth/realms/forests";
   private static final String CLIENT = "lexis-test";
+  private static final String MACHINE_CLIENT = "nexcol-test";
   private final LexisSessionService sessionService =
       new LexisSessionService("LEXIS_PROVINCIAL_SUBMITTER");
   private final Oauth2SecurityCustomizer customizer =
-      new Oauth2SecurityCustomizer("", ISSUER, CLIENT, MACHINE_ISSUER, "", sessionService);
+      new Oauth2SecurityCustomizer(
+          "", ISSUER, CLIENT, MACHINE_ISSUER, "", MACHINE_CLIENT, sessionService);
 
   @ParameterizedTest
   @ValueSource(strings = {"idir", "azureidir"})
@@ -219,16 +225,82 @@ class Oauth2SecurityCustomizerTest {
   }
 
   @Test
-  void machineIssuerShouldContinueUsingScopesOnly() {
+  void configuredMachineClientShouldReceiveScopesOnly() {
     assertThat(
             authorities(
                 Map.of(
                     "iss", MACHINE_ISSUER,
+                    "azp", MACHINE_CLIENT,
                     "scope", "openid lexis:federal-submission:submit",
                     "scp", List.of("lexis:federal-submission:submit"),
                     "client_roles", List.of("LEXIS_ADMIN"),
                     "resource_access", Map.of(CLIENT, Map.of("roles", List.of("LEXIS_READ_ONLY"))))))
         .containsExactly("SCOPE_openid", "SCOPE_lexis:federal-submission:submit");
+  }
+
+  @Test
+  void machineTokensMustBelongToTheConfiguredClient() {
+    var validator = Oauth2SecurityCustomizer.machineTokenValidator(MACHINE_CLIENT);
+    assertThat(validator.validate(jwt(Map.of("azp", MACHINE_CLIENT))).hasErrors()).isFalse();
+    assertThat(
+            validator
+                .validate(jwt(Map.of("azp", MACHINE_CLIENT, "client_id", MACHINE_CLIENT)))
+                .hasErrors())
+        .isFalse();
+    assertThat(validator.validate(machineJwtWithoutAzp(MACHINE_CLIENT)).hasErrors()).isFalse();
+    assertThat(validator.validate(jwt(Map.of("azp", "another-client"))).hasErrors()).isTrue();
+    assertThat(validator.validate(machineJwtWithoutAzp("another-client")).hasErrors()).isTrue();
+    assertThat(
+            validator
+                .validate(jwt(Map.of("azp", MACHINE_CLIENT, "client_id", "another-client")))
+                .hasErrors())
+        .isTrue();
+    assertThat(validator.validate(jwt(Map.of("azp", MACHINE_CLIENT, "typ", "ID"))).hasErrors())
+        .isTrue();
+    assertThat(
+            validator.validate(jwt(Map.of("azp", MACHINE_CLIENT, "token_use", "id"))).hasErrors())
+        .isTrue();
+    assertThat(
+            authorities(
+                Map.of(
+                    "iss", MACHINE_ISSUER,
+                    "azp", "another-client",
+                    "scope", "lexis:federal-submission:submit")))
+        .isEmpty();
+    assertThat(
+            authorities(
+                Map.of(
+                    "iss", MACHINE_ISSUER,
+                    "azp", MACHINE_CLIENT,
+                    "typ", "ID",
+                    "scope", "lexis:federal-submission:submit")))
+        .isEmpty();
+  }
+
+  @Test
+  void missingMachineClientShouldStartAndRejectEveryMachineToken(CapturedOutput output) {
+    var unbound =
+        new Oauth2SecurityCustomizer("", ISSUER, CLIENT, MACHINE_ISSUER, "", " ", sessionService);
+
+    assertThat(output).contains("lexis.auth.keycloak.client-id is not configured");
+    assertThat(
+            unbound.normalizedAuthorities(
+                jwt(
+                    Map.of(
+                        "iss", MACHINE_ISSUER,
+                        "azp", MACHINE_CLIENT,
+                        "scope", "lexis:federal-submission:submit"))))
+        .isEmpty();
+    assertThat(
+            unbound.normalizedAuthorities(
+                jwt(Map.of("client_roles", List.of("LEXIS_READ_ONLY_REGION-CARIBOO")))))
+        .extracting(GrantedAuthority::getAuthority)
+        .containsExactly("LEXIS_READ_ONLY_REGION-CARIBOO");
+    assertThat(
+            Oauth2SecurityCustomizer.machineTokenValidator("")
+                .validate(jwt(Map.of("azp", "")))
+                .hasErrors())
+        .isTrue();
   }
 
   @Test
@@ -248,11 +320,15 @@ class Oauth2SecurityCustomizerTest {
   @Test
   void configurationShouldFailClosedForMissingClientOrOverlappingIssuers() {
     assertThatThrownBy(
-            () -> new Oauth2SecurityCustomizer("", ISSUER, "", MACHINE_ISSUER, "", sessionService))
+            () ->
+                new Oauth2SecurityCustomizer(
+                    "", ISSUER, "", MACHINE_ISSUER, "", MACHINE_CLIENT, sessionService))
         .isInstanceOf(IllegalStateException.class)
         .hasMessageContaining("client-id");
     assertThatThrownBy(
-            () -> new Oauth2SecurityCustomizer("", ISSUER, CLIENT, ISSUER + "/", "", sessionService))
+            () ->
+                new Oauth2SecurityCustomizer(
+                    "", ISSUER, CLIENT, ISSUER + "/", "", MACHINE_CLIENT, sessionService))
         .isInstanceOf(IllegalStateException.class)
         .hasMessageContaining("distinct");
     assertThat(Oauth2SecurityCustomizer.normalizeIssuerUri(ISSUER + "/")).isEqualTo(ISSUER);
@@ -403,6 +479,15 @@ class Oauth2SecurityCustomizerTest {
         .isEmpty();
     assertThat(authorities(Map.of("iss", MACHINE_ISSUER, "client_roles", roles))).isEmpty();
     assertThat(authorities(Map.of("azp", "another-client", "client_roles", roles))).isEmpty();
+  }
+
+  private Jwt machineJwtWithoutAzp(String clientId) {
+    return new Jwt(
+        "token",
+        Instant.now(),
+        Instant.now().plusSeconds(300),
+        Map.of("alg", "RS256"),
+        Map.of("iss", MACHINE_ISSUER, "client_id", clientId, "typ", "Bearer"));
   }
 
   private Jwt jwt(Map<String, Object> extra) {

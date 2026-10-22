@@ -55,6 +55,7 @@ import org.springframework.web.servlet.config.annotation.EnableWebMvc;
 @SpringJUnitWebConfig(KeycloakBearerAuthenticationIntegrationTest.TestConfiguration.class)
 class KeycloakBearerAuthenticationIntegrationTest {
   private static final String CLIENT = "lexis-test";
+  private static final String MACHINE_CLIENT = "nexcol-service-client";
   private static final RSAKey SIGNING_KEY;
   private static final RSAKey WRONG_KEY;
   private static final HttpServer JWKS_SERVER;
@@ -92,6 +93,7 @@ class KeycloakBearerAuthenticationIntegrationTest {
     registry.add("spring.security.oauth2.resourceserver.jwt.jwk-set-uri", () -> "");
     registry.add("lexis.auth.oidc.client-id", () -> CLIENT);
     registry.add("lexis.auth.keycloak.issuer-uri", () -> MACHINE_ISSUER);
+    registry.add("lexis.auth.keycloak.client-id", () -> MACHINE_CLIENT);
   }
 
   @Autowired private WebApplicationContext context;
@@ -262,19 +264,7 @@ class KeycloakBearerAuthenticationIntegrationTest {
 
   @Test
   void machineAndInteractiveAuthoritiesShouldRemainIsolated() throws Exception {
-    String machine =
-        sign(
-            new JWTClaimsSet.Builder()
-                .issuer(MACHINE_ISSUER)
-                .subject("service-id")
-                .issueTime(Date.from(Instant.now()))
-                .expirationTime(Date.from(Instant.now().plusSeconds(300)))
-                .claim("azp", "nexcol-service-client")
-                .claim("preferred_username", "service-account-nexcol-service-client")
-                .claim("client_roles", List.of("LEXIS_ADMIN"))
-                .claim("scope", "lexis:federal-submission:submit")
-                .build(),
-            SIGNING_KEY);
+    String machine = machine(b -> {});
     mvc.perform(get("/machine").header("Authorization", machine))
         .andExpect(status().isOk())
         .andExpect(jsonPath("$.principal").value("SERVICE\\nexcol-service-client"));
@@ -285,6 +275,34 @@ class KeycloakBearerAuthenticationIntegrationTest {
                     "Authorization",
                     bearer(b -> b.claim("scope", "lexis:federal-submission:submit"))))
         .andExpect(status().isForbidden());
+  }
+
+  @Test
+  void machineTokensFromAnotherClientShouldReturnUnauthorized() throws Exception {
+    for (Consumer<JWTClaimsSet.Builder> change :
+        List.<Consumer<JWTClaimsSet.Builder>>of(
+            b -> b.claim("azp", "another-client"),
+            b -> b.claim("client_id", "another-client"),
+            b -> b.claim("typ", null))) {
+      mvc.perform(get("/machine").header("Authorization", machine(change)))
+          .andExpect(status().isUnauthorized());
+    }
+  }
+
+  private String machine(Consumer<JWTClaimsSet.Builder> change) throws Exception {
+    JWTClaimsSet.Builder builder =
+        new JWTClaimsSet.Builder()
+            .issuer(MACHINE_ISSUER)
+            .subject("service-id")
+            .issueTime(Date.from(Instant.now()))
+            .expirationTime(Date.from(Instant.now().plusSeconds(300)))
+            .claim("azp", MACHINE_CLIENT)
+            .claim("typ", "Bearer")
+            .claim("preferred_username", "service-account-nexcol-service-client")
+            .claim("client_roles", List.of("LEXIS_ADMIN"))
+            .claim("scope", "lexis:federal-submission:submit");
+    change.accept(builder);
+    return sign(builder.build(), SIGNING_KEY);
   }
 
   private void unauthorized(Consumer<JWTClaimsSet.Builder> change) throws Exception {
