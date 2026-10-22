@@ -24,6 +24,7 @@ import ca.bc.gov.mof.lexis.service.federal.FederalApplicationService;
 import ca.bc.gov.mof.lexis.service.offer.OfferWithdrawalPolicy;
 import ca.bc.gov.mof.lexis.service.offer.PurchaseOfferService;
 import ca.bc.gov.mof.lexis.service.permit.ApplicationPermitOperationCoordinator;
+import ca.bc.gov.mof.lexis.service.permit.OracleAggregateRowLockService;
 import ca.bc.gov.mof.lexis.service.permit.PermitOperationMutex;
 import ca.bc.gov.mof.lexis.service.session.LexisAuthorizationService;
 import ca.bc.gov.mof.lexis.service.session.LexisSessionService;
@@ -543,7 +544,7 @@ class OfferDetailsRpcControllerTest {
         controller.addOfferLegacy(params, authentication);
 
     assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
-    verify(provincialAuthorizationService)
+    verify(provincialAuthorizationService, times(2))
         .requireApplication(authentication, 1000456L);
     verify(provincialAuthorizationService).canCreateForClient(authentication, null, null);
     ArgumentCaptor<PurchaseOfferService.CreateOfferRequest> requestCaptor =
@@ -574,7 +575,7 @@ class OfferDetailsRpcControllerTest {
         controller.addOfferLegacy(params, authentication);
 
     assertThat(response.getStatusCode()).isEqualTo(HttpStatus.FORBIDDEN);
-    verify(provincialAuthorizationService)
+    verify(provincialAuthorizationService, times(2))
         .requireApplication(authentication, 1000456L);
     verify(purchaseOfferService, never())
         .addOffer(org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any());
@@ -666,6 +667,38 @@ class OfferDetailsRpcControllerTest {
   }
 
   @Test
+  void addOfferShouldRefuseAClosedApplicationBeforeLockingOrCheckingItsVersion() {
+    OracleAggregateRowLockService rowLocks = mock(OracleAggregateRowLockService.class);
+    controller = controllerWithRowLocks(rowLocks);
+    controller.setProvincialAuthorizationService(provincialAuthorizationService);
+    when(purchaseOfferServiceProvider.getIfAvailable()).thenReturn(purchaseOfferService);
+    when(sessionService.parseRolesFromPrincipal(authentication))
+        .thenReturn(List.of("LEXIS_PROVINCIAL_SUBMITTER"));
+    when(authorizationService.canPerformAction(
+            List.of("LEXIS_PROVINCIAL_SUBMITTER"), "createOffer"))
+        .thenReturn(true);
+    when(sessionService.resolveForestClientNumber(authentication)).thenReturn("00077881");
+    when(applicationService.findByApplicationNumber(1000456L))
+        .thenReturn(
+            Optional.of(
+                application(
+                    1000456L,
+                    "APP",
+                    LexisBusinessTime.today().minusDays(1),
+                    false,
+                    List.of())));
+    MultiValueMap<String, String> params = new LinkedMultiValueMap<>();
+    params.add("applicationNumber", "1000456");
+
+    assertThatThrownBy(() -> controller.addOfferLegacy(params, authentication))
+        .isInstanceOf(AccessDeniedException.class)
+        .hasMessageContaining("not currently available");
+    verifyNoInteractions(rowLocks);
+    verify(purchaseOfferService, never())
+        .addOffer(org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any());
+  }
+
+  @Test
   void updateOfferLegacyShouldMapAliasesAndPreserveOmittedSnapshotFields() {
     controller.setProvincialAuthorizationService(provincialAuthorizationService);
     when(purchaseOfferServiceProvider.getIfAvailable()).thenReturn(purchaseOfferService);
@@ -722,7 +755,7 @@ class OfferDetailsRpcControllerTest {
     assertThat(request.teacReviewDate()).isEqualTo(LocalDate.of(2026, 3, 5));
     assertThat(request.offerCondition()).isEqualTo("Condition notes");
     assertThat(request.offerVolume()).isEqualTo(90.0d);
-    verify(provincialAuthorizationService)
+    verify(provincialAuthorizationService, times(2))
         .requireApplication(authentication, 1000456L);
   }
 
@@ -1319,7 +1352,7 @@ class OfferDetailsRpcControllerTest {
         controller.updateOfferLegacy(params, authentication);
 
     assertThat(response.getStatusCode()).isEqualTo(HttpStatus.FORBIDDEN);
-    verify(purchaseOfferService, times(2)).findByOfferNumber(81001L);
+    verify(purchaseOfferService).findByOfferNumber(81001L);
   }
 
   @Test
@@ -1345,6 +1378,83 @@ class OfferDetailsRpcControllerTest {
         .updateOfferSnapshot(org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any());
     verify(provincialAuthorizationService, never())
         .requireApplication(authentication, 1000456L);
+  }
+
+  @Test
+  void updateOfferShouldRefuseAnotherClientsOfferBeforeLockingOrCheckingItsVersion() {
+    OracleAggregateRowLockService rowLocks = mock(OracleAggregateRowLockService.class);
+    controller = controllerWithRowLocks(rowLocks);
+    when(purchaseOfferServiceProvider.getIfAvailable()).thenReturn(purchaseOfferService);
+    when(sessionService.parseRolesFromPrincipal(authentication))
+        .thenReturn(List.of("LEXIS_PROVINCIAL_SUBMITTER"));
+    when(authorizationService.canPerformAction(
+            List.of("LEXIS_PROVINCIAL_SUBMITTER"), "createOffer"))
+        .thenReturn(true);
+    when(authorizationService.canPerformAction(
+            List.of("LEXIS_PROVINCIAL_SUBMITTER"), "/offerDetails"))
+        .thenReturn(true);
+    when(sessionService.resolveForestClientNumber(authentication)).thenReturn("00099999");
+    when(purchaseOfferService.findByOfferNumber(81001L))
+        .thenReturn(Optional.of(offerDetailForRestrictedUpdate()));
+    MultiValueMap<String, String> params = new LinkedMultiValueMap<>();
+    params.add("exportPurchaseOfferNumber", "81001");
+    params.add("purchaseOfferAmount", "13000.00");
+
+    ResponseEntity<OfferDetailsRpcController.OfferPersistenceResponseDto> response =
+        controller.updateOfferLegacy(params, authentication);
+
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.FORBIDDEN);
+    verifyNoInteractions(rowLocks);
+    verify(purchaseOfferService, never())
+        .updateOfferSnapshot(org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any());
+  }
+
+  @Test
+  void updateOfferShouldRefuseStaffOutsideTheApplicationBeforeLockingOrCheckingItsVersion() {
+    OracleAggregateRowLockService rowLocks = mock(OracleAggregateRowLockService.class);
+    controller = controllerWithRowLocks(rowLocks);
+    controller.setProvincialAuthorizationService(provincialAuthorizationService);
+    when(purchaseOfferServiceProvider.getIfAvailable()).thenReturn(purchaseOfferService);
+    when(sessionService.parseRolesFromPrincipal(authentication))
+        .thenReturn(List.of("LEXIS_APPLICATION_APPROVER"));
+    when(authorizationService.canPerformAction(
+            List.of("LEXIS_APPLICATION_APPROVER"), "createOffer"))
+        .thenReturn(true);
+    when(purchaseOfferService.findByOfferNumber(81001L))
+        .thenReturn(Optional.of(offerDetailForRestrictedUpdate()));
+    org.mockito.Mockito.doThrow(new AccessDeniedException("outside scope"))
+        .when(provincialAuthorizationService)
+        .requireApplication(authentication, 1000456L);
+    MultiValueMap<String, String> params = new LinkedMultiValueMap<>();
+    params.add("exportPurchaseOfferNumber", "81001");
+    params.add("purchaseOfferAmount", "13000.00");
+
+    assertThatThrownBy(() -> controller.updateOfferLegacy(params, authentication))
+        .isInstanceOf(AccessDeniedException.class);
+    verifyNoInteractions(rowLocks);
+    verify(purchaseOfferService, never())
+        .updateOfferSnapshot(org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any());
+  }
+
+  private OfferDetailsRpcController controllerWithRowLocks(
+      OracleAggregateRowLockService rowLocks) {
+    @SuppressWarnings("unchecked")
+    ObjectProvider<OracleAggregateRowLockService> rowLockProvider = mock(ObjectProvider.class);
+    when(rowLockProvider.getIfAvailable()).thenReturn(rowLocks);
+    OfferDetailsRpcController lockedController =
+        new OfferDetailsRpcController(
+            applicationServiceProvider,
+            applicationDetailsServiceProvider,
+            federalApplicationServiceProvider,
+            clientLookupServiceProvider,
+            purchaseOfferServiceProvider,
+            sessionService,
+            authorizationService,
+            new ApplicationPermitOperationCoordinator(new PermitOperationMutex(rowLockProvider)),
+            editLockService,
+            offerWithdrawalPolicy);
+    lockedController.setProvincialAuthorizationService(permissiveAuthorization());
+    return lockedController;
   }
 
   @Test
