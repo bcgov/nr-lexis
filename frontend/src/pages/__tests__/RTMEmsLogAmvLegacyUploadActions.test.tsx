@@ -96,6 +96,30 @@ const mockSavedValues = () => {
   return { comparisonMonth, nextMonth }
 }
 
+type StoredCell = [species: string, grade: string, value: number]
+
+// The next month's stored cells, then the previous month's rows, as the page reads them.
+const mockStoredCells = (cells: StoredCell[]) => {
+  const nextMonth = monthOffset(`${formatBusinessIsoDate().slice(0, 7)}-01`, 1)
+  mockedSearch.mockResolvedValueOnce(
+    cells.map(([species, grade, value]) => ({
+      ...amvRow(nextMonth, nextMonth, value, value),
+      species,
+      grade,
+    })),
+  )
+  mockedSearch.mockResolvedValueOnce([])
+  return { comparisonMonth: monthOffset(nextMonth, -1), nextMonth }
+}
+
+const FIXED_GRADES = ['Z', 'BLANK', '1', '2', '3', '4', '5', '6']
+
+const sentCells = (call: number) =>
+  mockedSaveBatch.mock.calls[call][0].values.filter(({ grade }) => !FIXED_GRADES.includes(grade))
+
+const sentFixedGrades = (call: number) =>
+  mockedSaveBatch.mock.calls[call][0].values.filter(({ grade }) => FIXED_GRADES.includes(grade))
+
 describe('RTM EMS Log AMV spreadsheet upload actions', () => {
   beforeEach(() => {
     vi.clearAllMocks()
@@ -298,6 +322,7 @@ describe('RTM EMS Log AMV spreadsheet upload actions', () => {
     ).toHaveClass('cds--inline-notification--error')
     expect(screen.queryByText('Values saved')).not.toBeInTheDocument()
     expect(value).toHaveValue('79.25')
+    mockStoredCells([['BA', 'D', 79.25]])
     await userEvent.click(screen.getByRole('button', { name: 'Save values' }))
     await waitFor(() => expect(mockedSaveBatch).toHaveBeenCalledTimes(2))
     expect(mockedSaveBatch.mock.calls[0][0].values).toEqual(
@@ -346,11 +371,23 @@ describe('RTM EMS Log AMV spreadsheet upload actions', () => {
       warnings: [],
       rows: [row('BA', 'D', 75.29, 78.14), row('HE', 'B', null, 120), row('CE', 'B', 200, null)],
     })
+    const mockStoredRows = () => {
+      mockedSearch.mockResolvedValueOnce([
+        row('BA', 'D', 78.14, 78.14),
+        row('BA', 'D', 78.14, 78.14, 'S'),
+        row('BA', 'Z', 1, 1),
+        row('BA', 'BLANK', 1, 1),
+        row('HE', 'B', 120, 120),
+        row('HE', 'Z', 1, 1),
+      ])
+      mockedSearch.mockResolvedValueOnce([row('BA', 'D', 75.29, 75.29)])
+    }
     await renderUploadPage()
     await userEvent.upload(
       screen.getByLabelText('Average market values spreadsheet'),
       spreadsheetFile('test-2026-10-20.xlsx'),
     )
+    mockStoredRows()
     await userEvent.click(await screen.findByRole('button', { name: 'Save values' }))
 
     const afterSave = /^2 values will take effect on [A-Z][a-z]+ 1, \d{4}\.$/
@@ -359,22 +396,110 @@ describe('RTM EMS Log AMV spreadsheet upload actions', () => {
     cleanup()
 
     mockedSearch.mockReset()
-    mockedSearch.mockResolvedValueOnce([
-      row('BA', 'D', 78.14, 78.14),
-      row('BA', 'D', 78.14, 78.14, 'S'),
-      row('BA', 'Z', 1, 1),
-      row('BA', 'BLANK', 1, 1),
-      row('HE', 'B', 120, 120),
-      row('HE', 'Z', 1, 1),
-    ])
-    mockedSearch.mockResolvedValueOnce([row('BA', 'D', 75.29, 75.29)])
+    mockStoredRows()
     await renderUploadPage()
     const value = await screen.findByLabelText(`Balsam grade D ${monthLabel(nextMonth)} value`)
     await userEvent.clear(value)
     await userEvent.type(value, '79.25')
+    mockStoredRows()
     await userEvent.click(screen.getByRole('button', { name: 'Save values' }))
 
     expect(await screen.findByText(afterSave)).toBeVisible()
+  })
+
+  it("sends only the edited cell and shows another tab's saved value after Save", async () => {
+    const { nextMonth } = mockStoredCells([
+      ['BA', 'D', 78.14],
+      ['BA', 'B', 120],
+    ])
+    await renderUploadPage()
+    const gradeB = screen.getByLabelText(`Balsam grade B ${monthLabel(nextMonth)} value`)
+    const gradeD = screen.getByLabelText(`Balsam grade D ${monthLabel(nextMonth)} value`)
+    await userEvent.clear(gradeB)
+    await userEvent.type(gradeB, '125.50')
+    mockStoredCells([
+      ['BA', 'D', 79],
+      ['BA', 'B', 125.5],
+    ])
+
+    await userEvent.click(screen.getByRole('button', { name: 'Save values' }))
+
+    expect(await screen.findByText('Values saved')).toBeVisible()
+    expect(sentCells(0)).toEqual([
+      expect.objectContaining({ species: 'BA', grade: 'B', newValue: 125.5 }),
+    ])
+    expect(sentFixedGrades(0)).toHaveLength(7 * FIXED_GRADES.length)
+    expect(sentFixedGrades(0).every(({ newValue }) => newValue === 1)).toBe(true)
+    expect(gradeD).toHaveValue('79.00')
+    expect(gradeB).toHaveValue('125.50')
+    expect(screen.getByRole('button', { name: 'Save values' })).toHaveAttribute(
+      'aria-disabled',
+      'true',
+    )
+  })
+
+  it('shows the stored value again when a saved cell is cleared and saved', async () => {
+    const { nextMonth } = mockStoredCells([
+      ['BA', 'D', 78.14],
+      ['BA', 'B', 120],
+    ])
+    await renderUploadPage()
+    const gradeD = screen.getByLabelText(`Balsam grade D ${monthLabel(nextMonth)} value`)
+    await userEvent.clear(gradeD)
+    expect(gradeD).toHaveValue('')
+    mockStoredCells([
+      ['BA', 'D', 78.14],
+      ['BA', 'B', 120],
+    ])
+
+    await userEvent.click(screen.getByRole('button', { name: 'Save values' }))
+
+    expect(await screen.findByText('Values saved')).toBeVisible()
+    expect(sentCells(0)).toEqual([])
+    expect(gradeD).toHaveValue('78.14')
+    expect(screen.getByText(/^2 values will take effect on [A-Z][a-z]+ 1, \d{4}\.$/)).toBeVisible()
+    expect(screen.getByText('Edit a value to save again.')).toBeVisible()
+  })
+
+  it('sends every nonblank cell when a replacement workbook is saved', async () => {
+    const { comparisonMonth, nextMonth } = mockStoredCells([
+      ['BA', 'D', 78.14],
+      ['BA', 'B', 120],
+    ])
+    mockedPreviewUpload.mockResolvedValue({
+      status: 'accepted',
+      fileName: 'test-2026-10-21.xlsx',
+      fileSize: 1,
+      message: 'Spreadsheet is valid.',
+      rowCount: 2,
+      retrievalDate: comparisonMonth,
+      updateDate: nextMonth,
+      errors: [],
+      warnings: [],
+      rows: [
+        { ...amvRow(comparisonMonth, nextMonth, 75.29, 78.14), grade: 'D' },
+        { ...amvRow(comparisonMonth, nextMonth, 118, 125), grade: 'B' },
+      ],
+    })
+    await renderUploadPage()
+    await userEvent.click(screen.getByRole('button', { name: 'Replace file' }))
+    await userEvent.upload(
+      screen.getByLabelText('Replacement average market values spreadsheet'),
+      spreadsheetFile('test-2026-10-21.xlsx'),
+    )
+    await screen.findByLabelText('Uploaded replacement average market values file')
+    mockStoredCells([
+      ['BA', 'D', 78.14],
+      ['BA', 'B', 125],
+    ])
+
+    await userEvent.click(screen.getByRole('button', { name: 'Save values' }))
+
+    expect(await screen.findByText('Values saved')).toBeVisible()
+    expect(sentCells(0)).toEqual([
+      expect.objectContaining({ species: 'BA', grade: 'B', newValue: 125 }),
+      expect.objectContaining({ species: 'BA', grade: 'D', newValue: 78.14 }),
+    ])
   })
 
   it('asks before leaving the page with edited saved values', async () => {
@@ -613,6 +738,7 @@ describe('RTM EMS Log AMV spreadsheet upload actions', () => {
       screen.getByLabelText('Replacement average market values spreadsheet'),
       replacement,
     )
+    mockStoredCells([['BA', 'D', 91.25]])
     await userEvent.click(screen.getByRole('button', { name: 'Save values' }))
 
     await waitFor(() => expect(mockedSaveBatch).toHaveBeenCalledTimes(1))
@@ -1253,6 +1379,15 @@ describe('RTM EMS Log AMV spreadsheet upload actions', () => {
       within(hemlockTable).queryByText('August had 81.40. Enter a value, or 0 for none.'),
     ).not.toBeInTheDocument()
 
+    mockedLastSaved.mockResolvedValue({
+      savedBy: 'IDIR\\MGURJAOD',
+      savedAt: '2026-08-11T18:21:00',
+    })
+    mockStoredCells([
+      ['BA', 'D', 78.14],
+      ['HE', 'B', 0],
+      ['HE', 'H', 81.43],
+    ])
     await userEvent.click(screen.getByRole('button', { name: 'Save values' }))
     await waitFor(() => {
       expect(mockedSaveBatch).toHaveBeenCalledTimes(1)
@@ -1326,6 +1461,11 @@ describe('RTM EMS Log AMV spreadsheet upload actions', () => {
     await userEvent.clear(missingHemlockValue)
     await userEvent.type(missingHemlockValue, '82.15')
     expect(screen.queryByText('Changes discarded')).not.toBeInTheDocument()
+    mockStoredCells([
+      ['BA', 'D', 78.14],
+      ['HE', 'B', 0],
+      ['HE', 'H', 82.15],
+    ])
     await userEvent.click(screen.getByRole('button', { name: 'Cancel' }))
     await userEvent.click(
       within(screen.getByRole('dialog', { name: 'Discard these values?' })).getByRole('button', {
@@ -1848,6 +1988,7 @@ describe('RTM EMS Log AMV spreadsheet upload actions', () => {
       )
       await waitFor(() => expect(failure.closest('.app-inline-notification')).toHaveFocus())
 
+      mockStoredCells([['BA', 'D', 78.14]])
       await userEvent.click(screen.getByRole('button', { name: 'Save values' }))
 
       const saved = await screen.findByText('Values saved')

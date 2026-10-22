@@ -72,10 +72,12 @@ only and does not misrepresent it as audit metadata.
 ## Atomic reviewed saves
 
 The active page calls `POST /api/lexis/rtm/emslogamv/batch` once per Save action. The body is a
-`values` array containing all nonblank reviewed logical cells plus the fixed `$1.00` grades. The
-backend independently rejects a batch whose effective date is not the immediately upcoming
-month. The prior single-row `POST /emslogamv` route is not exposed, so the page cannot bypass the
-atomic batch contract.
+`values` array plus the fixed `$1.00` grades. The first save of a month and the save of an accepted
+replacement workbook send all nonblank reviewed logical cells; an edit of saved values sends only
+the cells whose value differs from the saved value, so a cell that was not edited is never
+rewritten. The backend independently rejects a batch whose effective date is not the immediately
+upcoming month. The prior single-row `POST /emslogamv` route is not exposed, so the page cannot
+bypass the atomic batch contract.
 
 The backend validates the complete request before any write, then expands each logical cell to its
 physical targets:
@@ -112,9 +114,11 @@ new-combination warnings. Final submission expands the reviewed values to direct
 and writes them in one Spring transaction. It does not call the legacy row procedures. If any
 target is not applied or the database write fails, the complete batch transaction rolls back.
 
-After an accepted save, the page removes the upload card, shows a persistent inline confirmation
-above the reviewed values, and keeps those values editable. The confirmation scrolls into view
-when outside the viewport. While a save is pending, the Save values button shows a spinner
+After an accepted save, the page reloads the month's stored values, so the review shows what is
+stored, including a value that was cleared on screen but not removed. It removes the upload card,
+shows a persistent inline confirmation above the reviewed values, and keeps those values editable.
+The confirmation scrolls into view when outside the viewport. While a save is pending, the Save
+values button shows a spinner
 and changes its label to Saving values. Replace file first
 reveals a warning and the upload area together in one card above the unchanged saved review;
 opening it does not select a file or change any values.
