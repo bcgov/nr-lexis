@@ -57,6 +57,12 @@ final class ProvincialPermitMutationValidator {
   }
 
   ValidationResult validate(PermitMutationRow permit, ExemptionDetailDto exemption) {
+    return validate(permit, null, exemption);
+  }
+
+  /** The stored permit is null on create and holds the saved values on update. */
+  ValidationResult validate(
+      PermitMutationRow permit, PermitMutationRow stored, ExemptionDetailDto exemption) {
     List<String> errors = new ArrayList<>();
     List<String> warnings = new ArrayList<>();
     if (permit == null) {
@@ -71,15 +77,36 @@ final class ProvincialPermitMutationValidator {
     validateNumericRanges(submittedPermit, exemption, errors);
     validateRequiredText(
         permit.destinationCompanyName(),
+        stored == null ? null : stored.destinationCompanyName(),
         "company name on the Shipping tab",
         52,
         errors);
     validateRequiredText(
-        permit.transportName(), "transport name on the Shipping tab", 26, errors);
-    validateOptionalText(permit.receiptNumber(), "Receipt number", 50, errors);
-    validateOptionalText(permit.federalPermitNumber(), "Federal permit number", 10, errors);
-    validateOptionalText(permit.remarks(), "Permit remarks", 254, errors);
-    validateOptionalText(permit.overrideComment(), "Override comment", 254, errors);
+        permit.transportName(),
+        stored == null ? null : stored.transportName(),
+        "transport name on the Shipping tab",
+        26,
+        errors);
+    validateOptionalText(
+        permit.receiptNumber(),
+        stored == null ? null : stored.receiptNumber(),
+        "Receipt number",
+        50,
+        errors);
+    validateOptionalText(
+        permit.federalPermitNumber(),
+        stored == null ? null : stored.federalPermitNumber(),
+        "Federal permit number",
+        10,
+        errors);
+    validateOptionalText(
+        permit.remarks(), stored == null ? null : stored.remarks(), "Permit remarks", 254, errors);
+    validateOptionalText(
+        permit.overrideComment(),
+        stored == null ? null : stored.overrideComment(),
+        "Override comment",
+        254,
+        errors);
     if (permit.estimatedShippingDate() == null) {
       errors.add("A valid estimated shipping date on the Shipping tab is required.");
     }
@@ -115,7 +142,11 @@ final class ProvincialPermitMutationValidator {
 
     if (PORT_OTHER.equals(normalizeCode(permit.portOfExportCode()))) {
       validateRequiredText(
-          permit.otherPortOfExport(), "other port of export description", 34, errors);
+          permit.otherPortOfExport(),
+          stored == null ? null : stored.otherPortOfExport(),
+          "other port of export description",
+          34,
+          errors);
     }
 
     validateDates(permit, exemption, errors);
@@ -343,15 +374,20 @@ final class ProvincialPermitMutationValidator {
   }
 
   private void validateRequiredText(String value, String description, List<String> errors) {
-    validateRequiredText(value, description, null, errors);
+    validateRequiredText(value, null, description, null, errors);
   }
 
+  /** Text equal to the stored value skips the character check, so stored text saves unchanged. */
   private void validateRequiredText(
-      String value, String description, Integer maxLength, List<String> errors) {
+      String value,
+      String storedValue,
+      String description,
+      Integer maxLength,
+      List<String> errors) {
     String normalized = trimToNull(value);
     if (normalized == null) {
       errors.add("A valid " + description + " is required.");
-    } else if (!isUsAscii(normalized)) {
+    } else if (!isUsAscii(normalized) && !normalized.equals(trimToNull(storedValue))) {
       errors.add(
           Character.toUpperCase(description.charAt(0))
               + description.substring(1)
@@ -366,13 +402,14 @@ final class ProvincialPermitMutationValidator {
     }
   }
 
+  /** Text equal to the stored value skips the character check, so stored text saves unchanged. */
   private void validateOptionalText(
-      String value, String description, int maxLength, List<String> errors) {
+      String value, String storedValue, String description, int maxLength, List<String> errors) {
     String normalized = trimToNull(value);
     if (normalized == null) {
       return;
     }
-    if (!isUsAscii(normalized)) {
+    if (!isUsAscii(normalized) && !normalized.equals(trimToNull(storedValue))) {
       errors.add(
           description + " contains characters the current LEXIS database cannot store.");
     } else if (normalized.length() > maxLength) {

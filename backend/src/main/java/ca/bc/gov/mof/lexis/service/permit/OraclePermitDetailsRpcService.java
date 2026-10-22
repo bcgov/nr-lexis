@@ -2031,7 +2031,7 @@ public class OraclePermitDetailsRpcService implements PermitDetailsRpcService {
     PermitMutationRow submittedPermit = updated;
     String submittedPermitStatusCode = normalizeCode(submittedPermit.permitStatusCode());
     ValidationResult validation =
-        permitMutationValidator.validate(submittedPermit, targetExemption.detail());
+        permitMutationValidator.validate(submittedPermit, current, targetExemption.detail());
     if (!validation.valid()) {
       return validationFailureResponse(validation, permitNumber);
     }
@@ -2229,7 +2229,7 @@ public class OraclePermitDetailsRpcService implements PermitDetailsRpcService {
     }
 
     ValidationResult validation =
-        permitMutationValidator.validate(updated, exemption.detail());
+        permitMutationValidator.validate(updated, current, exemption.detail());
     if (!validation.valid()) {
       return validationFailureResponse(validation, permitNumber);
     }

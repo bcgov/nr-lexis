@@ -6231,6 +6231,52 @@ class OraclePermitDetailsRpcServiceTest {
     assertThat(permitCaptor.getValue().remarks()).isEqualTo("test-2026-10-22");
   }
 
+  @Test
+  void updatePermitShouldSaveAnUnchangedStoredAccentedCompanyName() {
+    when(repository.findPermitMutationByPermitNumber(7000123L))
+        .thenReturn(
+            Optional.of(withDestinationCompanyName(permitMutationRow("COM"), "Société Générale")));
+    stubTargetMinisterialExemption("EX-700");
+    when(repository.updatePermitDetail(
+            any(PermitMutationRow.class), eq("idir\\jsmith"), eq(FEE_MASK_EFFECTIVE_DATE)))
+        .thenReturn(true);
+
+    PermitMutationRpcResponseDto response =
+        service.updatePermit(
+            withShipping(
+                formCheckRequest("COM", "42", "test-2026-10-22"),
+                "Société Générale",
+                "US",
+                "MV North"),
+            "idir\\jsmith");
+
+    assertThat(response.errors()).isEmpty();
+    assertThat(response.success()).isTrue();
+    ArgumentCaptor<PermitMutationRow> permitCaptor =
+        ArgumentCaptor.forClass(PermitMutationRow.class);
+    verify(repository)
+        .updatePermitDetail(
+            permitCaptor.capture(), eq("idir\\jsmith"), eq(FEE_MASK_EFFECTIVE_DATE));
+    assertThat(permitCaptor.getValue().destinationCompanyName()).isEqualTo("Société Générale");
+    assertThat(permitCaptor.getValue().remarks()).isEqualTo("test-2026-10-22");
+  }
+
+  @Test
+  void updatePermitShouldRefuseNewlyTypedAccentedRemarks() {
+    when(repository.findPermitMutationByPermitNumber(7000123L))
+        .thenReturn(Optional.of(permitMutationRow("COM")));
+    stubTargetMinisterialExemption("EX-700");
+
+    PermitMutationRpcResponseDto response =
+        service.updatePermit(formCheckRequest("COM", "42", "Expédition"), "idir\\jsmith");
+
+    assertThat(response.success()).isFalse();
+    assertThat(response.errors())
+        .containsExactly(
+            "Permit remarks contains characters the current LEXIS database cannot store.");
+    verify(repository, never()).updatePermitDetail(any(), any(), any());
+  }
+
   @ParameterizedTest
   @ValueSource(strings = {"CAN", "ACT"})
   void updatePermitShouldCancelOrReactivateAMinisterialPermitWhoseSavedOwnerIsNotTheExemptionOwner(
@@ -7229,6 +7275,47 @@ class OraclePermitDetailsRpcServiceTest {
     verify(repository).updatePermitDetail(permitCaptor.capture(), eq("idir\\jsmith"), isNull());
     assertThat(permitCaptor.getValue().clientNumber()).isEqualTo("00077881");
     assertThat(permitCaptor.getValue().destinationCompanyName()).isEqualTo("test-2026-10-22");
+  }
+
+  @Test
+  void updateShippingShouldSaveAnUnchangedStoredAccentedCompanyName() {
+    when(repository.findPermitMutationByPermitNumber(7000123L))
+        .thenReturn(
+            Optional.of(withDestinationCompanyName(permitMutationRow("COM"), "Société Générale")));
+    stubTargetMinisterialExemption("EX-700");
+    when(repository.updatePermitDetail(any(PermitMutationRow.class), eq("idir\\jsmith"), isNull()))
+        .thenReturn(true);
+
+    PermitMutationRpcResponseDto response =
+        service.updateShipping(
+            updateShippingRequest("2026-06-10", "Société Générale"), "idir\\jsmith");
+
+    assertThat(response.errors()).isEmpty();
+    assertThat(response.success()).isTrue();
+    ArgumentCaptor<PermitMutationRow> permitCaptor =
+        ArgumentCaptor.forClass(PermitMutationRow.class);
+    verify(repository).updatePermitDetail(permitCaptor.capture(), eq("idir\\jsmith"), isNull());
+    assertThat(permitCaptor.getValue().destinationCompanyName()).isEqualTo("Société Générale");
+    assertThat(permitCaptor.getValue().estimatedShippingDate())
+        .isEqualTo(LocalDate.of(2026, 6, 10));
+  }
+
+  @Test
+  void updateShippingShouldRefuseANewlyTypedAccentedCompanyName() {
+    when(repository.findPermitMutationByPermitNumber(7000123L))
+        .thenReturn(
+            Optional.of(withDestinationCompanyName(permitMutationRow("COM"), "Société Générale")));
+    stubTargetMinisterialExemption("EX-700");
+
+    PermitMutationRpcResponseDto response =
+        service.updateShipping(
+            updateShippingRequest("2026-06-10", "Société Générale Ltée"), "idir\\jsmith");
+
+    assertThat(response.success()).isFalse();
+    assertThat(response.errors())
+        .containsExactly(
+            "Company name on the Shipping tab contains characters the current LEXIS database cannot store.");
+    verify(repository, never()).updatePermitDetail(any(), any(), any());
   }
 
   @ParameterizedTest
@@ -10848,6 +10935,46 @@ class OraclePermitDetailsRpcServiceTest {
         row.agentLocationCode(),
         row.exemptionNumber(),
         orgUnitNo,
+        row.portOfExportCode(),
+        row.permitStatusCode(),
+        row.growthTypeCode(),
+        row.countryCode(),
+        row.overrideFee(),
+        row.overrideComment(),
+        row.oicApplicationNumber(),
+        row.oicRequestPieces(),
+        row.oicRequestVolume(),
+        row.productTypeCode());
+  }
+
+  private PermitMutationRow withDestinationCompanyName(
+      PermitMutationRow row, String destinationCompanyName) {
+    return new PermitMutationRow(
+        row.permitNumber(),
+        destinationCompanyName,
+        row.transportName(),
+        row.estimatedShippingDate(),
+        row.otherPortOfExport(),
+        row.applicationDate(),
+        row.receivedDate(),
+        row.permitIssueDate(),
+        row.receiptNumber(),
+        row.expiryDate(),
+        row.permitVolume(),
+        row.numberOfPieces(),
+        row.feeInLieuVolume(),
+        row.federalPermitNumber(),
+        row.remarks(),
+        row.entryUserId(),
+        row.entryTimestamp(),
+        row.transportTypeCode(),
+        row.scaleMethodCode(),
+        row.clientNumber(),
+        row.clientLocationCode(),
+        row.agentNumber(),
+        row.agentLocationCode(),
+        row.exemptionNumber(),
+        row.orgUnitNo(),
         row.portOfExportCode(),
         row.permitStatusCode(),
         row.growthTypeCode(),

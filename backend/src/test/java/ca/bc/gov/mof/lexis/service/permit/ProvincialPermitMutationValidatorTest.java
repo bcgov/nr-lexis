@@ -274,6 +274,66 @@ class ProvincialPermitMutationValidatorTest {
   }
 
   @Test
+  void shouldAcceptStoredTextThatOracleCannotRepresentWhenItIsUnchanged() {
+    PermitMutationRow stored = accentedTextPermit().build();
+
+    var result =
+        validator.validate(
+            accentedTextPermit().destinationCompanyName(" Société Générale ").build(),
+            stored,
+            ministerialExemption(LocalDate.of(2026, 7, 31)));
+
+    assertThat(result.errors()).isEmpty();
+  }
+
+  @Test
+  void shouldRejectChangedTextThatOracleCannotRepresent() {
+    PermitMutationRow stored = accentedTextPermit().build();
+
+    var result =
+        validator.validate(
+            accentedTextPermit()
+                .destinationCompanyName("Société Générale Ltée")
+                .remarks("Expédition test-2026-10-22")
+                .build(),
+            stored,
+            ministerialExemption(LocalDate.of(2026, 7, 31)));
+
+    assertThat(result.errors())
+        .containsExactlyInAnyOrder(
+            "Company name on the Shipping tab contains characters the current LEXIS database cannot store.",
+            "Permit remarks contains characters the current LEXIS database cannot store.");
+  }
+
+  @Test
+  void shouldRejectNewTextThatOracleCannotRepresentOverStoredAsciiText() {
+    var result =
+        validator.validate(
+            permit().transportName("Navire Étoile").build(),
+            permit().build(),
+            ministerialExemption(LocalDate.of(2026, 7, 31)));
+
+    assertThat(result.errors())
+        .containsExactly(
+            "Transport name on the Shipping tab contains characters the current LEXIS database cannot store.");
+  }
+
+  @Test
+  void shouldKeepTheLengthCheckForUnchangedStoredText() {
+    String storedCompany = "É" + "C".repeat(52);
+    PermitMutationRow stored = permit().destinationCompanyName(storedCompany).build();
+
+    var result =
+        validator.validate(
+            permit().destinationCompanyName(storedCompany).build(),
+            stored,
+            ministerialExemption(LocalDate.of(2026, 7, 31)));
+
+    assertThat(result.errors())
+        .containsExactly("Company name on the Shipping tab must not exceed 52 bytes.");
+  }
+
+  @Test
   void shouldRejectShippingCodesThatExceedOracleSchemaWidths() {
     var result =
         validator.validate(
@@ -529,6 +589,19 @@ class ProvincialPermitMutationValidatorTest {
 
   private PermitBuilder permit() {
     return new PermitBuilder();
+  }
+
+  private PermitBuilder accentedTextPermit() {
+    return permit()
+        .destinationCompanyName("Société Générale")
+        .transportName("Navire Étoile")
+        .portOfExportCode("OT")
+        .otherPortOfExport("Québec")
+        .receiptNumber("Reçu")
+        .federalPermitNumber("Fédéral")
+        .remarks("Expédition")
+        .overrideFee(1.0d)
+        .overrideComment("Révision");
   }
 
   private ExemptionDetailDto ministerialExemption(LocalDate expiryDate) {

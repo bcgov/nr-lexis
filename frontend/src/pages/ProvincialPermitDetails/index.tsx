@@ -361,6 +361,9 @@ const MAX_PERMIT_OVERRIDE_COMMENT_LENGTH = 254
 const MAX_PERMIT_REMARKS_LENGTH = 250
 const PACKAGE_COMMENTS_MAX_LENGTH = 180
 const ASCII_PATTERN = /^[\u0000-\u007f]*$/
+// Text equal to the stored value skips the character check, so stored text saves unchanged.
+const isStorableText = (value: string, storedValue: string | null | undefined): boolean =>
+  ASCII_PATTERN.test(value.trim()) || value.trim() === (storedValue ?? '').trim()
 // Legacy allows an approver to move a permit to EXP; once expired, the record is read-only.
 const EDITABLE_PERMIT_STATUS_CODES = new Set(['ACT', 'COM', 'CAN', 'EXP'])
 const SERVER_ASSIGNED_PAYMENT_PENDING_STATUS = 'PPD'
@@ -3049,7 +3052,7 @@ const ProvincialPermitDetailsPage = () => {
       permitReceiptNo:
         firstValidationError(
           () =>
-            ASCII_PATTERN.test(permitForm.permitReceiptNo.trim())
+            isStorableText(permitForm.permitReceiptNo, detail?.receiptNumber)
               ? null
               : 'Receipt number contains unsupported characters. Use unaccented letters, numbers, spaces, or standard punctuation.',
           () => maxLengthFieldError(permitForm.permitReceiptNo, 50, 'Receipt number'),
@@ -3057,7 +3060,7 @@ const ProvincialPermitDetailsPage = () => {
       permitRemarks:
         firstValidationError(
           () =>
-            ASCII_PATTERN.test(permitForm.permitRemarks.trim())
+            isStorableText(permitForm.permitRemarks, detail?.remarks)
               ? null
               : 'Permit remarks contain unsupported characters. Use unaccented letters, numbers, spaces, or standard punctuation.',
           () =>
@@ -3147,6 +3150,8 @@ const ProvincialPermitDetailsPage = () => {
     blanketOicPermit,
     blanketOicRegionError,
     blanketOicRegionOptionsLoading,
+    detail?.receiptNumber,
+    detail?.remarks,
     editablePermitRegionOptions,
     invoiceMaterialLocked,
     requiresPositiveOicRequestLimits,

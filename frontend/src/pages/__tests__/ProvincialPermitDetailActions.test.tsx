@@ -9768,6 +9768,54 @@ describe('Provincial Permit Detail Action Smoke', () => {
     expect(mockedUpdatePermitDetail).not.toHaveBeenCalled()
   })
 
+  it('saves stored accented remarks unchanged and refuses newly typed accented remarks', async () => {
+    mockedFetchProvincialPermitDetail.mockResolvedValue({
+      ...permitDetail,
+      permitStatusCode: 'ACT',
+      permitStatusDescription: 'Active',
+      remarks: 'Café test-2026-10-22',
+    })
+    mockedUpdatePermitDetail.mockResolvedValue({
+      success: true,
+      message: 'The permit was updated successfully.',
+      errors: [],
+      warnings: [],
+      source: 'api',
+    })
+    renderPermitDetails()
+
+    await selectPermitDetailTab('Fees')
+    await userEvent.click(await screen.findByRole('button', { name: /Edit permit(?: details)?/ }))
+    fireEvent.change(screen.getByLabelText('Receipt number'), { target: { value: 'R-2' } })
+    await selectPermitDetailTab('Permit')
+    const remarks = screen.getByLabelText('Remarks')
+    expect(remarks).toHaveValue('Café test-2026-10-22')
+
+    fireEvent.change(remarks, { target: { value: 'Café test-2026-10-22 Ltée' } })
+    await userEvent.click(getActiveSectionSaveButton())
+
+    expect(
+      (
+        await screen.findAllByText(
+          'Permit remarks contain unsupported characters. Use unaccented letters, numbers, spaces, or standard punctuation.',
+        )
+      ).length,
+    ).toBeGreaterThanOrEqual(1)
+    expect(mockedUpdatePermitDetail).not.toHaveBeenCalled()
+
+    fireEvent.change(remarks, { target: { value: 'Café test-2026-10-22' } })
+    await userEvent.click(getActiveSectionSaveButton())
+
+    await waitFor(() =>
+      expect(mockedUpdatePermitDetail).toHaveBeenCalledWith(
+        expect.objectContaining({
+          permitReceiptNo: 'R-2',
+          permitRemarks: 'Café test-2026-10-22',
+        }),
+      ),
+    )
+  })
+
   it('allows an approver to expire a permit like legacy', async () => {
     configureActivePermit()
     renderPermitDetails()
@@ -11423,7 +11471,7 @@ describe('Provincial Permit Detail Action Smoke', () => {
   it('shows a permit details error before asking to save the shipping of a completed Interior permit without a receipt', async () => {
     mockedFetchProvincialPermitDetail.mockResolvedValue({
       ...completedPermitWithoutReceipt,
-      remarks: 'Café test-2026-10-19',
+      remarks: `Café ${'R'.repeat(246)}`,
     })
     renderPermitDetails()
 
@@ -11431,10 +11479,8 @@ describe('Provincial Permit Detail Action Smoke', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Save shipping' }))
 
     expect(
-      await screen.findByText(
-        'Permit remarks contain unsupported characters. Use unaccented letters, numbers, spaces, or standard punctuation.',
-      ),
-    ).toBeInTheDocument()
+      (await screen.findAllByText(/^Permit remarks must be 250 characters or fewer\.?$/)).length,
+    ).toBeGreaterThanOrEqual(1)
     expect(screen.queryByRole('dialog', { name: 'Save as Payment pending?' })).toBeNull()
     expect(mockedUpdatePermitShipping).not.toHaveBeenCalled()
     expect(mockedUpdatePermitDetail).not.toHaveBeenCalled()
