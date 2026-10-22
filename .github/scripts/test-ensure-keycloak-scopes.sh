@@ -2,7 +2,7 @@
 set -euo pipefail
 
 ROOT_DIR="$(git rev-parse --show-toplevel)"
-TARGET="${ROOT_DIR}/.github/scripts/ensure-keycloak-scopes.sh"
+TARGET="${TARGET:-${ROOT_DIR}/.github/scripts/ensure-keycloak-scopes.sh}"
 TEST_DIR="$(mktemp -d)"
 trap 'rm -rf "${TEST_DIR}"' EXIT
 mkdir -p "${TEST_DIR}/bin"
@@ -14,6 +14,7 @@ set -euo pipefail
 method=GET
 output=""
 write_format=""
+fail_with_body=0
 url=""
 while (( $# > 0 )); do
   case "$1" in
@@ -32,7 +33,11 @@ while (( $# > 0 )); do
     -H|-d|--data-urlencode|--connect-timeout|--max-time)
       shift 2
       ;;
-    --silent|--show-error|--fail-with-body)
+    --fail-with-body)
+      fail_with_body=1
+      shift
+      ;;
+    --silent|--show-error)
       shift
       ;;
     http*)
@@ -96,7 +101,21 @@ case "${method} ${url}" in
     body='[]'
     ;;
   "GET "*"/clients?first=0&max=100")
-    body='[{"id":"approved-uuid","clientId":"lexis-nexcol-test"},{"id":"rogue-uuid","clientId":"rogue-client"}]'
+    case "${MOCK_CLIENT_LIST_MODE:-valid}" in
+      empty) body='[]' ;;
+      empty-body) body='' ;;
+      malformed) body='not-json' ;;
+      page2-failure)
+        body="$(jq -cn '[{id:"approved-uuid",clientId:"lexis-nexcol-test"}] + [range(1;100) | {id:("client-" + tostring),clientId:("client-" + tostring)}]')"
+        ;;
+      *) body='[{"id":"approved-uuid","clientId":"lexis-nexcol-test"},{"id":"rogue-uuid","clientId":"rogue-client"}]' ;;
+    esac
+    ;;
+  "GET "*"/clients?first=100&max=100")
+    if [[ "${MOCK_CLIENT_LIST_MODE:-valid}" = "page2-failure" ]]; then
+      body='[]'
+      status=500
+    fi
     ;;
   "GET "*"/clients/rogue-uuid/default-client-scopes")
     body='[]'
@@ -128,8 +147,10 @@ if [[ "${output}" != "/dev/null" ]]; then
   printf '%s' "${body}"
 fi
 if [[ -n "${write_format}" ]]; then
+  if [[ "${write_format}" == *$'\n'* ]]; then printf '\n'; fi
   printf '%s' "${status}"
 fi
+if [[ "${fail_with_body}" == 1 && "${status}" -ge 400 ]]; then exit 22; fi
 MOCK_CURL
 chmod 0755 "${TEST_DIR}/bin/curl"
 
@@ -198,6 +219,29 @@ if run_script "${TEST_DIR}/duplicate" MOCK_SCOPE_MODE=duplicate >"${TEST_DIR}/du
   exit 1
 fi
 grep -Fq "Expected exactly one Keycloak client scope" "${TEST_DIR}/duplicate.out"
+
+for listing_mode in page2-failure malformed empty empty-body; do
+  if run_script "${TEST_DIR}/${listing_mode}" "MOCK_CLIENT_LIST_MODE=${listing_mode}" \
+      >"${TEST_DIR}/${listing_mode}.out" 2>&1; then
+    echo "Expected ${listing_mode} client listing to fail before provisioning completes." >&2
+    exit 1
+  fi
+  if grep -Fq "exclusive submission scope are ready" "${TEST_DIR}/${listing_mode}.out"; then
+    echo "Provisioning must not continue after ${listing_mode} client listing." >&2
+    exit 1
+  fi
+  case "${listing_mode}" in
+    page2-failure) grep -Fq "Keycloak request failed (HTTP 500)" "${TEST_DIR}/${listing_mode}.out" ;;
+    malformed) grep -Fq "Keycloak returned invalid JSON" "${TEST_DIR}/${listing_mode}.out" ;;
+    empty) grep -Fq "empty or invalid client listing" "${TEST_DIR}/${listing_mode}.out" ;;
+    empty-body) grep -Fq "Keycloak returned invalid JSON" "${TEST_DIR}/${listing_mode}.out" ;;
+  esac
+  if grep -Eq $'^(PUT|DELETE)\\t|^POST\\t.*(/client-scopes|/clients)' \
+      "${TEST_DIR}/${listing_mode}/calls.log"; then
+    echo "Provisioning must fail before mutating Keycloak after ${listing_mode} client listing." >&2
+    exit 1
+  fi
+done
 
 if env \
   KEYCLOAK_ISSUER_URI="https://keycloak.example.test/auth/realms/forests" \

@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Provision the dedicated NEXCOL client and keep its submission scope exclusive.
 set -euo pipefail
+shopt -s inherit_errexit 2>/dev/null || true
 
 : "${KEYCLOAK_ISSUER_URI:?KEYCLOAK_ISSUER_URI is required}"
 : "${KC_SA_CLIENT_ID:?KC_SA_CLIENT_ID is required}"
@@ -27,9 +28,23 @@ if [[ "${nexcol_client_id}" == "${KC_SA_CLIENT_ID}" ]]; then
 fi
 
 request_json() {
-  curl --silent --show-error --fail-with-body \
-    --connect-timeout 10 --max-time 60 \
-    -H "Authorization: Bearer ${token}" "$1"
+  local response status body
+  if ! response="$(curl --silent --show-error --connect-timeout 10 --max-time 60 \
+      -H "Authorization: Bearer ${token}" -w $'\n%{http_code}' "$1")"; then
+    echo "::error::Keycloak request failed before returning an HTTP status." >&2
+    return 1
+  fi
+  status="${response##*$'\n'}"
+  body="${response%$'\n'*}"
+  if [[ "${status}" != "200" ]]; then
+    echo "::error::Keycloak request failed (HTTP ${status})." >&2
+    return 1
+  fi
+  if ! jq -e -s 'length == 1' >/dev/null <<< "${body}"; then
+    echo "::error::Keycloak returned invalid JSON." >&2
+    return 1
+  fi
+  printf '%s' "${body}"
 }
 
 request_status() {
@@ -98,7 +113,11 @@ fetch_all_clients() {
   local clients='[]'
   while true; do
     local page count
-    page="$(request_json "${clients_url}?first=${first}&max=${page_size}")"
+    page="$(request_json "${clients_url}?first=${first}&max=${page_size}")" || return 1
+    if ! jq -e -s 'length == 1 and (.[0] | type == "array")' >/dev/null <<< "${page}"; then
+      echo "::error::Keycloak returned an invalid client page." >&2
+      return 1
+    fi
     count="$(jq 'length' <<< "${page}")"
     clients="$(jq -cn --argjson clients "${clients}" --argjson page "${page}" '$clients + $page')"
     if (( count < page_size )); then
@@ -120,6 +139,13 @@ token="$(curl --silent --show-error --fail-with-body \
 
 if [[ -z "${token}" ]]; then
   echo "::error::Could not obtain a Keycloak administration token."
+  exit 1
+fi
+
+all_clients="$(fetch_all_clients)"
+if ! jq -e 'length > 0 and all(.[]; (.id | type == "string" and length > 0) and (.clientId | type == "string" and length > 0))' \
+  >/dev/null <<< "${all_clients}"; then
+  echo "::error::Keycloak returned an empty or invalid client listing."
   exit 1
 fi
 
@@ -218,7 +244,6 @@ fi
 require_scope_absent "${realm_url}/default-default-client-scopes" "the realm default scopes"
 require_scope_absent "${realm_url}/default-optional-client-scopes" "the realm optional scopes"
 
-all_clients="$(fetch_all_clients)"
 while IFS= read -r candidate; do
   candidate_uuid="$(jq -r '.id' <<< "${candidate}")"
   candidate_id="$(jq -r '.clientId' <<< "${candidate}")"
