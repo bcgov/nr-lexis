@@ -197,7 +197,7 @@
   .application-upload-review-table.cds--data-table--zebra
   tbody
   tr[data-parent-row]:hover
-  + tr[data-child-row]
+  + tr[data-child-row]:not(.cds--parent-row):not(.cds--data-table--selected)
   td,
 .app-shell
   .application-upload-page
