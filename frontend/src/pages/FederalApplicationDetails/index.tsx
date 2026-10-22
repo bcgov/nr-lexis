@@ -26,8 +26,10 @@ import {
   TextArea,
   Tile,
 } from '@carbon/react'
+import { Box, Chat, Enterprise, Result } from '@carbon/icons-react'
 import { useLocation, useParams } from 'react-router-dom'
 import ContentLoadingOverlay from '@/components/ContentLoadingOverlay'
+import DetailCardTitle from '@/components/DetailCardTitle'
 import EmptyState from '@/components/EmptyState'
 import DetailBreadcrumb from '@/components/DetailBreadcrumb'
 import DetailLoadError from '@/components/DetailLoadError'
@@ -693,11 +695,11 @@ const FederalApplicationDetailsPage = () => {
                 contained
                 className="application-tabs__list application-detail-tab-list"
               >
-                <Tab>Applicant</Tab>
-                {hasAgent && <Tab>Agent</Tab>}
-                <Tab>Application</Tab>
-                <Tab>Items</Tab>
-                {canViewFederalRemarks && <Tab>Remarks</Tab>}
+                <Tab renderIcon={Enterprise}>Applicant</Tab>
+                {hasAgent && <Tab renderIcon={Enterprise}>Agent</Tab>}
+                <Tab renderIcon={Result}>Application</Tab>
+                <Tab renderIcon={Box}>Items</Tab>
+                {canViewFederalRemarks && <Tab renderIcon={Chat}>Remarks</Tab>}
               </TabList>
               <TabPanels>
                 <TabPanel className="application-detail-tab-panel">
@@ -705,6 +707,7 @@ const FederalApplicationDetailsPage = () => {
                     <Column sm={4} md={8} lg={16}>
                       <DetailFieldTile
                         title="Applicant"
+                        icon={<Enterprise size={24} aria-hidden="true" />}
                         fields={[
                           [
                             {
@@ -787,6 +790,7 @@ const FederalApplicationDetailsPage = () => {
                       <Column sm={4} md={8} lg={16}>
                         <DetailFieldTile
                           title="Agent"
+                          icon={<Enterprise size={24} aria-hidden="true" />}
                           fields={[
                             [
                               {
@@ -868,6 +872,7 @@ const FederalApplicationDetailsPage = () => {
                     <Column sm={4} md={8} lg={16}>
                       <DetailFieldTile
                         title="Application"
+                        icon={<Result size={24} aria-hidden="true" />}
                         headerAction={
                           canMutateFederalApplication &&
                           statusTransitions.length > 0 &&
@@ -942,7 +947,7 @@ const FederalApplicationDetailsPage = () => {
                       />
                       {canMutateFederalApplication && editingStatusTransition && (
                         <Tile ref={sections.sectionRef(statusSectionFor(editingStatusTransition))}>
-                          <h2 className="detail-tile-title">Update federal status</h2>
+                          <DetailCardTitle icon={Result}>Update federal status</DetailCardTitle>
                           <RequiredFieldsLegend />
                           <RecordFieldGrid editing ref={statusFormRef}>
                             <RecordFieldRow>
@@ -996,6 +1001,7 @@ const FederalApplicationDetailsPage = () => {
                     <Column sm={4} md={8} lg={16}>
                       <DetailFieldTile
                         title="Items"
+                        icon={<Box size={24} aria-hidden="true" />}
                         fields={[
                           [
                             {
@@ -1030,7 +1036,7 @@ const FederalApplicationDetailsPage = () => {
                     </Column>
                     <Column sm={4} md={8} lg={16}>
                       <Tile>
-                        <h2 className="detail-tile-title">Packages</h2>
+                        <DetailCardTitle icon={Box}>Packages</DetailCardTitle>
                         {detail.packages.length > 0 ? (
                           <TableFrame ariaLabel="Federal application packages">
                             <Table size="md" useZebraStyles>
@@ -1134,7 +1140,7 @@ const FederalApplicationDetailsPage = () => {
                             className="application-detail-section application-detail-remarks"
                           >
                             <div className="detail-section-card__header">
-                              <h2 className="detail-tile-title">Remarks</h2>
+                              <DetailCardTitle icon={Chat}>Remarks</DetailCardTitle>
                               {addFederalRemarkButton}
                             </div>
                             {canManageFederalRemarks && isEditingFederalRemarks && (
