@@ -595,10 +595,10 @@ class OracleExemptionDetailsRpcServiceTest {
                     "03",
                     "12",
                     "A",
-                    "BOB TURMEL",
+                    "OWNER PERSON",
                     "EXPORT PERSON",
-                    "NORSKE SKOG CANADA LIMITED",
-                    "INTERNATIONAL FOREST PRODUCTS",
+                    "SAMPLE OWNER LTD",
+                    "SAMPLE AGENT LTD",
                     "P",
                     "T",
                     "EXE"),
@@ -620,12 +620,12 @@ class OracleExemptionDetailsRpcServiceTest {
               assertThat(application.ownerClientLocationCode()).isEqualTo("03");
               assertThat(application.agentClientLocationCode()).isEqualTo("12");
               assertThat(application.applicantTypeCode()).isEqualTo("A");
-              assertThat(application.ownerContactName()).isEqualTo("BOB TURMEL");
+              assertThat(application.ownerContactName()).isEqualTo("OWNER PERSON");
               assertThat(application.agentContactName()).isEqualTo("EXPORT PERSON");
               assertThat(application.ownerCompanyName())
-                  .isEqualTo("NORSKE SKOG CANADA LIMITED");
+                  .isEqualTo("SAMPLE OWNER LTD");
               assertThat(application.agentCompanyName())
-                  .isEqualTo("INTERNATIONAL FOREST PRODUCTS");
+                  .isEqualTo("SAMPLE AGENT LTD");
             });
     assertThat(response.containsUnmanu()).isTrue();
     assertThat(response.ownerNumber()).isEqualTo("00077881");

@@ -96,10 +96,10 @@ describe('Provincial exemption client parity', () => {
           ownerClientLocationCode: '03',
           agentClientLocationCode: '12',
           applicantTypeCode: 'A',
-          ownerContactName: 'BOB TURMEL',
+          ownerContactName: 'OWNER PERSON',
           agentContactName: 'EXPORT PERSON',
-          ownerCompanyName: 'NORSKE SKOG CANADA LIMITED',
-          agentCompanyName: 'INTERNATIONAL FOREST PRODUCTS',
+          ownerCompanyName: 'SAMPLE OWNER LTD',
+          agentCompanyName: 'SAMPLE AGENT LTD',
           removable: true,
         },
       ],
@@ -124,16 +124,15 @@ describe('Provincial exemption client parity', () => {
         ? {
             clientNumber,
             companyName: 'Client lookup owner name',
-            clientAcronym: 'NSK',
+            clientAcronym: 'SOL',
             locationName: 'AUTHORITATIVE OWNER LOCATION',
-            address:
-              'ATTN ACCT DEPT JOHANN BOULTER SUITE 2300 1055 WEST GEORGIA STREET PO BOX 11101',
+            address: 'ATTN ACCOUNTS PAYABLE SUITE 100 100 SAMPLE STREET PO BOX 100',
             city: 'VANCOUVER',
             province: 'BC',
-            postalCode: 'V6E3P3',
+            postalCode: 'A1A1A1',
             country: 'CANADA',
-            phone: '6046544521',
-            fax: '6046544571',
+            phone: '6045550100',
+            fax: '6045550101',
             email: 'Not on file',
             notfound: '',
           }
@@ -142,14 +141,13 @@ describe('Provincial exemption client parity', () => {
             companyName: 'Client lookup agent name',
             clientAcronym: '',
             locationName: 'AUTHORITATIVE AGENT LOCATION',
-            address:
-              'C/O ACCOUNTS MANAGER PO BOX 49114 TOWER 4 BENTALL CENTRE 3500 1055 DUNSMUIR STREET',
+            address: 'C/O ACCOUNTS MANAGER PO BOX 200 TOWER 1 SAMPLE CENTRE 200 SAMPLE AVENUE',
             city: 'PORTLAND',
             province: 'OR',
             postalCode: '73611',
             country: 'USA',
-            phone: '6046896800',
-            fax: '6046816892',
+            phone: '6045550102',
+            fax: '6045550103',
             email: 'Not on file',
             notfound: '',
           },
@@ -284,19 +282,19 @@ describe('Provincial exemption client parity', () => {
     expect(
       within(ownerTile as HTMLElement).getByText('03 - WOODLANDS SERVICES'),
     ).toBeInTheDocument()
-    expect(within(ownerTile as HTMLElement).getByText('BOB TURMEL')).toBeInTheDocument()
+    expect(within(ownerTile as HTMLElement).getByText('OWNER PERSON')).toBeInTheDocument()
     expect(
-      within(ownerTile as HTMLElement).getByText('NORSKE SKOG CANADA LIMITED (NSK) · 00001074'),
+      within(ownerTile as HTMLElement).getByText('SAMPLE OWNER LTD (SOL) · 00001074'),
     ).toBeInTheDocument()
     expect(
       within(ownerTile as HTMLElement).getByText(
-        'ATTN ACCT DEPT JOHANN BOULTER SUITE 2300 1055 WEST GEORGIA STREET PO BOX 11101',
+        'ATTN ACCOUNTS PAYABLE SUITE 100 100 SAMPLE STREET PO BOX 100',
       ),
     ).toBeInTheDocument()
     expect(within(ownerTile as HTMLElement).getAllByText('Agent')).not.toHaveLength(0)
-    expect(within(ownerTile as HTMLElement).getByText('(604) 654-4521')).toBeInTheDocument()
-    expect(within(ownerTile as HTMLElement).getByText('(604) 654-4571')).toBeInTheDocument()
-    expect(within(ownerTile as HTMLElement).queryByText('6046544521')).not.toBeInTheDocument()
+    expect(within(ownerTile as HTMLElement).getByText('(604) 555-0100')).toBeInTheDocument()
+    expect(within(ownerTile as HTMLElement).getByText('(604) 555-0101')).toBeInTheDocument()
+    expect(within(ownerTile as HTMLElement).queryByText('6045550100')).not.toBeInTheDocument()
 
     // The agent section has the application page's title.
     const agentTile = (
@@ -308,15 +306,15 @@ describe('Provincial exemption client parity', () => {
     expect(within(agentTile as HTMLElement).getByText('12 - EXPORT BILLING')).toBeInTheDocument()
     expect(within(agentTile as HTMLElement).getByText('EXPORT PERSON')).toBeInTheDocument()
     expect(
-      within(agentTile as HTMLElement).getByText(/INTERNATIONAL FOREST PRODUCTS.*00002176/),
+      within(agentTile as HTMLElement).getByText(/SAMPLE AGENT LTD.*00002176/),
     ).toBeInTheDocument()
     expect(
       within(agentTile as HTMLElement).getByText(
-        'C/O ACCOUNTS MANAGER PO BOX 49114 TOWER 4 BENTALL CENTRE 3500 1055 DUNSMUIR STREET',
+        'C/O ACCOUNTS MANAGER PO BOX 200 TOWER 1 SAMPLE CENTRE 200 SAMPLE AVENUE',
       ),
     ).toBeInTheDocument()
-    expect(within(agentTile as HTMLElement).getByText('(604) 689-6800')).toBeInTheDocument()
-    expect(within(agentTile as HTMLElement).getByText('(604) 681-6892')).toBeInTheDocument()
+    expect(within(agentTile as HTMLElement).getByText('(604) 555-0102')).toBeInTheDocument()
+    expect(within(agentTile as HTMLElement).getByText('(604) 555-0103')).toBeInTheDocument()
 
     // Both parties are looked up through the linked application.
     await waitFor(() => {
@@ -391,15 +389,15 @@ describe('Provincial exemption client parity', () => {
     ).closest('section') as HTMLElement
     expect(
       await within(agentSection).findByText(
-        'C/O ACCOUNTS MANAGER PO BOX 49114 TOWER 4 BENTALL CENTRE 3500 1055 DUNSMUIR STREET',
+        'C/O ACCOUNTS MANAGER PO BOX 200 TOWER 1 SAMPLE CENTRE 200 SAMPLE AVENUE',
       ),
     ).toBeInTheDocument()
     expect(within(agentSection).getByText('12 - EXPORT BILLING')).toBeInTheDocument()
     expect(within(agentSection).queryByText('Client details unavailable')).not.toBeInTheDocument()
 
     // The owner keeps the linked application's saved values and says the rest didn't load.
-    expect(within(ownerTile).getByText('BOB TURMEL')).toBeInTheDocument()
-    expect(within(ownerTile).getByText('NORSKE SKOG CANADA LIMITED · 00001074')).toBeInTheDocument()
+    expect(within(ownerTile).getByText('OWNER PERSON')).toBeInTheDocument()
+    expect(within(ownerTile).getByText('SAMPLE OWNER LTD · 00001074')).toBeInTheDocument()
     expect(within(ownerTile).getAllByText('Client details unavailable')).toHaveLength(1)
     expect(screen.queryByRole('heading', { name: 'Client details unavailable' })).toBeNull()
     expect(screen.queryByRole('tab', { name: 'Agent' })).not.toBeInTheDocument()
@@ -421,9 +419,9 @@ describe('Provincial exemption client parity', () => {
           ownerClientLocationCode: '03',
           agentClientLocationCode: '12',
           applicantTypeCode: 'O',
-          ownerContactName: 'BOB TURMEL',
+          ownerContactName: 'OWNER PERSON',
           agentContactName: 'STALE AGENT',
-          ownerCompanyName: 'NORSKE SKOG CANADA LIMITED',
+          ownerCompanyName: 'SAMPLE OWNER LTD',
           agentCompanyName: 'STALE AGENT COMPANY',
           removable: true,
         },

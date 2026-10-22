@@ -149,9 +149,9 @@ class ClientLookupRepositoryTest {
     ResultSet resultSet = mock(ResultSet.class);
     when(resultSet.getString("CLIENT_NUMBER")).thenReturn("00001086");
     when(resultSet.getString("CLIENT_LOCN_CODE")).thenReturn("00");
-    when(resultSet.getString("COMPANY_NAME")).thenReturn(" TOLKO INDUSTRIES ");
+    when(resultSet.getString("COMPANY_NAME")).thenReturn(" SAMPLE CLIENT LTD ");
     when(resultSet.getString("EMAIL_ADDRESS")).thenReturn("applicant@example.com");
-    when(resultSet.getString("CLIENT_ACRONYM")).thenReturn(" TOLKOL ");
+    when(resultSet.getString("CLIENT_ACRONYM")).thenReturn(" SCL ");
     when(jdbcTemplate.query(anyString(), any(RowMapper.class), eq("00001086"), eq("00")))
         .thenAnswer(
             invocation ->
@@ -163,7 +163,7 @@ class ClientLookupRepositoryTest {
             "00001086",
             "00",
             null,
-            "TOLKO INDUSTRIES",
+            "SAMPLE CLIENT LTD",
             null,
             null,
             null,
@@ -174,7 +174,7 @@ class ClientLookupRepositoryTest {
             null,
             null,
             "applicant@example.com",
-            "TOLKOL");
+            "SCL");
     assertThat(repository.findLocationByClientNumberCode(" 00001086 ", " 00 ")).contains(expected);
     assertThat(repository.findLocationByClientNumberCodeRequired("00001086", "00"))
         .contains(expected);
