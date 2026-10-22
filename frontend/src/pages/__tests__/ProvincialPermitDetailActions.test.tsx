@@ -3017,9 +3017,15 @@ describe('Provincial Permit Detail Action Smoke', () => {
       name: 'Include scale SCALE-1 in permit',
     })
     expect(checkbox).toBeDisabled()
+    const packageTotal = (label: string) =>
+      screen.getByText(label).closest('.record-field')?.textContent ?? ''
+    expect(packageTotal('Package volume (m³)')).toContain('1.0')
+    expect(packageTotal('Package pieces')).toContain('1')
     await userEvent.click(screen.getByRole('button', { name: 'Edit scale selection' }))
     await userEvent.click(checkbox)
     expect(checkbox).not.toBeChecked()
+    expect(packageTotal('Package volume (m³)')).toContain('0.0')
+    expect(packageTotal('Package pieces')).toContain('0')
     expect(mockedUpdatePermitScaleSelection).not.toHaveBeenCalled()
     expect(mockedUpdatePermitScaleAttachment).not.toHaveBeenCalled()
     expect(screen.getByRole('combobox', { name: 'Package number' })).toBeEnabled()
@@ -3035,6 +3041,8 @@ describe('Provincial Permit Detail Action Smoke', () => {
     )
     expect(checkbox).toBeChecked()
     expect(checkbox).toBeDisabled()
+    expect(packageTotal('Package volume (m³)')).toContain('1.0')
+    expect(packageTotal('Package pieces')).toContain('1')
     expect(mockedUpdatePermitScaleSelection).not.toHaveBeenCalled()
   })
 

@@ -2196,7 +2196,8 @@ const ProvincialPermitDetailsPage = () => {
   const selectedPermitScaleTotalsByPackage = useMemo(() => {
     const totals = new Map<string, { pieces: number; volume: number }>()
     for (const row of tabsData?.items ?? []) {
-      if (!row.includedInPermit || !row.packageNumber) continue
+      const included = ministerialScaleSelectionDraft?.[row.id] ?? row.includedInPermit
+      if (!included || !row.packageNumber) continue
       const current = totals.get(row.packageNumber) ?? { pieces: 0, volume: 0 }
       totals.set(row.packageNumber, {
         pieces: current.pieces + row.pieces,
@@ -2204,7 +2205,7 @@ const ProvincialPermitDetailsPage = () => {
       })
     }
     return totals
-  }, [tabsData?.items])
+  }, [ministerialScaleSelectionDraft, tabsData?.items])
   const ministerialScaleEmpty =
     ministerialPermit &&
     !isPermitTablesLoading &&
