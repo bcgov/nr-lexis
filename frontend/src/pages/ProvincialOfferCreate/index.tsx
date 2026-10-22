@@ -145,7 +145,7 @@ type PageStatus = {
 type CreatedOfferNavigation = {
   path: string
   warnings: string[]
-  /** The server's save message, shown on the offer page when the save raised no warnings. */
+  /** The server's save message, shown on the offer page ahead of any warnings. */
   message: string
 }
 
@@ -431,6 +431,7 @@ const ProvincialOfferCreatePage = () => {
         state: {
           offerCreationNotice: {
             warnings: createdOfferNavigation.warnings,
+            message: createdOfferNavigation.message,
           },
         },
       })

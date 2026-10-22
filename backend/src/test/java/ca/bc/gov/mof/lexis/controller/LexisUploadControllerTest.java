@@ -2257,6 +2257,38 @@ class LexisUploadControllerTest {
   }
 
   @Test
+  void federalApplicationSubmissionUploadShouldTagUnsupportedSchemaVersionAsInvalidXml() {
+    SimpleMeterRegistry meterRegistry =
+        rejectedFederalSubmissionMetrics(
+            "The file uses a LEXIS schema version that isn't supported. Use version 2 or 3.");
+
+    assertThat(
+            meterRegistry
+                .get("lexis_federal_submission_failures_total")
+                .tag("operation", "create-raw")
+                .tag("failure_type", "invalid_xml")
+                .counter()
+                .count())
+        .isEqualTo(1.0d);
+  }
+
+  @Test
+  void federalApplicationSubmissionUploadShouldTagMalformedXmlAsInvalidXml() {
+    SimpleMeterRegistry meterRegistry =
+        rejectedFederalSubmissionMetrics(
+            "The file isn't valid XML. The element type \"lexis:LexisSubmission\" must be terminated.");
+
+    assertThat(
+            meterRegistry
+                .get("lexis_federal_submission_failures_total")
+                .tag("operation", "create-raw")
+                .tag("failure_type", "invalid_xml")
+                .counter()
+                .count())
+        .isEqualTo(1.0d);
+  }
+
+  @Test
   void federalApplicationSubmissionUploadShouldUseDefaultFileNameForRawXml() {
     when(applicationSubmissionImportServiceProvider.getIfAvailable()).thenReturn(applicationSubmissionImportService);
     LexisUploadController controller = controller();
@@ -3621,6 +3653,48 @@ class LexisUploadControllerTest {
     controller.setProvincialAuthorizationService(provincialAuthorizationService);
     controller.setDocumentUploadMutationPolicy(documentUploadMutationPolicy);
     return controller;
+  }
+
+  private SimpleMeterRegistry rejectedFederalSubmissionMetrics(String error) {
+    when(applicationSubmissionImportServiceProvider.getIfAvailable()).thenReturn(applicationSubmissionImportService);
+    SimpleMeterRegistry meterRegistry = new SimpleMeterRegistry();
+    when(meterRegistryProvider.getIfAvailable()).thenReturn(meterRegistry);
+    LexisUploadController controller =
+        new LexisUploadController(
+            uploadServiceProvider,
+            applicationSubmissionImportServiceProvider,
+            applicationEditLockService,
+            meterRegistryProvider);
+    byte[] submissionData =
+        "<lexis:LexisSubmission xmlns:lexis=\"http://www.for.gov.bc.ca/schema/lexis\"/>"
+            .getBytes(StandardCharsets.UTF_8);
+    when(
+            applicationSubmissionImportService.importDedicatedFederalApplicationSubmission(
+                submissionData, "federal-direct.xml", "bceid\\federal-user", "FED-REF-1"))
+        .thenReturn(
+            new ApplicationSubmissionImportResultDto(
+                "applicationSubmission",
+                "federal-direct.xml",
+                submissionData.length,
+                "rejected",
+                error,
+                null,
+                null,
+                0,
+                List.of(error),
+                List.of()));
+
+    ResponseEntity<ApplicationSubmissionImportResultDto> response =
+        controller.federalApplicationSubmissionUpload(
+            "FED-REF-1",
+            "federal-direct.xml",
+            submissionData,
+            "REQ-1",
+            "IDEMP-1",
+            new TestingAuthenticationToken("bceid\\federal-user", "n/a"));
+
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.UNPROCESSABLE_ENTITY);
+    return meterRegistry;
   }
 
   private LexisUploadController controller() {

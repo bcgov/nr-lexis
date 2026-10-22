@@ -5,6 +5,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.List;
 import org.junit.jupiter.api.Test;
 
 class TestDeploymentTopologyConfigTest {
@@ -48,8 +49,12 @@ class TestDeploymentTopologyConfigTest {
         .contains("frontend_replicas: \"3\"")
         .contains("backend_cpu_request: \"400m\"")
         .contains("backend_memory_request: \"1Gi\"")
-        .contains("backend_cpu_limit: \"1500m\"")
-        .contains("backend_memory_limit: \"1536Mi\"")
+        .contains("backend_cpu_limit: \"2\"")
+        .contains("backend_memory_limit: \"3Gi\"")
+        .contains("frontend_cpu_request: \"100m\"")
+        .contains("frontend_memory_request: \"128Mi\"")
+        .contains("frontend_cpu_limit: \"500m\"")
+        .contains("frontend_memory_limit: \"256Mi\"")
         .contains("expiry_enabled: false")
         .contains("backend_image: ${{ needs.prepare.outputs.backend_image }}")
         .contains("frontend_image: ${{ needs.prepare.outputs.frontend_image }}")
@@ -278,6 +283,8 @@ class TestDeploymentTopologyConfigTest {
         .contains("value: ${LEXIS_EXPIRY_LOCK_AT_LEAST_FOR}")
         .contains("value: ${LEXIS_REPORT_STATISTICS_LOG_LEVEL}")
         .contains("value: ${LEXIS_FAILURE_DIAGNOSTICS_LOG_LEVEL}")
+        .contains("- name: NEXCOL_KEYCLOAK_CLIENT_ID\n    description:")
+        .contains("- name: NEXCOL_KEYCLOAK_CLIENT_ID\n                  value: ${NEXCOL_KEYCLOAK_CLIENT_ID}")
         .contains("type: RollingUpdate\n        rollingUpdate:\n          maxUnavailable: 1\n          maxSurge: 0")
         .contains("averageUtilization: 70")
         .contains("topologySpreadConstraints:")
@@ -477,6 +484,22 @@ class TestDeploymentTopologyConfigTest {
             "LEXIS_MAIL_REGION_RSI_ADDRESS:"
                 + " ${{ secrets.lexis_mail_region_rsi_address }}");
     assertThat(frontendBeforeDeploy).doesNotContain("LEXIS_PROD_RTM_ONLY");
+    String vanityValidation =
+        between(
+            backendJob,
+            "      - name: Validate PROD vanity Route configuration",
+            "      - uses: actions/checkout@");
+    String vanityRouteStep =
+        frontendJob.substring(frontendJob.indexOf("      - name: Vanity Route (PROD)"));
+    for (String vanitySecret :
+        List.of(
+            "${{ secrets.vanity_tls_certificate }}",
+            "${{ secrets.vanity_tls_key }}",
+            "${{ secrets.vanity_tls_ca_certificate }}")) {
+      assertThat(occurrences(workflow, vanitySecret)).isEqualTo(2);
+      assertThat(vanityValidation).containsOnlyOnce(vanitySecret);
+      assertThat(vanityRouteStep).containsOnlyOnce(vanitySecret);
+    }
     assertThat(frontendJob)
         .doesNotContain(
             "LEXIS_MAIL_FROM",
@@ -487,7 +510,8 @@ class TestDeploymentTopologyConfigTest {
     assertThat(backendDeployStep)
         .contains("-p LEXIS_OIDC_ISSUER_URI=\"${{ vars.LEXIS_OIDC_ISSUER_URI }}\"")
         .contains("-p LEXIS_OIDC_CLIENT_ID=\"${{ vars.LEXIS_OIDC_CLIENT_ID }}\"")
-        .contains("-p KEYCLOAK_ISSUER_URI=\"${{ vars.KEYCLOAK_ISSUER_URI }}\"");
+        .contains("-p KEYCLOAK_ISSUER_URI=\"${{ vars.KEYCLOAK_ISSUER_URI }}\"")
+        .contains("-p NEXCOL_KEYCLOAK_CLIENT_ID=\"${{ vars.NEXCOL_KEYCLOAK_CLIENT_ID }}\"");
     assertThat(frontendDeployStep)
         .contains("-p VITE_OIDC_ISSUER_URI=\"${{ vars.LEXIS_OIDC_ISSUER_URI }}\"")
         .contains("-p VITE_OIDC_CLIENT_ID=\"${{ vars.LEXIS_OIDC_CLIENT_ID }}\"")
@@ -554,6 +578,20 @@ class TestDeploymentTopologyConfigTest {
             "for setting in VANITY_HOST VANITY_TLS_CERTIFICATE VANITY_TLS_KEY"
                 + " VANITY_TLS_CA_CERTIFICATE")
         .doesNotContain("inputs.target == 'prod' && env.VANITY_HOST != ''");
+
+    String backendJob = workflowJob(workflow, "backend", "frontend");
+    String stepsBeforeProvisioning =
+        between(
+            backendJob,
+            "      - name: Validate release images",
+            "      - name: Ensure Keycloak scopes and NEXCOL client");
+    assertThat(stepsBeforeProvisioning)
+        .contains(
+            "      - name: Validate PROD vanity Route configuration\n"
+                + "        if: ${{ inputs.target == 'prod' }}",
+            "VANITY_HOST: ${{ vars.VANITY_HOST }}");
+    assertThat(workflowJob(workflow, "frontend", "deployment-result"))
+        .doesNotContain("Validate PROD vanity Route configuration");
   }
 
   @Test

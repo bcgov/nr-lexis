@@ -2399,6 +2399,94 @@ class ApplicationDetailsRpcControllerTest {
     verify(service, never()).updateApplicationSummary(any(), any());
   }
 
+  @ParameterizedTest
+  @ValueSource(strings = {"", "owner", "owner-agent"})
+  void updateApplicationSummaryShouldRefuseAScopedSubmitterAgentChangingTheSavedOwner(
+      String saveSource) {
+    TestingAuthenticationToken authentication = scopedSubmitter("00022222");
+    matchScopedClient(authentication, "00022222");
+    when(serviceProvider.getIfAvailable()).thenReturn(service);
+    when(service.getApplicationSummarySnapshot(1000456L)).thenReturn(Optional.of(summarySnapshot()));
+    MultiValueMap<String, String> params = ownerAgentSaveParams("00099999", "A", "00022222");
+    params.set("saveSource", saveSource);
+
+    ResponseEntity<ApplicationDetailsRpcController.ApplicationPersistenceResponseDto> response =
+        controller.updateApplicationSummary(params, authentication);
+
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+    assertThat(response.getBody().valid()).isFalse();
+    assertThat(response.getBody().errors()).containsExactly("Owner client cannot be changed.");
+    verify(service, never()).updateApplicationSummary(any(), any());
+    verify(service, never()).updateApplicationAgent(any(), any());
+  }
+
+  @Test
+  void updateApplicationSummaryShouldRefuseAScopedSubmitterOwnerNamingAnotherOwner() {
+    TestingAuthenticationToken authentication = scopedSubmitter("00011111");
+    matchScopedClient(authentication, "00011111");
+    when(serviceProvider.getIfAvailable()).thenReturn(service);
+    when(service.getApplicationSummarySnapshot(1000456L))
+        .thenReturn(Optional.of(summarySnapshotWithApplicantType("O")));
+    when(applicationEditPolicyService.listDateReached(service, 1000456L)).thenReturn(false);
+
+    ResponseEntity<ApplicationDetailsRpcController.ApplicationPersistenceResponseDto> response =
+        controller.updateApplicationSummary(
+            ownerAgentSaveParams("00099999", "A", "00011111"), authentication);
+
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+    assertThat(response.getBody().valid()).isFalse();
+    assertThat(response.getBody().errors()).containsExactly("Owner client cannot be changed.");
+    verify(service, never()).updateApplicationSummary(any(), any());
+  }
+
+  @Test
+  void updateApplicationSummaryShouldLetAScopedSubmitterChangeTheSavedOwnersLocationAndContact() {
+    TestingAuthenticationToken authentication = scopedSubmitter("00022222");
+    matchScopedClient(authentication, "00022222");
+    when(serviceProvider.getIfAvailable()).thenReturn(service);
+    when(service.getApplicationSummarySnapshot(1000456L)).thenReturn(Optional.of(summarySnapshot()));
+    when(service.updateApplicationSummary(any(), org.mockito.ArgumentMatchers.eq("bceid\\submitter")))
+        .thenReturn(
+            new ApplicationDetailsRpcService.CreateApplicationResult(
+                true, "Saved", 1000456L, List.of(), List.of()));
+    MultiValueMap<String, String> params = ownerAgentSaveParams("11111", "A", "00022222");
+    params.set("ownerClientLocationCode", "05");
+    params.set("ownerContactName", "New Owner Contact");
+
+    ResponseEntity<ApplicationDetailsRpcController.ApplicationPersistenceResponseDto> response =
+        controller.updateApplicationSummary(params, authentication);
+
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+    assertThat(response.getBody().valid()).isTrue();
+    verify(service)
+        .updateApplicationSummary(any(), org.mockito.ArgumentMatchers.eq("bceid\\submitter"));
+  }
+
+  @Test
+  void updateApplicationSummaryShouldLetStaffChangeTheSavedOwner() {
+    TestingAuthenticationToken authentication =
+        authorized("createApplication", "/changeApplicantType");
+    when(serviceProvider.getIfAvailable()).thenReturn(service);
+    when(service.getApplicationSummarySnapshot(1000456L)).thenReturn(Optional.of(summarySnapshot()));
+    when(service.updateApplicationSummary(any(), org.mockito.ArgumentMatchers.eq("idir\\jsmith")))
+        .thenReturn(
+            new ApplicationDetailsRpcService.CreateApplicationResult(
+                true, "Saved", 1000456L, List.of(), List.of()));
+
+    ResponseEntity<ApplicationDetailsRpcController.ApplicationPersistenceResponseDto> response =
+        controller.updateApplicationSummary(
+            ownerAgentSaveParams("00099999", "A", "00022222"), authentication);
+
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+    assertThat(response.getBody().valid()).isTrue();
+    ArgumentCaptor<ApplicationDetailsRpcService.ApplicationSummaryUpdateRequest> requestCaptor =
+        ArgumentCaptor.forClass(ApplicationDetailsRpcService.ApplicationSummaryUpdateRequest.class);
+    verify(service)
+        .updateApplicationSummary(
+            requestCaptor.capture(), org.mockito.ArgumentMatchers.eq("idir\\jsmith"));
+    assertThat(requestCaptor.getValue().ownerClientNumber()).isEqualTo("00099999");
+  }
+
   @Test
   void updateApplicationSummaryShouldLetAScopedSubmitterWhoIsAlsoTheOwnerRemoveTheAgent() {
     TestingAuthenticationToken authentication = scopedSubmitter("00011111");

@@ -572,6 +572,12 @@ class ProvincialRegionAuthorizationTest {
             Map.of("region", "0"),
             Map.of("orgUnitNumber", "1903"),
             Map.of("region", "ALL"),
+            Map.of("region", ",", "orgUnitNumber", "1908"),
+            Map.of("region", "[]", "orgUnitNumber", "1908"),
+            Map.of("region", ", ,", "orgUnitNumber", "1908"),
+            Map.of("region", "1908", "orgUnitNumber", ","),
+            Map.of("region", "1908", "orgUnitNumber", "[]"),
+            Map.of("region", "1908", "orgUnitNumber", ", ,"),
             Map.<String, String>of())) {
       assertThatThrownBy(() -> service.requireReportRegions(readOnly, outside))
           .isInstanceOf(AccessDeniedException.class);
@@ -580,6 +586,8 @@ class ProvincialRegionAuthorizationTest {
             () -> service.requireReportRegions(staff(READ_ONLY), Map.of("region", "1908")))
         .isInstanceOf(AccessDeniedException.class);
     assertThatCode(() -> service.requireReportRegions(staff(ADMIN), Map.of()))
+        .doesNotThrowAnyException();
+    assertThatCode(() -> service.requireReportRegions(staff(ADMIN), Map.of("region", ",")))
         .doesNotThrowAnyException();
   }
 

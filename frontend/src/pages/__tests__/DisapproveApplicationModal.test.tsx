@@ -1,4 +1,4 @@
-import { render, screen, waitFor, within } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import DisapproveApplicationModal from '@/pages/ProvincialReview/DisapproveApplicationModal'
@@ -58,15 +58,19 @@ const clientData = (email: string) => ({
 const EMAIL_REQUIRED =
   'Enter at least one email address, or clear Send disapproval email to notify the applicant another way.'
 
-const renderModal = () =>
+const renderModal = (onClose = vi.fn()) =>
   render(
     <DisapproveApplicationModal
       applicationNumber="1000123"
       statusOptions={statusOptions}
       onComplete={vi.fn()}
-      onClose={vi.fn()}
+      onClose={onClose}
     />,
   )
+
+// A browser Escape carries keyCode 27, which Carbon's ListBox checks before it stops the key.
+const pressEscape = (target: HTMLElement) =>
+  fireEvent.keyDown(target, { key: 'Escape', code: 'Escape', keyCode: 27, which: 27 })
 
 describe('DisapproveApplicationModal', () => {
   beforeEach(() => {
@@ -74,6 +78,38 @@ describe('DisapproveApplicationModal', () => {
     vi.mocked(fetchApplicationSummarySnapshot).mockResolvedValue(summary())
     vi.mocked(fetchApplicationClientData).mockResolvedValue(clientData('Not on file'))
     vi.mocked(fetchCurrentApplicationRecordVersion).mockResolvedValue('"version"')
+  })
+
+  it('closes on Escape from the collapsed Application status and keeps Rejected', async () => {
+    const onClose = vi.fn()
+    renderModal(onClose)
+    const dialog = await screen.findByRole('dialog', { name: 'Disapprove application 1000123' })
+    const status = within(dialog).getByRole('combobox', { name: 'Application status' })
+    status.focus()
+    expect(status).toHaveAttribute('aria-expanded', 'false')
+
+    pressEscape(status)
+
+    expect(onClose).toHaveBeenCalledTimes(1)
+    expect(status).toHaveValue('Rejected')
+  })
+
+  it('closes only the status list on the first Escape and the dialog on the second', async () => {
+    const onClose = vi.fn()
+    renderModal(onClose)
+    const dialog = await screen.findByRole('dialog', { name: 'Disapprove application 1000123' })
+    const status = within(dialog).getByRole('combobox', { name: 'Application status' })
+
+    await userEvent.click(status)
+    expect(status).toHaveAttribute('aria-expanded', 'true')
+    pressEscape(status)
+
+    expect(status).toHaveAttribute('aria-expanded', 'false')
+    expect(onClose).not.toHaveBeenCalled()
+    expect(status).toHaveValue('Rejected')
+
+    pressEscape(status)
+    expect(onClose).toHaveBeenCalledTimes(1)
   })
 
   it('holds the recipient section open while the recipients load', async () => {

@@ -526,6 +526,8 @@ const summarySaveFields = (source: SummarySaveSource): ApplicationSummaryField[]
     : source === 'summary-items'
       ? [...SUMMARY_SAVE_FIELDS.summary, ...SUMMARY_SAVE_FIELDS.items]
       : SUMMARY_SAVE_FIELDS[source]
+const FIRST_SCALE_REGION_ERROR =
+  'The first scale timber mark is not valid for the application region.'
 // These cards save the field without showing it, so its error stays in the page notification.
 const SUMMARY_FIELDS_WITHOUT_ERROR_DISPLAY: Partial<
   Record<ApplicationEditSection, ApplicationSummaryField[]>
@@ -559,16 +561,18 @@ const applicationClientNumberFieldError = (value: string, label: string): string
         : `${label} must be 1 to 8 digits.`,
   )
 
+// Text equal to the stored value skips the character check, so stored text saves unchanged.
 const applicationTextStorageFieldError = (
   value: string,
   maximumLength: number,
   label: string,
   required = false,
+  storedValue = '',
 ): string | undefined =>
   firstValidationError(
     () => (required ? requiredFieldError(value, label) : null),
     () =>
-      ASCII_PATTERN.test(value.trim())
+      ASCII_PATTERN.test(value.trim()) || value.trim() === storedValue.trim()
         ? null
         : `${label} contains unsupported characters. Use unaccented letters, numbers, spaces, or standard punctuation.`,
     () => maxLengthFieldError(value, maximumLength, label),
@@ -1722,6 +1726,7 @@ const ProvincialApplicationDetailsPage = () => {
         APPLICATION_CONTACT_NAME_MAX_LENGTH,
         'Contact name',
         true,
+        summaryBaselineForm?.ownerContactName,
       ),
       agentClientNumber: isAgentApplicant(summaryForm.applicantTypeCode)
         ? applicationClientNumberFieldError(summaryForm.agentClientNumber, 'Agent client') ||
@@ -1740,6 +1745,7 @@ const ProvincialApplicationDetailsPage = () => {
             APPLICATION_CONTACT_NAME_MAX_LENGTH,
             'Contact name',
             true,
+            summaryBaselineForm?.agentContactName,
           )
         : undefined,
       applicantTypeCode: firstValidationError(
@@ -1824,6 +1830,7 @@ const ProvincialApplicationDetailsPage = () => {
         APPLICATION_PRODUCT_LOCATION_MAX_LENGTH,
         'Location of logs',
         productTypeRequiresLogDetails(summaryForm.productTypeCode),
+        summaryBaselineForm?.productLocation,
       ),
       applicationVolume: firstValidationError(
         () => requiredFieldError(summaryForm.applicationVolume, 'Application volume'),
@@ -3153,13 +3160,32 @@ const ProvincialApplicationDetailsPage = () => {
           }),
         })
         if (!result.valid) {
-          setActionResult({
-            kind: 'error',
-            message:
-              result.errors.length > 0
-                ? result.errors.join(' ')
-                : result.message || 'Unable to save application summary.',
-          })
+          // A save that sends Region shows the region message on it; other saves keep the notice.
+          const section = editingSection ?? 'summary'
+          const regionError =
+            (source === 'summary' || source === 'summary-items') &&
+            !SUMMARY_FIELDS_WITHOUT_ERROR_DISPLAY[section]?.includes('orgUnitNumber')
+              ? result.errors.find((error) => error.trim() === FIRST_SCALE_REGION_ERROR)
+              : undefined
+          const otherErrors = result.errors.filter((error) => error !== regionError)
+          if (regionError) {
+            setSummarySaveErrors({
+              errors: { orgUnitNumber: regionError },
+              values: summaryRequestForm,
+            })
+            focusFirstInvalidFieldAfterRender(() =>
+              document.getElementById(APPLICATION_EDIT_SECTION_CARD_IDS[section]),
+            )
+          }
+          if (!regionError || otherErrors.length > 0) {
+            setActionResult({
+              kind: 'error',
+              message:
+                otherErrors.length > 0
+                  ? otherErrors.join(' ')
+                  : result.message || 'Unable to save application summary.',
+            })
+          }
           return false
         }
 
@@ -3197,6 +3223,7 @@ const ProvincialApplicationDetailsPage = () => {
       canChangeApplicantType,
       detail,
       editingRemarkId,
+      editingSection,
       isApplicationExpired,
       isSavingSummary,
       loadApplicationDetail,

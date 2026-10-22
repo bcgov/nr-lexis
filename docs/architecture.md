@@ -58,7 +58,8 @@ both gets no LEXIS access and sees the no-access page until FAM removes one. Sco
 `LEXIS_PROVINCIAL_SUBMITTER_FOREST_CLIENT-00001018` retain their eight-digit client scope;
 `FAM:` metadata roles grant no application access. Audit usernames keep legacy LEXIS's WebADE
 form, `IDIR\USERNAME` or `BCEID\USERNAME` in upper case, so users keep one name across legacy and
-modern rows.
+modern rows. Federal gateway submissions are recorded as `SERVICE\<machine client id>`; legacy
+used one shared ESF account.
 When FAM assigns a Provincial Submitter to multiple forest clients, LEXIS requires a per-session
 active organization selection. The frontend sends that selection with each API request and the
 backend validates it against the client-scoped FAM authorities before enforcing it for every
@@ -258,7 +259,7 @@ endpoints run in the same Spring Boot backend and independently validate the for
 | Application prevalidation | `lexisws` exposes `LogExportWebService.isValidApplication`; checks client number, client location, boom/package number, and timber marks. | `POST /api/lexis/federal/submissions/prevalidation` reproduces those checks and calls the same Oracle procedures directly. |
 | Submission intake | ESF uploads and schema-validates the XML, saves an ESF submission record, and routes a file message according to the schema/version queue mapping. | NEXCOL sends XML to `POST /api/lexis/federal/submissions`; the gateway forwards it to modern LEXIS. |
 | Business validation and persistence | `lexisvc` consumes the queue, resolves the ESF submitter through WebADE, requires `FEDERAL_SUBMITTER` for federal applications, validates the data, and creates the application and applicable package/scale records. | Modern LEXIS authorizes the machine-client scope, validates the payload, and writes the application and applicable package/scale records in one Oracle transaction. |
-| Completion | ESF finalization acknowledges intake. The queue agent later sends acceptance or rejection through the ESF status queue. | The submission response is synchronous: `201` means persisted; validation failures return `422`. No ESF status-polling endpoint is recreated. |
+| Completion | ESF finalization acknowledges intake. The queue agent later sends acceptance or rejection through the ESF status queue, and ESF emails the result to the submission's address. | The submission response is synchronous: `201` means persisted; validation failures return `422`. No ESF status-polling endpoint is recreated, and no result email is sent. |
 | System of record | Legacy LEXIS Oracle tables and packages. | The same Oracle data model; no transfer from a legacy database into a separate modern database is introduced. |
 
 The legacy `lexisvc` queue agent and `lexisws` SOAP application are separate components from the
@@ -311,17 +312,18 @@ concrete federal operations and denies unrecognized paths. The gateway accepts J
 Authorization header; query-string and cookie token extraction are disabled. Current
 configuration requires the environment's `forests` issuer,
 RS256 signature verification, expiry, and `lexis:federal-submission:submit`. `allowed_aud` is
-currently unset; neither the gateway configuration nor backend adds a dedicated audience/client-ID
-binding. Access therefore depends on valid issuer-signed tokens and the federal-submission scope.
-The [provisioning script](../.github/scripts/ensure-keycloak-scopes.sh) restricts that scope to the
-approved NEXCOL client. A client ID is used for provisioning and caller identity, but it is not an
-extra runtime allowlist check.
+currently unset at the gateway. The backend also requires a Bearer access token from
+`NEXCOL_KEYCLOAK_CLIENT_ID`: `azp` (or `client_id` when `azp` is absent) must equal it, and a
+`client_id` that is present must match too. When the machine issuer is configured without this
+client ID, the backend starts, logs a warning, and rejects every machine token. The
+[provisioning script](../.github/scripts/ensure-keycloak-scopes.sh) independently restricts the
+submission scope to the approved NEXCOL client and stops on an incomplete client listing.
 
 The [backend token configuration](../backend/src/main/java/ca/bc/gov/mof/lexis/security/Oauth2SecurityCustomizer.java)
 registers `LEXIS_OIDC_ISSUER_URI` for interactive users and the separate `KEYCLOAK_ISSUER_URI`
 for machine clients. Interactive tokens produce compatible FAM role authorities; machine tokens
-produce scope authorities. The interactive client is bound through `LEXIS_OIDC_CLIENT_ID`; this
-does not change the machine-client trust model described above.
+produce scope authorities. The interactive client is bound through `LEXIS_OIDC_CLIENT_ID`,
+separately from the machine-client binding described above.
 `SCOPE_lexis:federal-submission:submit` maps only to `uploadFederalSubmission`, which
 protects the three federal endpoints. It grants no interactive LEXIS role or general record-read
 access. The backend trusts one configured Keycloak issuer for machine clients.
@@ -406,8 +408,8 @@ endpoint; `LEXIS_OIDC_SITEMINDER_LOGOUT_URL` can override it. FAM must grant use
 LEXIS roles, including forest-client scopes where required.
 
 The `KEYCLOAK_ISSUER_URI`, `NEXCOL_KEYCLOAK_CLIENT_ID`, `keycloak_sa_client_id`, and
-`keycloak_sa_client_secret` settings belong to the separate machine-client provisioning path.
-They are not browser BCeID credentials.
+`keycloak_sa_client_secret` settings belong to the separate machine-client path. They are not
+browser BCeID credentials.
 
 ### PROD vanity route
 
@@ -437,10 +439,12 @@ conflict instead of silently replacing newer work. Short multi-row mutations tak
 in a consistent order and rely on Oracle transactions, constraints, and conditional updates for
 correctness across replicas.
 
-The daily expiry process is disabled by default and is enabled per environment. JDBC ShedLock uses
-`THE.LEXIS_SHEDLOCK` and the existing Oracle datasource so only one backend replica executes a
-trigger. It processes each eligible exemption independently, leaves unsuccessful aggregates
-eligible for a later run, and publishes metrics for operational monitoring.
+The daily expiry process runs where `LEXIS_EXPIRY_ENABLED` is true. The backend defaults to
+enabled; when the GitHub environment variable is unset, the deploy workflows default PROD and DEV
+to disabled and TEST to enabled (see above and [Exemption expiry job](exemption-expiry-job.md)).
+JDBC ShedLock uses `THE.LEXIS_SHEDLOCK` and the existing Oracle datasource so only one backend
+replica executes a trigger. It processes each eligible exemption independently, leaves unsuccessful
+aggregates eligible for a later run, and publishes metrics for operational monitoring.
 
 Federal validation and CREATE are replica-safe for the NEXCOL contract. CREATE uses best-effort
 same-replica replay, while the Oracle package primary key and the application/package/scale

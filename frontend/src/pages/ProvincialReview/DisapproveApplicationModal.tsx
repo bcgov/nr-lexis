@@ -296,16 +296,21 @@ const DisapproveApplicationModal = ({
         }}
         onKeyDownCapture={(event: KeyboardEvent<HTMLDivElement>) => {
           const target = event.target
-          if (
-            event.key === 'Escape' &&
-            target instanceof Element &&
-            target.getAttribute('aria-expanded') === 'true'
-          ) {
+          if (event.key !== 'Escape' || !(target instanceof Element)) return
+          if (target.getAttribute('aria-expanded') === 'true') {
             menuEscapeRef.current = true
             // Carbon closes the dialog from the same keydown, on the document.
             window.setTimeout(() => {
               menuEscapeRef.current = false
             })
+            return
+          }
+          // Carbon's ListBox stops native Escape from bubbling even when its list is closed, and
+          // the ComboBox would clear its text. Close the dialog here instead and keep the status.
+          if (target.getAttribute('role') === 'combobox') {
+            event.preventDefault()
+            event.stopPropagation()
+            close()
           }
         }}
       >

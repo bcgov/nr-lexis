@@ -325,14 +325,13 @@ public class ApplicationSubmissionImportService {
     }
 
     ParsedSubmission submission = parsedUpload.submission();
-    List<String> warnings = buildImportWarnings(submission);
+    List<String> warnings = List.of();
     ApplicationSubmissionSummaryDto submissionSummary = toSubmissionSummary(submission);
     ApplicationSubmissionImportResultDto federalOnlyRejection =
         federalOnlyRejection(
             fileName,
             fileSize,
             submission,
-            warnings,
             submissionSummary,
             normalizedUserReference,
             federalOnly,
@@ -596,14 +595,13 @@ public class ApplicationSubmissionImportService {
     }
 
     ParsedSubmission submission = parsedUpload.submission();
-    List<String> warnings = buildImportWarnings(submission);
+    List<String> warnings = List.of();
     ApplicationSubmissionSummaryDto submissionSummary = toSubmissionSummary(submission);
     ApplicationSubmissionImportResultDto federalOnlyRejection =
         federalOnlyRejection(
             fileName,
             fileSize,
             submission,
-            warnings,
             submissionSummary,
             normalizedUserReference,
             federalOnly,
@@ -864,17 +862,6 @@ public class ApplicationSubmissionImportService {
               List.of("The file can't be read as XML."),
               List.of()));
     }
-  }
-
-  private List<String> buildImportWarnings(ParsedSubmission submission) {
-    if (!FEDERAL_JURISDICTION.equals(submission.jurisdictionCode())
-        || submission.applicationStatusCode() == null) {
-      return List.of();
-    }
-    return List.of(
-        "Source application status "
-            + submission.applicationStatusCode()
-            + " will be applied to the imported federal application.");
   }
 
   private UploadedLexisSubmission readUploadedLexisSubmission(MultipartFile file) throws Exception {
@@ -3047,7 +3034,6 @@ public class ApplicationSubmissionImportService {
       String fileName,
       long fileSize,
       ParsedSubmission submission,
-      List<String> warnings,
       ApplicationSubmissionSummaryDto submissionSummary,
       String userReference,
       boolean federalOnly,
@@ -3063,8 +3049,7 @@ public class ApplicationSubmissionImportService {
         fileName,
         fileSize,
         List.of(federalOnly ? federalOnlyError : PROVINCIAL_ENDPOINT_ONLY_ERROR),
-        // The provincial upload shows a federal file's one message without its federal warnings.
-        federalOnly ? warnings : List.of(),
+        List.of(),
         submissionSummary,
         userReference);
   }

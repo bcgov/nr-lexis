@@ -85,7 +85,10 @@ public interface PermitDetailsRpcService {
   PermitExemptionVolumeRemainingRpcResponseDto getExemptionVolumeRemaining(String exemptionNumber);
 
   List<PermitGbmsInvoiceHistoryItemRpcResponseDto> getGbmsInvoiceHistory(
-      String receiptNumber, Long permitNumber, boolean readOnlyUser);
+      String receiptNumber,
+      Long permitNumber,
+      boolean readOnlyUser,
+      Predicate<Long> permitAccess);
 
   PermitMutationRpcResponseDto createPermitFromExemption(
       String exemptionNumber, String userId);

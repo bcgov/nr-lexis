@@ -1,6 +1,6 @@
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { MemoryRouter, Route, Routes } from 'react-router-dom'
+import { createMemoryRouter, MemoryRouter, Route, RouterProvider, Routes } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { useAuth } from '@/context/auth/useAuth'
 import AdminUploadsPage from '@/pages/AdminUploads'
@@ -56,6 +56,23 @@ const renderPage = (path = '/admin/uploads?type=permit') => {
       </Routes>
     </MemoryRouter>,
   )
+}
+
+const renderRoutedPage = (path = '/admin/uploads?type=permit&permitNumber=5001') => {
+  const router = createMemoryRouter(
+    [
+      { path: '/admin/uploads', element: <AdminUploadsPage /> },
+      { path: '/dashboard', element: <h1>Dashboard</h1> },
+    ],
+    { initialEntries: [path] },
+  )
+  render(<RouterProvider router={router} />)
+  return router
+}
+
+const chooseUploadType = async (optionName: string): Promise<void> => {
+  await userEvent.click(screen.getByRole('combobox', { name: 'Upload type' }))
+  await userEvent.click(await screen.findByRole('option', { name: optionName }))
 }
 
 describe('Admin upload workflow smoke', () => {
@@ -609,6 +626,85 @@ describe('Admin upload workflow smoke', () => {
       )
     })
     expect(mockedSubmitAdminUpload).toHaveBeenCalledTimes(1)
+  })
+
+  it('asks before changing the upload type while files are queued', async () => {
+    mockUploadAccess('/filePermitUpload', '/fileExemptionUpload')
+    renderPage('/admin/uploads?type=permit&permitNumber=5001')
+    await userEvent.upload(
+      screen.getByLabelText('Document File'),
+      new File(['permit upload'], 'test-2026-10-21.pdf', { type: 'application/pdf' }),
+    )
+    await userEvent.type(
+      screen.getByLabelText(/Document description for test-2026-10-21\.pdf/),
+      'Permit evidence',
+    )
+
+    await chooseUploadType('Exemption upload')
+
+    const dialog = await screen.findByRole('dialog', { name: 'Discard changes?' })
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Keep editing' }))
+    await waitFor(() =>
+      expect(screen.queryByRole('dialog', { name: 'Discard changes?' })).not.toBeInTheDocument(),
+    )
+    expect(screen.getByRole('combobox', { name: 'Upload type' })).toHaveValue('Permit upload')
+    expect(screen.getByLabelText(/Document description for test-2026-10-21\.pdf/)).toHaveValue(
+      'Permit evidence',
+    )
+
+    await chooseUploadType('Exemption upload')
+    await userEvent.click(
+      within(await screen.findByRole('dialog', { name: 'Discard changes?' })).getByRole('button', {
+        name: 'Discard changes',
+      }),
+    )
+
+    expect(screen.getByRole('combobox', { name: 'Upload type' })).toHaveValue('Exemption upload')
+    expect(screen.queryByText('test-2026-10-21.pdf')).not.toBeInTheDocument()
+    expect(screen.queryByRole('dialog', { name: 'Discard changes?' })).not.toBeInTheDocument()
+  })
+
+  it('changes the upload type without asking when nothing is queued', async () => {
+    mockUploadAccess('/filePermitUpload', '/fileExemptionUpload')
+    renderPage('/admin/uploads?type=permit&permitNumber=5001')
+
+    await chooseUploadType('Exemption upload')
+
+    expect(screen.getByRole('combobox', { name: 'Upload type' })).toHaveValue('Exemption upload')
+    expect(screen.queryByRole('dialog', { name: 'Discard changes?' })).not.toBeInTheDocument()
+  })
+
+  it('asks before leaving the page while files are queued and not after they are uploaded', async () => {
+    mockUploadAccess('/filePermitUpload')
+    const router = renderRoutedPage()
+    await userEvent.upload(
+      screen.getByLabelText('Document File'),
+      new File(['permit upload'], 'test-2026-10-21.pdf', { type: 'application/pdf' }),
+    )
+
+    const unload = new Event('beforeunload', { cancelable: true })
+    window.dispatchEvent(unload)
+    expect(unload.defaultPrevented).toBe(true)
+
+    await act(async () => {
+      void router.navigate('/dashboard')
+    })
+    expect(await screen.findByRole('dialog', { name: 'Discard changes?' })).toBeVisible()
+    expect(router.state.location.pathname).toBe('/admin/uploads')
+
+    await userEvent.click(screen.getByRole('button', { name: 'Keep editing' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Review upload' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Submit upload' }))
+    await screen.findByText('Upload submitted')
+
+    const afterUpload = new Event('beforeunload', { cancelable: true })
+    window.dispatchEvent(afterUpload)
+    expect(afterUpload.defaultPrevented).toBe(false)
+
+    await act(async () => {
+      void router.navigate('/dashboard')
+    })
+    expect(await screen.findByRole('heading', { name: 'Dashboard' })).toBeVisible()
   })
 
   it('keeps review and submit disabled until the document target is valid', async () => {

@@ -253,7 +253,6 @@ type PermitActionResultSource =
   | 'permit'
   | 'applications'
   | 'applicant'
-  | 'agent'
   | 'shipping'
   | 'fees'
   | 'email'
@@ -266,7 +265,6 @@ const SECTION_SAVE_RESULT_SOURCES = new Set<PermitActionResultSource>([
   'permit',
   'applications',
   'applicant',
-  'agent',
   'shipping',
   'fees',
   'scale-summary',
@@ -360,7 +358,7 @@ const MAX_OIC_REQUEST_PIECES = 9_999_999_999
 const MAX_OIC_REQUEST_VOLUME_LENGTH = 9
 const MAX_PERMIT_OVERRIDE_FEE = 9_999_999.99
 const MAX_PERMIT_OVERRIDE_COMMENT_LENGTH = 254
-const MAX_REVIEWED_PERMIT_REMARKS_LENGTH = 250
+const MAX_PERMIT_REMARKS_LENGTH = 250
 const PACKAGE_COMMENTS_MAX_LENGTH = 180
 const ASCII_PATTERN = /^[\u0000-\u007f]*$/
 // Legacy allows an approver to move a permit to EXP; once expired, the record is read-only.
@@ -393,7 +391,6 @@ const SHIPPING_PERMIT_FIELDS = new Set<PermitDetailFormField>([
 const PERMIT_DETAIL_TABS = [
   { id: 'permit', label: 'Permit', icon: Certificate },
   { id: 'owner', label: 'Applicant', icon: Enterprise },
-  { id: 'agent', label: 'Agent', icon: undefined },
   { id: 'shipping', label: 'Shipping', icon: EarthFilled },
   { id: 'items', label: 'Scale', icon: Box },
   { id: 'documents', label: 'Documents', icon: DocumentAttachment },
@@ -419,7 +416,7 @@ type PermitEditSection =
 const PERMIT_EDIT_SECTION_TABS: Record<PermitEditSection, readonly PermitDetailTabId[]> = {
   // The Fees tab holds the permit's receipt number.
   permit: ['permit', 'fees'],
-  applicant: ['owner', 'agent'],
+  applicant: ['owner'],
   shipping: ['shipping'],
   feeOverride: ['fees'],
   scaleSelection: ['items'],
@@ -1185,11 +1182,7 @@ const withPermitMutationResult = (
 
 /** The tab a section's save reports in: the one it was saved from. */
 const permitSaveResultSource = (tab: PermitDetailTabId): PermitActionResultSource =>
-  tab === 'owner'
-    ? 'applicant'
-    : tab === 'agent' || tab === 'shipping' || tab === 'fees'
-      ? tab
-      : 'permit'
+  tab === 'owner' ? 'applicant' : tab === 'shipping' || tab === 'fees' ? tab : 'permit'
 
 /** A section's save, named for what it saved. Warnings or a follow-up make it a warning. */
 const sectionSaveResult = (
@@ -1327,7 +1320,9 @@ const ProvincialPermitDetailsPage = () => {
   )
   const [editContextLoaded, setEditContextLoaded] = useState(false)
   const [editContextLoadFailed, setEditContextLoadFailed] = useState(false)
-  const [permitDetailRefreshRequired, setPermitDetailRefreshRequired] = useState(false)
+  const [permitDetailRefreshRequired, setPermitDetailRefreshRequired] = useState<
+    false | 'saved' | 'unconfirmed'
+  >(false)
   const [feeOverrideForm, setFeeOverrideForm] = useState<PermitFeeOverrideForm | null>(null)
   const [feeOverrideFieldErrors, setFeeOverrideFieldErrors] =
     useState<PermitFeeOverrideFieldErrors>({})
@@ -1924,9 +1919,7 @@ const ProvincialPermitDetailsPage = () => {
   const usesReviewedPermitFlow = blanketOicPermit || ministerialPermit
   const hasGbmsHistory = (tabsData?.gbmsEvents.length ?? 0) > 0 || Boolean(gbmsErrorMessage)
   const permitDetailTabs = PERMIT_DETAIL_TABS.filter(
-    ({ id }) =>
-      (id !== 'agent' || (hasPermitAgent && !usesReviewedPermitFlow)) &&
-      (id !== 'gbms' || hasGbmsHistory),
+    ({ id }) => id !== 'gbms' || hasGbmsHistory,
   ).map((tab) => ({
     ...tab,
     label: usesReviewedPermitFlow && tab.id === 'owner' ? 'Applicant' : tab.label,
@@ -1934,8 +1927,7 @@ const ProvincialPermitDetailsPage = () => {
   const activePermitTabId = permitDetailTabs.some(({ id }) => id === selectedPermitTabId)
     ? selectedPermitTabId
     : 'permit'
-  const shouldLoadClientData =
-    clientDataRequested || activePermitTabId === 'owner' || activePermitTabId === 'agent'
+  const shouldLoadClientData = clientDataRequested || activePermitTabId === 'owner'
 
   useEffect(() => {
     let isCancelled = false
@@ -2196,7 +2188,8 @@ const ProvincialPermitDetailsPage = () => {
   const selectedPermitScaleTotalsByPackage = useMemo(() => {
     const totals = new Map<string, { pieces: number; volume: number }>()
     for (const row of tabsData?.items ?? []) {
-      if (!row.includedInPermit || !row.packageNumber) continue
+      const included = ministerialScaleSelectionDraft?.[row.id] ?? row.includedInPermit
+      if (!included || !row.packageNumber) continue
       const current = totals.get(row.packageNumber) ?? { pieces: 0, volume: 0 }
       totals.set(row.packageNumber, {
         pieces: current.pieces + row.pieces,
@@ -2204,9 +2197,10 @@ const ProvincialPermitDetailsPage = () => {
       })
     }
     return totals
-  }, [tabsData?.items])
-  const ministerialScaleEmpty =
-    ministerialPermit &&
+  }, [ministerialScaleSelectionDraft, tabsData?.items])
+  const permitScaleEmpty =
+    !!detail &&
+    !blanketOicPermit &&
     !isPermitTablesLoading &&
     !permitTablesErrorMessage &&
     (tabsData?.packages.length ?? 0) === 0 &&
@@ -2230,9 +2224,11 @@ const ProvincialPermitDetailsPage = () => {
     : ''
   const permitEditContextUnavailableMessage =
     hasPermitMutationPermission && (editContextLoadFailed || permitDetailRefreshRequired)
-      ? permitDetailRefreshRequired
+      ? permitDetailRefreshRequired === 'saved'
         ? 'The permit was saved, but its current details could not be refreshed. Reload before making another change.'
-        : 'Permit edit settings could not be loaded. Editing is unavailable until the data can be retrieved.'
+        : permitDetailRefreshRequired === 'unconfirmed'
+          ? 'Unable to confirm whether the changes were saved. Reload before making another change.'
+          : 'Permit edit settings could not be loaded. Editing is unavailable until the data can be retrieved.'
       : ''
   const permitStatusCode = detail?.permitStatusCode?.trim().toUpperCase()
   const invoiceMaterialLocked = permitStatusCode === 'COM' || permitStatusCode === 'PPD'
@@ -2760,8 +2756,14 @@ const ProvincialPermitDetailsPage = () => {
         : deferredPermitTabLoaded.fees
           ? null
           : '—'
-  const ministerialFeeShellEmpty =
-    ministerialPermit &&
+  // An ordinary permit keeps its receipt number and fee override controls while the user can edit
+  // them; a Ministerial permit shows the empty state regardless.
+  const permitFeeControlsAvailable =
+    !ministerialPermit && (canEditReceiptNumber || canEditFeeOverride)
+  const permitFeeShellEmpty =
+    !!detail &&
+    !blanketOicPermit &&
+    !permitFeeControlsAvailable &&
     !isPermitTablesLoading &&
     feeSummaryStatus === null &&
     !!tabsData &&
@@ -3061,7 +3063,7 @@ const ProvincialPermitDetailsPage = () => {
           () =>
             maxLengthFieldError(
               permitForm.permitRemarks,
-              usesReviewedPermitFlow ? MAX_REVIEWED_PERMIT_REMARKS_LENGTH : 254,
+              MAX_PERMIT_REMARKS_LENGTH,
               'Permit remarks',
             ),
         ) ?? undefined,
@@ -3148,7 +3150,6 @@ const ProvincialPermitDetailsPage = () => {
     editablePermitRegionOptions,
     invoiceMaterialLocked,
     requiresPositiveOicRequestLimits,
-    usesReviewedPermitFlow,
     permitForm,
     requiresCompletionSubmitDate,
     requiresPermitCompletionDates,
@@ -3762,7 +3763,7 @@ const ProvincialPermitDetailsPage = () => {
   }
   const openPermitTab = (tabId: PermitDetailTabId): void => {
     selectPermitTab(tabId)
-    if (tabId === 'owner' || tabId === 'agent') {
+    if (tabId === 'owner') {
       setClientDataRequested(true)
     }
     if (tabId === 'fees' || tabId === 'documents') {
@@ -4045,7 +4046,7 @@ const ProvincialPermitDetailsPage = () => {
           setAgentClientData(null)
           setIsClientDataLoading(false)
           setClientDataErrorMessage('')
-          setPermitDetailRefreshRequired(true)
+          setPermitDetailRefreshRequired('saved')
           setEditContextLoaded(false)
           setPermitEditSection(null)
         } else if (!deferStatusTransition) {
@@ -4347,7 +4348,7 @@ const ProvincialPermitDetailsPage = () => {
     } catch (error) {
       if (isLatestRequest()) {
         console.error(error)
-        setPermitDetailRefreshRequired(true)
+        setPermitDetailRefreshRequired(saved ? 'saved' : 'unconfirmed')
         setEditContextLoaded(false)
         setActionResult({
           kind: 'error',
@@ -4477,7 +4478,7 @@ const ProvincialPermitDetailsPage = () => {
     } catch (error) {
       if (isLatestRequest()) {
         console.error(error)
-        setPermitDetailRefreshRequired(true)
+        setPermitDetailRefreshRequired(saved ? 'saved' : 'unconfirmed')
         setEditContextLoaded(false)
         if (saved) {
           // The changes are saved, so the ticks are no longer unsaved. Save and Cancel are gone
@@ -5989,9 +5990,9 @@ const ProvincialPermitDetailsPage = () => {
       onChange={(event) => setPermitFormField(field, event.target.value)}
       disabled={isDisabled}
       rows={3}
-      enableCounter={usesReviewedPermitFlow && field === 'permitRemarks'}
+      enableCounter={field === 'permitRemarks'}
       maxCount={maxCount}
-      maxLength={usesReviewedPermitFlow ? maxCount : undefined}
+      maxLength={maxCount}
     />
   )
 
@@ -6411,12 +6412,7 @@ const ProvincialPermitDetailsPage = () => {
               span="full"
               value={detail.remarks}
               edit={() =>
-                renderPermitTextArea(
-                  'permitRemarks',
-                  'Remarks',
-                  false,
-                  MAX_REVIEWED_PERMIT_REMARKS_LENGTH,
-                )
+                renderPermitTextArea('permitRemarks', 'Remarks', false, MAX_PERMIT_REMARKS_LENGTH)
               }
             />
           </RecordFieldRow>
@@ -6538,7 +6534,9 @@ const ProvincialPermitDetailsPage = () => {
             label="Remarks"
             span="full"
             value={detail.remarks}
-            edit={() => renderPermitTextArea('permitRemarks', 'Remarks', false, 254)}
+            edit={() =>
+              renderPermitTextArea('permitRemarks', 'Remarks', false, MAX_PERMIT_REMARKS_LENGTH)
+            }
           />
         </RecordFieldRow>
       </RecordFieldGrid>
@@ -6571,7 +6569,7 @@ const ProvincialPermitDetailsPage = () => {
                 false,
                 52,
                 true,
-                usesReviewedPermitFlow ? 'Company name' : undefined,
+                'Company name',
               )
             }
           />
@@ -7020,7 +7018,7 @@ const ProvincialPermitDetailsPage = () => {
 
   // A Summary of scale result moves to the top of the tab while the summary itself is hidden.
   const scaleSummaryShown =
-    !ministerialScaleEmpty &&
+    !permitScaleEmpty &&
     !blanketOicPackageCreationRequired &&
     !isPermitTablesLoading &&
     !permitTablesErrorMessage &&
@@ -7050,8 +7048,9 @@ const ProvincialPermitDetailsPage = () => {
         aria-labelledby="permit-scale-summary-title"
         hidden={
           blanketOicPackageCreationRequired ||
-          ministerialScaleEmpty ||
-          (ministerialPermit && isPermitTablesLoading)
+          permitScaleEmpty ||
+          (ministerialPermit && isPermitTablesLoading) ||
+          tabsData === null
         }
       >
         <div className="permit-scale-summary__header">
@@ -7153,7 +7152,7 @@ const ProvincialPermitDetailsPage = () => {
           />
         )}
         {!permitTablesErrorMessage &&
-          !ministerialScaleEmpty &&
+          !permitScaleEmpty &&
           (packageScopedItems.length > 0 ? (
             <TableFrame ariaLabel={usesReviewedPermitFlow ? 'Scale rows' : 'Permit item rows'}>
               <Table size="md" useZebraStyles>
@@ -7386,7 +7385,7 @@ const ProvincialPermitDetailsPage = () => {
             </RecordFieldGrid>
           </>
         )}
-        {usesReviewedPermitFlow && !ministerialFeeShellEmpty && (
+        {usesReviewedPermitFlow && !permitFeeShellEmpty && (
           <h3 className="detail-section-subtitle">Fee details</h3>
         )}
         {permitFeesErrorMessage ? (
@@ -7476,8 +7475,8 @@ const ProvincialPermitDetailsPage = () => {
     !deferredPermitTabLoading.documents &&
     !documentsErrorMessage &&
     documentRows.length === 0
-  const emptyPermitScale = ministerialScaleEmpty || blanketOicPackageCreationRequired
-  const ScaleContainer = ministerialPermit && !ministerialScaleEmpty ? Tile : 'section'
+  const emptyPermitScale = permitScaleEmpty || blanketOicPackageCreationRequired
+  const ScaleContainer = ministerialPermit && !permitScaleEmpty ? Tile : 'section'
   // Only a Ministerial permit's package details need a group label; the other permits show their
   // package in a card of its own.
   const PackageDetailsContainer = ministerialPermit ? 'fieldset' : 'div'
@@ -7636,7 +7635,7 @@ const ProvincialPermitDetailsPage = () => {
               />
             </Column>
           )}
-          {!!blanketOicRegionError && (
+          {canMutatePermit && !!blanketOicRegionError && (
             <Column sm={4} md={8} lg={16} className="detail-page-error">
               <InlineNotification
                 className="detail-context-notification"
@@ -7648,7 +7647,7 @@ const ProvincialPermitDetailsPage = () => {
               />
             </Column>
           )}
-          {requiredPermitOptionsMissing && (
+          {canMutatePermit && requiredPermitOptionsMissing && (
             <Column sm={4} md={8} lg={16} className="detail-page-error">
               <InlineNotification
                 className="detail-context-notification"
@@ -8063,9 +8062,30 @@ const ProvincialPermitDetailsPage = () => {
                         )}
                       </Column>
                     )}
+                    {!ownerEditMode && !usesReviewedPermitFlow && hasPermitAgent && (
+                      <Column sm={4} md={8} lg={16}>
+                        <PermitClientTile
+                          title="Agent"
+                          kind="agent"
+                          clientNumber={detail.applicantClientNumber}
+                          locationCode={detail.agentClientLocationCode}
+                          clientData={agentClientData}
+                          isLoading={isClientDataLoading}
+                          errorMessage=""
+                        />
+                      </Column>
+                    )}
                     {ownerEditMode && permitForm && (
                       <Column sm={4} md={8} lg={16}>
-                        <Tile>
+                        {/* Editing the applicant, focus waits for the owner's locations, so it
+                        lands on the owner's fields rather than the fields after them. */}
+                        <Tile
+                          data-edit-focus-pending={
+                            permitEditSection === 'applicant' && isOwnerClientLookupLoading
+                              ? 'true'
+                              : undefined
+                          }
+                        >
                           <DetailCardTitle icon={Enterprise}>Applicant details</DetailCardTitle>
                           {renderSectionSaveResult('applicant')}
                           <RequiredFieldsLegend className="permit-client-editor__required-hint" />
@@ -8104,49 +8124,6 @@ const ProvincialPermitDetailsPage = () => {
                     )}
                   </Grid>
                 </TabPanel>
-                {hasPermitAgent && !usesReviewedPermitFlow && (
-                  <TabPanel key="agent" className="application-detail-tab-panel">
-                    <Grid
-                      fullWidth
-                      ref={permitEditSections.sectionRef('applicant', 'newPermit')}
-                      className="application-detail-tab-grid"
-                    >
-                      {ownerEditMode && permitForm ? (
-                        <Column sm={4} md={8} lg={16}>
-                          <Tile>
-                            <DetailCardTitle>Edit agent</DetailCardTitle>
-                            {renderSectionSaveResult('agent')}
-                            <RequiredFieldsLegend />
-                            {renderPermitClientEditor('agent', invoiceMaterialLocked)}
-                            {renderPermitClientEditActions()}
-                          </Tile>
-                        </Column>
-                      ) : (
-                        <Column sm={4} md={8} lg={16}>
-                          <PermitClientTile
-                            title="Agent"
-                            kind="agent"
-                            headerAction={
-                              canEditPermitClients && !isEditingPermit ? (
-                                <Button kind="tertiary" size="md" onClick={startPermitClientEdit}>
-                                  Edit agent
-                                </Button>
-                              ) : undefined
-                            }
-                            result={renderSectionSaveResult('agent')}
-                            clientNumber={detail.applicantClientNumber}
-                            locationCode={detail.agentClientLocationCode}
-                            clientData={agentClientData}
-                            isLoading={isClientDataLoading}
-                            errorMessage={
-                              activePermitTabId === 'agent' ? clientDataErrorMessage : ''
-                            }
-                          />
-                        </Column>
-                      )}
-                    </Grid>
-                  </TabPanel>
-                )}
                 <TabPanel key="shipping" className="application-detail-tab-panel">
                   <Grid
                     fullWidth
@@ -8265,7 +8242,7 @@ const ProvincialPermitDetailsPage = () => {
                         {!emptyPermitScale && !detail.blanketOic && (
                           <DetailCardTitle icon={Box}>Scale</DetailCardTitle>
                         )}
-                        {ministerialScaleEmpty && (
+                        {permitScaleEmpty && (
                           <EmptyState
                             className="permit-empty-state--sentences"
                             title="No scale yet"
@@ -8594,7 +8571,7 @@ const ProvincialPermitDetailsPage = () => {
                                 headingLevel={3}
                                 variant="tab"
                               />
-                            ) : ministerialScaleEmpty ? null : (
+                            ) : permitScaleEmpty ? null : (
                               <EmptyState
                                 title="No package details"
                                 description="No package detail rows are available for this permit."
@@ -8610,10 +8587,10 @@ const ProvincialPermitDetailsPage = () => {
                 </TabPanel>
                 <TabPanel
                   key="fees"
-                  className={`application-detail-tab-panel${ministerialFeeShellEmpty ? ' application-detail-tab-panel--empty' : ''}`}
+                  className={`application-detail-tab-panel${permitFeeShellEmpty ? ' application-detail-tab-panel--empty' : ''}`}
                 >
                   <Grid fullWidth className="application-detail-tab-grid">
-                    {ministerialFeeShellEmpty ? (
+                    {permitFeeShellEmpty ? (
                       <Column sm={4} md={8} lg={16}>
                         <EmptyState
                           className="permit-empty-state--sentences"

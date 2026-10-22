@@ -1097,8 +1097,7 @@ class ApplicationSubmissionImportServiceTest {
     assertThat(result.packageNumber()).isEqualTo("FED26-700123");
     assertThat(result.federalPermitNumber()).isNull();
     assertThat(result.scaleRows()).isEqualTo(3);
-    assertThat(result.warnings())
-        .contains("Source application status A will be applied to the imported federal application.");
+    assertThat(result.warnings()).isEmpty();
     assertThat(result.submissionSummary()).isNotNull();
     assertThat(result.submissionSummary().jurisdictionCode()).isEqualTo("F");
     assertThat(result.submissionSummary().federalApplicationNumber()).isEqualTo(700123L);

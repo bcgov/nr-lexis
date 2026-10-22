@@ -595,10 +595,10 @@ class OracleExemptionDetailsRpcServiceTest {
                     "03",
                     "12",
                     "A",
-                    "BOB TURMEL",
+                    "OWNER PERSON",
                     "EXPORT PERSON",
-                    "NORSKE SKOG CANADA LIMITED",
-                    "INTERNATIONAL FOREST PRODUCTS",
+                    "SAMPLE OWNER LTD",
+                    "SAMPLE AGENT LTD",
                     "P",
                     "T",
                     "EXE"),
@@ -620,12 +620,12 @@ class OracleExemptionDetailsRpcServiceTest {
               assertThat(application.ownerClientLocationCode()).isEqualTo("03");
               assertThat(application.agentClientLocationCode()).isEqualTo("12");
               assertThat(application.applicantTypeCode()).isEqualTo("A");
-              assertThat(application.ownerContactName()).isEqualTo("BOB TURMEL");
+              assertThat(application.ownerContactName()).isEqualTo("OWNER PERSON");
               assertThat(application.agentContactName()).isEqualTo("EXPORT PERSON");
               assertThat(application.ownerCompanyName())
-                  .isEqualTo("NORSKE SKOG CANADA LIMITED");
+                  .isEqualTo("SAMPLE OWNER LTD");
               assertThat(application.agentCompanyName())
-                  .isEqualTo("INTERNATIONAL FOREST PRODUCTS");
+                  .isEqualTo("SAMPLE AGENT LTD");
             });
     assertThat(response.containsUnmanu()).isTrue();
     assertThat(response.ownerNumber()).isEqualTo("00077881");
@@ -3028,6 +3028,7 @@ class OracleExemptionDetailsRpcServiceTest {
     assertThat(update.exemptionTypeCode()).isEqualTo(existing.exemptionTypeCode());
     assertThat(update.exemptionStatusCode()).isEqualTo("NEW");
     assertThat(update.regionNumbers()).isNull();
+    verify(activationEligibilityValidator, never()).validateActiveDates(any(), any());
     verify(repository, never()).findExemptionRate(any());
     verify(repository, never()).updateExemptionRate(any());
     verify(repository, never()).insertExemptionRate(any());
@@ -3109,9 +3110,98 @@ class OracleExemptionDetailsRpcServiceTest {
     assertThat(update.otherConditions()).isEqualTo(existing.otherConditions());
     assertThat(update.exemptionTypeCode()).isEqualTo(type);
     assertThat(update.exemptionStatusCode()).isEqualTo("ACT");
+    verify(activationEligibilityValidator)
+        .validateActiveDates(existing.approvalDate(), existing.expiryDate());
+    verify(activationEligibilityValidator, never()).validate(any());
     verify(repository, never()).findExemptionRate(any());
     verify(repository, never()).updateExemptionRate(any());
     verify(repository, never()).insertExemptionRate(any());
+  }
+
+  @ParameterizedTest
+  @ValueSource(strings = {"O", "M"})
+  void updateExemptionShouldRefuseToReactivateACancelledExemptionWithInvalidActiveDates(
+      String type) {
+    ExemptionDetailsRpcRepository.ExemptionRecord existing =
+        exemption("CAN", type, null, LexisBusinessTime.today().minusDays(1));
+    when(repository.findExemptionRecord("EX-205")).thenReturn(Optional.of(existing));
+    when(activationEligibilityValidator.validateActiveDates(null, existing.expiryDate()))
+        .thenReturn(
+            List.of(
+                "A valid approval date is required for an active exemption.",
+                "An active exemption cannot have an expiry date before today."));
+
+    ExemptionDetailsRpcService.CreateExemptionResult response =
+        service.updateExemption(
+            new ExemptionDetailsRpcService.UpdateExemptionRequest(
+                "EX-205", "EX-205", null, null, null, null, type, "ACT",
+                null, null, List.of()),
+            "idir\\jsmith",
+            true);
+
+    assertThat(response.success()).isFalse();
+    assertThat(response.errors())
+        .containsExactly(
+            "A valid approval date is required for an active exemption.",
+            "An active exemption cannot have an expiry date before today.");
+    verify(repository, never()).updateExemption(any());
+    verify(activationEligibilityValidator, never()).validate(any());
+    verify(activationEligibilityValidator, never()).validatePersistenceReferences(any());
+  }
+
+  @Test
+  void updateExemptionShouldKeepACancelledMinisterialExemptionCancelledWhenItWasNeverApproved() {
+    when(repository.findExemptionRecord("EX-205"))
+        .thenReturn(
+            Optional.of(
+                exemption("CAN", "M", null, LexisBusinessTime.today().plusDays(90))));
+    OracleExemptionDetailsRpcService serviceWithRealValidator =
+        new OracleExemptionDetailsRpcService(
+            repository, notificationRecipientResolver, clientEmailResolver, notificationService,
+            new ExemptionActivationEligibilityValidator(repository));
+
+    ExemptionDetailsRpcService.CreateExemptionResult response =
+        serviceWithRealValidator.updateExemption(
+            new ExemptionDetailsRpcService.UpdateExemptionRequest(
+                "EX-205", "EX-205", null, null, null, null, "M", "ACT",
+                null, null, List.of()),
+            "idir\\jsmith",
+            true);
+
+    assertThat(response.success()).isFalse();
+    assertThat(response.errors())
+        .containsExactly("A valid approval date is required for an active exemption.");
+    verify(repository, never()).updateExemption(any());
+  }
+
+  @Test
+  void updateExemptionShouldReactivateAnApprovedCancelledMinisterialExemptionWithAFutureExpiry() {
+    when(repository.findExemptionRecord("EX-205"))
+        .thenReturn(
+            Optional.of(
+                exemption(
+                    "CAN",
+                    "M",
+                    LexisBusinessTime.today().minusDays(30),
+                    LexisBusinessTime.today().plusDays(90))));
+    when(repository.isExemptionTypeCodeValidRequired("M")).thenReturn(true);
+    when(repository.isExemptionStatusCodeValidRequired("ACT")).thenReturn(true);
+    when(repository.updateExemption(any())).thenReturn(true);
+    OracleExemptionDetailsRpcService serviceWithRealValidator =
+        new OracleExemptionDetailsRpcService(
+            repository, notificationRecipientResolver, clientEmailResolver, notificationService,
+            new ExemptionActivationEligibilityValidator(repository));
+
+    ExemptionDetailsRpcService.CreateExemptionResult response =
+        serviceWithRealValidator.updateExemption(
+            new ExemptionDetailsRpcService.UpdateExemptionRequest(
+                "EX-205", "EX-205", null, null, null, null, "M", "ACT",
+                null, null, List.of()),
+            "idir\\jsmith",
+            true);
+
+    assertThat(response.success()).isTrue();
+    verify(repository).updateExemption(any());
   }
 
   @Test

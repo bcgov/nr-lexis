@@ -86,10 +86,15 @@ jobs:
       backend_min_replicas: "3"
       backend_max_replicas: "3"
       frontend_replicas: "3"
+      # Backend requests stay low because the PROD quota caps total requests; limits match TEST.
       backend_cpu_request: "400m"
       backend_memory_request: "1Gi"
-      backend_cpu_limit: "1500m"
-      backend_memory_limit: "1536Mi"
+      backend_cpu_limit: "2"
+      backend_memory_limit: "3Gi"
+      frontend_cpu_request: "100m"
+      frontend_memory_request: "128Mi"
+      frontend_cpu_limit: "500m"
+      frontend_memory_limit: "256Mi"
       # Default off if the PROD environment LEXIS_EXPIRY_ENABLED variable is unset.
       expiry_enabled: false
 

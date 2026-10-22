@@ -14,7 +14,7 @@ vi.mock('@/context/auth/useAuth', () => ({
 const mockedUseAuth = vi.mocked(useAuth)
 
 const renderPage = () => {
-  render(
+  return render(
     <ThemeProvider>
       <MemoryRouter initialEntries={['/unauthorized']}>
         <Routes>
@@ -29,6 +29,7 @@ describe('Unauthorized page actions', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     window.localStorage.clear()
+    document.title = ''
   })
 
   it('renders the no-role state with the landing composition and signed-in identity', () => {
@@ -47,6 +48,19 @@ describe('Unauthorized page actions', () => {
     expect(screen.getByText(/idir\\norole/)).toBeInTheDocument()
     expect(screen.getByAltText('British Columbia forest landscape')).toBeInTheDocument()
     expect(document.querySelector('.app-shell')).not.toBeInTheDocument()
+  })
+
+  it('names the browser tab after the heading and restores the previous name on leave', () => {
+    document.title = 'Provincial applications'
+    mockedUseAuth.mockReturnValue(createTestAuthContext())
+
+    const { unmount } = renderPage()
+
+    expect(document.title).toBe('Access not granted')
+
+    unmount()
+
+    expect(document.title).toBe('Provincial applications')
   })
 
   it('calls logout', async () => {

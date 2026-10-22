@@ -50,6 +50,16 @@ function ApplicationUploadResult({
     titleRef.current?.focus({ preventScroll: true })
   }, [])
 
+  // The heading isn't a PageHeader, so the result names the browser tab itself and gives the
+  // previous name back when it goes away.
+  useEffect(() => {
+    const previousTitle = document.title
+    document.title = summary.title
+    return () => {
+      document.title = previousTitle
+    }
+  }, [summary.title])
+
   return (
     <div className="application-upload-result">
       <div className="application-upload-result__summary">

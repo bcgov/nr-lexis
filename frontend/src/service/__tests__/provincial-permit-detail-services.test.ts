@@ -1208,7 +1208,7 @@ describe('provincial permit detail services', () => {
     })
   })
 
-  it('sends explicit blank issue and expiry dates when updating a permit', async () => {
+  it('sends explicit blank issue date, expiry date and remarks when updating a permit', async () => {
     postMock.mockResolvedValue(response({ success: true }))
 
     await updatePermitDetail({
@@ -1244,7 +1244,7 @@ describe('provincial permit detail services', () => {
     expect(body.get('permitIssueDate')).toBe('')
     expect(body.get('permitExpiryDate')).toBe('')
     expect(body.get('permitReceiptNo')).toBeNull()
-    expect(body.get('permitRemarks')).toBeNull()
+    expect(body.get('permitRemarks')).toBe('')
     expect(body.get('agentClientNumber')).toBe('')
     expect(body.get('agentClientLocation')).toBeNull()
   })

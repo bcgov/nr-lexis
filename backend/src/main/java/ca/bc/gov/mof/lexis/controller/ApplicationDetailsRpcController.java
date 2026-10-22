@@ -846,6 +846,9 @@ public class ApplicationDetailsRpcController {
           if (namesOwnerAsAgent(service, request)) {
             return ownerNamedAsAgent(request.applicationNumber());
           }
+          if (changesSavedOwner(service, request, authentication)) {
+            return savedOwnerLocked(request.applicationNumber());
+          }
           ApplicationDetailsRpcService.CreateApplicationResult result =
               agentChangeOnly
                   ? service.updateApplicationAgent(request, userId)
@@ -1870,6 +1873,38 @@ public class ApplicationDetailsRpcController {
     return APPLICATION_APPLICANT_TYPE_AGENT.equalsIgnoreCase(applicantType)
         && agentClientNumber != null
         && agentClientNumber.equals(normalizeClientNumber(request.ownerClientNumber()));
+  }
+
+  // INTENTIONAL_LEGACY_DIVERGENCE(SUBMITTER_APPLICATION_AGENT): Provincial Submitters cannot
+  // change the saved owner client; its location and contact still change.
+  private boolean changesSavedOwner(
+      ApplicationDetailsRpcService service,
+      ApplicationDetailsRpcService.ApplicationSummaryUpdateRequest request,
+      Authentication authentication) {
+    String requestedOwnerClientNumber = normalizeClientNumber(request.ownerClientNumber());
+    if (!request.saveSource().updatesOwnerFields()
+        || requestedOwnerClientNumber == null
+        || provincialAuthorizationService.scopedForestClientNumber(authentication) == null) {
+      return false;
+    }
+    return service
+        .getApplicationSummarySnapshot(request.applicationNumber())
+        .map(
+            snapshot ->
+                !requestedOwnerClientNumber.equals(
+                    normalizeClientNumber(snapshot.ownerClientNumber())))
+        .orElse(false);
+  }
+
+  private ResponseEntity<ApplicationPersistenceResponseDto> savedOwnerLocked(
+      Long applicationNumber) {
+    return ResponseEntity.ok(
+        new ApplicationPersistenceResponseDto(
+            false,
+            null,
+            applicationNumber,
+            List.of("Owner client cannot be changed."),
+            List.of()));
   }
 
   private ResponseEntity<ApplicationPersistenceResponseDto> ownerNamedAsAgent(

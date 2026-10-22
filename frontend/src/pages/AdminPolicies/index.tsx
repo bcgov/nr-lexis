@@ -68,6 +68,7 @@ import IsoDatePicker from '../../components/IsoDatePicker'
 import { toCarbonSortDirection } from '@/pages/shared/search-query-utils'
 import { combineActionMessages } from '@/utils/action-result'
 import { formatBusinessIsoDate } from '@/utils/date'
+import { fieldErrorText } from '@/utils/field-error'
 import {
   focusFirstEditableFieldAfterPanelChange,
   focusFirstInvalidFieldAfterRender,
@@ -192,6 +193,13 @@ const FIL_POLICY_SORT_COLUMNS: Array<{ id: FilPolicySortField; label: string }> 
   { id: 'fil_percent', label: 'Fee in lieu %' },
 ]
 
+// Server messages about the effective date, which show on that field.
+const EFFECTIVE_DATE_SERVER_ERRORS = [
+  'Effective date must be greater than the current date.',
+  'Effective date already exists.',
+  'Effective date and region combination already exists.',
+]
+
 const isFuturePolicyDate = (effectiveDate: string): boolean =>
   /^\d{4}-\d{2}-\d{2}$/.test(effectiveDate) && effectiveDate > formatBusinessIsoDate()
 
@@ -250,6 +258,11 @@ const AdminPoliciesPage = ({ area }: AdminPoliciesPageProps) => {
   const [editingScheduleId, setEditingScheduleId] = useState<string | null>(null)
 
   const [errorMessage, setErrorMessage] = useState('')
+  // A refused effective date, shown on the field while it still holds that date.
+  const [effectiveDateServerError, setEffectiveDateServerError] = useState<{
+    message: string
+    value: string
+  } | null>(null)
   const [successMessage, setSuccessMessage] = useState('')
   const [isLoadingPolicies, setIsLoadingPolicies] = useState(true)
   const [isMutatingPolicies, setIsMutatingPolicies] = useState(false)
@@ -449,10 +462,17 @@ const AdminPoliciesPage = ({ area }: AdminPoliciesPageProps) => {
     setTouchedFields((current) => ({ ...current, [field]: true }))
   }
 
+  const serverEffectiveDateError = (effectiveDate: string): string | undefined =>
+    effectiveDateServerError?.value === effectiveDate
+      ? fieldErrorText(effectiveDateServerError.message)
+      : undefined
+
   const feeFieldError = (field: PolicyField): string | undefined =>
+    (field === 'feeEffectiveDate' ? serverEffectiveDateError(feeEffectiveDate) : undefined) ??
     getVisibleFieldError(field, fieldErrors, touchedFields, showFeeValidationErrors)
 
   const filFieldError = (field: PolicyField): string | undefined =>
+    (field === 'filEffectiveDate' ? serverEffectiveDateError(filEffectiveDate) : undefined) ??
     getVisibleFieldError(field, fieldErrors, touchedFields, showFilValidationErrors)
 
   const scheduleFieldError = (field: PolicyField): string | undefined =>
@@ -470,6 +490,7 @@ const AdminPoliciesPage = ({ area }: AdminPoliciesPageProps) => {
     setEditingFeePolicyId(null)
     setTouchedFields({})
     setShowFeeValidationErrors(false)
+    setEffectiveDateServerError(null)
   }
 
   const resetFilForm = (): void => {
@@ -478,6 +499,7 @@ const AdminPoliciesPage = ({ area }: AdminPoliciesPageProps) => {
     setEditingFilPolicyId(null)
     setTouchedFields({})
     setShowFilValidationErrors(false)
+    setEffectiveDateServerError(null)
   }
 
   const closePolicyEditor = (): void => {
@@ -490,6 +512,7 @@ const AdminPoliciesPage = ({ area }: AdminPoliciesPageProps) => {
     } else {
       resetFilForm()
     }
+    setErrorMessage('')
     setIsPolicyEditorOpen(false)
   }
 
@@ -666,6 +689,29 @@ const AdminPoliciesPage = ({ area }: AdminPoliciesPageProps) => {
     }
   }, [area, canManageFeePolicy])
 
+  // An effective date refusal shows on that field; any other refusal shows in the notice.
+  const showPolicySaveError = (
+    error: unknown,
+    effectiveDate: string,
+    httpErrorMessage: string,
+    fallbackMessage: string,
+  ): void => {
+    const serverErrors = error instanceof AdminPolicyMutationError ? error.errors : []
+    const dateErrors = serverErrors.filter((message) =>
+      EFFECTIVE_DATE_SERVER_ERRORS.includes(message.trim()),
+    )
+    if (dateErrors.length === 0) {
+      setErrorMessage(policyMutationErrorMessage(error, httpErrorMessage, fallbackMessage))
+      return
+    }
+    setEffectiveDateServerError({ message: dateErrors.join(' '), value: effectiveDate })
+    const otherErrors = serverErrors.filter((message) => !dateErrors.includes(message))
+    if (otherErrors.length > 0) {
+      setErrorMessage(otherErrors.join(' '))
+    }
+    focusFirstInvalidFieldAfterRender(() => policyFieldsRef.current)
+  }
+
   const upsertFeePolicy = async (): Promise<void> => {
     if (isMutatingPolicies) return
     clearNotifications()
@@ -691,6 +737,7 @@ const AdminPoliciesPage = ({ area }: AdminPoliciesPageProps) => {
       return
     }
 
+    setEffectiveDateServerError(null)
     setIsMutatingPolicies(true)
 
     try {
@@ -706,12 +753,11 @@ const AdminPoliciesPage = ({ area }: AdminPoliciesPageProps) => {
       setIsPolicyEditorOpen(false)
     } catch (error) {
       console.error(error)
-      setErrorMessage(
-        policyMutationErrorMessage(
-          error,
-          'Unable to save the fee policy right now. Please check your entry and try again. If this continues, contact support.',
-          'Unable to save the fee policy. Please try again or contact support.',
-        ),
+      showPolicySaveError(
+        error,
+        feeEffectiveDate,
+        'Unable to save the fee policy right now. Please check your entry and try again. If this continues, contact support.',
+        'Unable to save the fee policy. Please try again or contact support.',
       )
     } finally {
       setIsMutatingPolicies(false)
@@ -733,6 +779,7 @@ const AdminPoliciesPage = ({ area }: AdminPoliciesPageProps) => {
     setPolicyBaseline([row.effectiveDate, row.orgUnitNo, row.policyPercentage])
     setEditingFeePolicyId(row.id)
     setShowFeeValidationErrors(false)
+    setEffectiveDateServerError(null)
     setIsPolicyEditorOpen(true)
   }
 
@@ -772,6 +819,7 @@ const AdminPoliciesPage = ({ area }: AdminPoliciesPageProps) => {
       return
     }
 
+    setEffectiveDateServerError(null)
     setIsMutatingPolicies(true)
 
     try {
@@ -788,12 +836,11 @@ const AdminPoliciesPage = ({ area }: AdminPoliciesPageProps) => {
       setIsPolicyEditorOpen(false)
     } catch (error) {
       console.error(error)
-      setErrorMessage(
-        policyMutationErrorMessage(
-          error,
-          'Unable to save the fee in lieu policy right now. Please check your entry and try again. If this continues, contact support.',
-          'Unable to save the fee in lieu policy. Please try again or contact support.',
-        ),
+      showPolicySaveError(
+        error,
+        filEffectiveDate,
+        'Unable to save the fee in lieu policy right now. Please check your entry and try again. If this continues, contact support.',
+        'Unable to save the fee in lieu policy. Please try again or contact support.',
       )
     } finally {
       setIsMutatingPolicies(false)
@@ -806,6 +853,7 @@ const AdminPoliciesPage = ({ area }: AdminPoliciesPageProps) => {
     setPolicyBaseline([row.effectiveDate, row.filPercentage])
     setEditingFilPolicyId(row.id)
     setShowFilValidationErrors(false)
+    setEffectiveDateServerError(null)
     clearNotifications()
     setIsPolicyEditorOpen(true)
   }

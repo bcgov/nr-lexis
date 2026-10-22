@@ -72,10 +72,12 @@ only and does not misrepresent it as audit metadata.
 ## Atomic reviewed saves
 
 The active page calls `POST /api/lexis/rtm/emslogamv/batch` once per Save action. The body is a
-`values` array containing all nonblank reviewed logical cells plus the fixed `$1.00` grades. The
-backend independently rejects a batch whose effective date is not the immediately upcoming
-month. The prior single-row `POST /emslogamv` route is not exposed, so the page cannot bypass the
-atomic batch contract.
+`values` array plus the fixed `$1.00` grades. The first save of a month and the save of an accepted
+replacement workbook send all nonblank reviewed logical cells; an edit of saved values sends only
+the cells whose value differs from the saved value, so a cell that was not edited is never
+rewritten. The backend independently rejects a batch whose effective date is not the immediately
+upcoming month. The prior single-row `POST /emslogamv` route is not exposed, so the page cannot
+bypass the atomic batch contract.
 
 The backend validates the complete request before any write, then expands each logical cell to its
 physical targets:
@@ -112,35 +114,34 @@ new-combination warnings. Final submission expands the reviewed values to direct
 and writes them in one Spring transaction. It does not call the legacy row procedures. If any
 target is not applied or the database write fails, the complete batch transaction rolls back.
 
-After an accepted save, the page removes the upload card, shows a persistent inline confirmation
-above the reviewed values, and keeps those values editable. The confirmation scrolls into view
-when outside the viewport. While a save is pending, the Save values button shows a spinner
-and changes its label to Saving values. Replace file first
-reveals a warning and the upload area together in one card above the unchanged saved review;
-opening it does not select a file or change any values.
-Keep current values closes that temporary state; Escape leaves the warning open. An accepted
-replacement removes the warning,
-shows the selected filename, and previews the workbook over the values on screen without changing
-the database. A rejected replacement remains visible in the upload area and leaves the review
-intact; Cancel restores the last-saved preview, while Save values applies the replacement through
-the same batch update used for manual edits. Removing an accepted replacement file always asks
-first, then restores the review from before that file was selected; a rejected or still-validating
-file is removed without asking. The expanded replacement area is
-browser-only state, so refresh returns to the compact saved review. Save and Cancel remain
-keyboard-focusable but are announced as unavailable until a value changes or a replacement
-workbook has been accepted; the helper text is linked through `aria-describedby`. Editing a value
-clears the saved confirmation. Cancel then offers to save the changes or return the table to the
-last saved values; Discard values uses the danger-tertiary style. Restoring the saved values shows
-a dismissible confirmation that also clears on the next edit. Leaving the page or closing the tab
-with edited values, or with an accepted workbook that is not saved, asks "Discard changes?" first.
-Dismissing a confirmation dialog returns focus to the action that opened it; Discard values and
-Save changes move focus to their result notice. The page header does not show
+After an accepted save, the page reloads the month's stored values, so the review shows what is
+stored, including a value that was cleared on screen but not removed. It removes the upload card,
+shows a persistent inline confirmation above the reviewed values, and keeps those values editable.
+The confirmation scrolls into view when outside the viewport. While a save is pending, the Save
+values button shows a spinner and changes its label to Saving values. Replace file first reveals a
+warning and the upload area together in one card above the unchanged saved review; opening it does
+not select a file or change any values. Keep current values closes that temporary state; Escape
+leaves the warning open. An accepted replacement removes the warning, shows the selected filename,
+and previews the workbook over the values on screen without changing the database. A rejected
+replacement remains visible in the upload area and leaves the review intact; Cancel restores the
+last-saved preview, while Save values applies the replacement through the same batch update used for
+manual edits. Removing an accepted replacement file always asks first, then restores the review from
+before that file was selected; a rejected or still-validating file is removed without asking. The
+expanded replacement area is browser-only state, so refresh returns to the compact saved review.
+Save and Cancel remain keyboard-focusable but are announced as unavailable until a value changes or
+a replacement workbook has been accepted; the helper text is linked through `aria-describedby`.
+Editing a value clears the saved confirmation. Cancel then offers to save the changes or return the
+table to the last saved values; Discard values uses the danger-tertiary style. Restoring the saved
+values shows a dismissible confirmation that also clears on the next edit. Leaving the page or
+closing the tab with edited values, or with an accepted workbook that is not saved, asks "Discard
+changes?" first. Dismissing a confirmation dialog returns focus to the action that opened it;
+Discard values and Save changes move focus to their result notice. The page header does not show
 save time or user until the upcoming month has saved rows and complete audit metadata. After an
 accepted save, and again on navigation or refresh, the page queries the immediately upcoming
 effective month. It displays `Last saved` using the newest `UPDATE_TIMESTAMP` for that month, with
-`ENTRY_TIMESTAMP` as the fallback for legacy rows without update audit data, together with the matching
-user. This is the last durable audit value for the effective month being edited, not the effective
-date itself.
+`ENTRY_TIMESTAMP` as the fallback for legacy rows without update audit data, together with the
+matching user. This is the last durable audit value for the effective month being edited, not the
+effective date itself.
 
 The page restores the editable review and exact previous-month comparison when upcoming-month rows
 exist; otherwise it restores the upload state and omits `Last saved`. The workbook and filename

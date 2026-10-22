@@ -583,7 +583,7 @@ public abstract class OracleRepositorySupport {
 
   protected String getString(ResultSet rs, String column) {
     try {
-      return trim(rs.getString(column));
+      return trim(storedByteText(rs.getString(column)));
     } catch (SQLException ex) {
       throwIfRequiredCursorColumn(column, ex);
       return null;
@@ -596,11 +596,30 @@ public abstract class OracleRepositorySupport {
    */
   protected String getRawString(ResultSet rs, String column) {
     try {
-      return rs.getString(column);
+      return storedByteText(rs.getString(column));
     } catch (SQLException ex) {
       throwIfRequiredCursorColumn(column, ex);
       return null;
     }
+  }
+
+  /**
+   * The driver reads a stored byte from 0x80 to 0xFF as U+FF80 to U+FFFF. This maps each of those
+   * characters to U+0080 to U+00FF, the Latin-1 character with that byte value.
+   */
+  private static String storedByteText(String value) {
+    if (value == null) {
+      return null;
+    }
+    char[] characters = value.toCharArray();
+    boolean mapped = false;
+    for (int index = 0; index < characters.length; index++) {
+      if (characters[index] >= '\uFF80') {
+        characters[index] = (char) (characters[index] & 0xFF);
+        mapped = true;
+      }
+    }
+    return mapped ? new String(characters) : value;
   }
 
   protected LocalDate getLocalDate(ResultSet rs, String column) {

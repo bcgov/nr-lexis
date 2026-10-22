@@ -1886,6 +1886,45 @@ describe('Exemption and Federal Detail Document Actions', () => {
     expect(screen.queryByText('Truck')).not.toBeInTheDocument()
   })
 
+  it('leads the federal tabs and card titles with icons, except Summary of scale', async () => {
+    render(
+      <MemoryRouter initialEntries={['/federal/888']}>
+        <Routes>
+          <Route path="/federal/:applicationNumber" element={<FederalApplicationDetailsPage />} />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    await screen.findByRole('tab', { name: 'Applicant' })
+    for (const tab of screen.getAllByRole('tab')) {
+      expect(tab.querySelector('svg')).toBeTruthy()
+    }
+    const expectCardIcon = (name: string, hasIcon: boolean) => {
+      const heading = screen.getByRole('heading', { name, level: 2 })
+      const icon = heading.querySelector('svg')
+      if (hasIcon) {
+        expect(icon).toHaveAttribute('aria-hidden', 'true')
+        expect(icon).toHaveAttribute('width', '24')
+      } else {
+        expect(icon).toBeNull()
+      }
+    }
+
+    expectCardIcon('Applicant', true)
+    await selectDetailTab('Agent')
+    expectCardIcon('Agent', true)
+    await selectDetailTab('Application')
+    expectCardIcon('Application', true)
+    await selectDetailTab('Items')
+    expectCardIcon('Items', true)
+    expectCardIcon('Packages', true)
+    expect(await screen.findByRole('heading', { name: 'Summary of scale' })).toBeInTheDocument()
+    expectCardIcon('Summary of scale', false)
+    await selectDetailTab('Remarks')
+    expect(await screen.findByText('Review note')).toBeInTheDocument()
+    expectCardIcon('Remarks', true)
+  })
+
   it('loads independent federal detail sections concurrently', async () => {
     let resolveScales: (() => void) | undefined
     let resolveRemarks: (() => void) | undefined

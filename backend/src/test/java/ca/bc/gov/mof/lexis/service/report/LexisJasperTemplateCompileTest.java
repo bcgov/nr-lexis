@@ -132,6 +132,22 @@ class LexisJasperTemplateCompileTest {
   }
 
   @Test
+  void permitLedgerTemplateShouldLabelBlanketOicExemptionType() throws Exception {
+    String template =
+        Files.readString(
+            new ClassPathResource("reports/lexis/LEXIS_PERMIT_LEDGER.jrxml")
+                .getFile()
+                .toPath());
+
+    assertThat(template)
+        .contains(
+            "$P{P_EXEMPTION_TYPE}.equalsIgnoreCase( \"B\" )\n"
+                + "                ?   \"Blanket OIC\"")
+        .contains(
+            "<textFieldExpression><![CDATA[\": \" + $V{CCF6_F_EXEMPT_TYPE}]]></textFieldExpression>");
+  }
+
+  @Test
   void permitLedgerShouldKeepCriteriaValuesOnMatchingLines() throws Exception {
     String template =
         Files.readString(

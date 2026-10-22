@@ -490,12 +490,12 @@ class ExemptionDetailsRpcRepositoryTest {
               assertThat(application.ownerClientLocationCode()).isEqualTo("03");
               assertThat(application.agentClientLocationCode()).isEqualTo("12");
               assertThat(application.applicantTypeCode()).isEqualTo("A");
-              assertThat(application.ownerContactName()).isEqualTo("BOB TURMEL");
+              assertThat(application.ownerContactName()).isEqualTo("OWNER PERSON");
               assertThat(application.agentContactName()).isEqualTo("EXPORT PERSON");
               assertThat(application.ownerCompanyName())
-                  .isEqualTo("NORSKE SKOG CANADA LIMITED");
+                  .isEqualTo("SAMPLE OWNER LTD");
               assertThat(application.agentCompanyName())
-                  .isEqualTo("INTERNATIONAL FOREST PRODUCTS");
+                  .isEqualTo("SAMPLE AGENT LTD");
               assertThat(application.applicationStatusCode()).isEqualTo("EXE");
             });
 
@@ -560,11 +560,11 @@ class ExemptionDetailsRpcRepositoryTest {
     when(cursor.getString("OWNER_CLIENT_LOCATION_CODE")).thenReturn("03");
     when(cursor.getString("AGENT_CLIENT_LOCATION_CODE")).thenReturn("12");
     when(cursor.getString("EXPORT_APPLICANT_TYPE_CODE")).thenReturn("A");
-    when(cursor.getString("OWNER_CONTACT_NAME")).thenReturn("BOB TURMEL");
+    when(cursor.getString("OWNER_CONTACT_NAME")).thenReturn("OWNER PERSON");
     when(cursor.getString("AGENT_CONTACT_NAME")).thenReturn("EXPORT PERSON");
-    when(cursor.getString("OWNER_COMPANY_NAME")).thenReturn("NORSKE SKOG CANADA LIMITED");
+    when(cursor.getString("OWNER_COMPANY_NAME")).thenReturn("SAMPLE OWNER LTD");
     when(cursor.getString("AGENT_COMPANY_NAME"))
-        .thenReturn("INTERNATIONAL FOREST PRODUCTS");
+        .thenReturn("SAMPLE AGENT LTD");
     when(cursor.getString("EXPORT_JURISDICTION_CODE")).thenReturn("P");
     when(cursor.getString("EXPORT_PRODUCT_TYPE_CODE")).thenReturn("T");
     when(cursor.getString("EXPORT_APPLICATION_STATUS_CODE")).thenReturn("EXE");

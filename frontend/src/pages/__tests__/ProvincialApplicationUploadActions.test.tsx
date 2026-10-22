@@ -4,6 +4,7 @@ import { createMemoryRouter, MemoryRouter, Route, RouterProvider, Routes } from 
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { useAuth } from '@/context/auth/useAuth'
 import ProvincialApplicationUploadPage from '@/pages/ProvincialApplicationUpload'
+import { buildValidationIssuesCsv } from '@/pages/ProvincialApplicationUpload/applicationUploadFiles'
 import {
   submitAdminUpload,
   validateApplicationSubmissionUpload,
@@ -174,6 +175,17 @@ describe('Upload applications', () => {
     expect(dropZone).toHaveClass('is-invalid')
     expect(screen.getByRole('heading', { level: 2, name: 'Upload' })).toBeVisible()
     expect(screen.queryByRole('heading', { level: 2, name: 'Review' })).not.toBeInTheDocument()
+  })
+
+  it('reaches the drop zone with one tab stop, past the native file input', async () => {
+    renderPage()
+
+    expect(screen.getByLabelText('Application files')).toHaveAttribute('tabindex', '-1')
+    act(() => screen.getByRole('heading', { level: 2, name: 'Upload' }).focus())
+
+    await userEvent.tab()
+
+    expect(screen.getByRole('button', { name: 'Choose files for Application files' })).toHaveFocus()
   })
 
   it('focuses the page heading when the page opens with focus lost', async () => {
@@ -439,6 +451,7 @@ describe('Upload applications', () => {
 
     const title = await screen.findByRole('heading', { level: 1, name: '2 applications created' })
     expect(title).toHaveFocus()
+    expect(document.title).toBe('2 applications created')
     expect(window.scrollTo).toHaveBeenCalledWith({ top: 0 })
     expect(mockedSubmitAdminUpload).toHaveBeenCalledTimes(2)
     expect(screen.queryByRole('list', { name: 'Upload applications progress' })).toBeNull()
@@ -464,6 +477,7 @@ describe('Upload applications', () => {
     await userEvent.click(uploadMore)
 
     expect(await screen.findByRole('heading', { level: 2, name: 'Upload' })).toBeVisible()
+    expect(document.title).toBe('Upload applications')
     expect(screen.queryByText('test-2026-10-20-01.xml')).not.toBeInTheDocument()
   })
 
@@ -488,6 +502,7 @@ describe('Upload applications', () => {
     expect(
       await screen.findByRole('heading', { level: 1, name: '1 of 2 applications created' }),
     ).toHaveFocus()
+    expect(document.title).toBe('1 of 2 applications created')
     expect(
       screen.getByText('1 file was not created. Check the reason before you upload it again.'),
     ).toBeVisible()
@@ -635,5 +650,38 @@ describe('Upload applications', () => {
 
     expect(await screen.findByRole('dialog', { name: 'Discard changes?' })).toBeVisible()
     expect(router.state.location.pathname).toBe('/provincial/application/upload')
+  })
+})
+
+describe('Upload issues CSV', () => {
+  const csvRows = (...cells: Array<[fileName: string, detail: string]>): string[] => {
+    const href = buildValidationIssuesCsv(
+      cells.map(([fileName, detail], index) => ({ key: String(index), fileName, detail })),
+    )
+    return decodeURIComponent(href.replace('data:text/csv;charset=utf-8,', '')).split('\r\n')
+  }
+
+  it('prefixes cells that start like a formula', () => {
+    expect(
+      csvRows(
+        ['=HYPERLINK("https://example.test").xml', '+1 is not valid.'],
+        ['-test-2026-10-20.xml', '@SUM(1+1) is not valid.'],
+        ['test-2026-10-20.xml', '\t=1+1'],
+        ['test-2026-10-21.xml', '  \n=1+1'],
+      ),
+    ).toEqual([
+      '"Application file","Detail"',
+      '"\'=HYPERLINK(""https://example.test"").xml","\'+1 is not valid."',
+      '"\'-test-2026-10-20.xml","\'@SUM(1+1) is not valid."',
+      '"test-2026-10-20.xml","\'\t=1+1"',
+      '"test-2026-10-21.xml","\'  \n=1+1"',
+    ])
+  })
+
+  it('leaves ordinary cells unchanged', () => {
+    expect(csvRows(['test-2026-10-20.xml', 'Line 2: a "quoted" value = 1.'])).toEqual([
+      '"Application file","Detail"',
+      '"test-2026-10-20.xml","Line 2: a ""quoted"" value = 1."',
+    ])
   })
 })

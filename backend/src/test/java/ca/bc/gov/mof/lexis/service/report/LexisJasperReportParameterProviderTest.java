@@ -151,6 +151,17 @@ class LexisJasperReportParameterProviderTest {
   }
 
   @Test
+  void permitLedgerShouldBindBlanketOicExemptionTypeCode() {
+    LexisReportRequestDto request =
+        new LexisReportRequestDto(Map.of("exemptionType", "B"), "PDF");
+
+    Map<String, Object> parameters =
+        provider.buildParameters(LexisJasperReportDefinition.PERMIT_LEDGER_REPORT, request);
+
+    assertThat(parameters).containsEntry("P_EXEMPTION_TYPE", "B");
+  }
+
+  @Test
   void tenureGenerateTenureReportShouldForceClientFieldsToLegacyDefaults() {
     LexisReportRequestDto request =
         new LexisReportRequestDto(

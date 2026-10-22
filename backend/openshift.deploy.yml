@@ -111,6 +111,9 @@ parameters:
   - name: KEYCLOAK_ISSUER_URI
     description: Optional Keycloak realm issuer URI for machine-to-machine service clients
     value: ""
+  - name: NEXCOL_KEYCLOAK_CLIENT_ID
+    description: Machine client ID accepted from the Keycloak issuer; blank rejects every machine token
+    value: ""
   - name: ALLOWED_ORIGINS
     description: Comma-separated browser origins allowed to call the backend
     value: https://openapi.apps.gov.bc.ca
@@ -232,6 +235,8 @@ objects:
                   value: ${LEXIS_OIDC_CLIENT_ID}
                 - name: KEYCLOAK_ISSUER_URI
                   value: ${KEYCLOAK_ISSUER_URI}
+                - name: NEXCOL_KEYCLOAK_CLIENT_ID
+                  value: ${NEXCOL_KEYCLOAK_CLIENT_ID}
                 - name: ALLOWED_ORIGINS
                   value: ${ALLOWED_ORIGINS}
                 - name: DATABASE_HOST

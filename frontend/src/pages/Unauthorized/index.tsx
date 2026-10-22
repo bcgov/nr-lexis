@@ -1,3 +1,4 @@
+import { useEffect } from 'react'
 import { Button, Column, Grid } from '@carbon/react'
 import { Logout } from '@carbon/icons-react'
 import { useAuth } from '@/context/auth/useAuth'
@@ -5,6 +6,8 @@ import { useTheme } from '@/context/theme/useTheme'
 import logo from '@/assets/BCID_H_rgb_pos.png'
 import reverseLogo from '@/assets/gov-bc-logo-horiz.png'
 import landingImage from '@/assets/landing.jpg'
+
+const ACCESS_NOT_GRANTED_TITLE = 'Access not granted'
 
 const UnauthorizedPage = () => {
   const { capabilities, logout } = useAuth()
@@ -17,6 +20,16 @@ const UnauthorizedPage = () => {
     capabilities.accessDeniedReason === 'INCOMPATIBLE_APPROVER_ROLES'
       ? `${signedInDescription} Contact your administrator.`
       : signedInDescription
+
+  // The heading isn't a PageHeader, so the page names the browser tab itself and gives the
+  // previous name back when it goes away.
+  useEffect(() => {
+    const previousTitle = document.title
+    document.title = ACCESS_NOT_GRANTED_TITLE
+    return () => {
+      document.title = previousTitle
+    }
+  }, [])
 
   return (
     <main
@@ -32,7 +45,7 @@ const UnauthorizedPage = () => {
             </div>
 
             <div className="landing-title-group">
-              <h1 className="landing-title">Access not granted</h1>
+              <h1 className="landing-title">{ACCESS_NOT_GRANTED_TITLE}</h1>
               <p className="landing-subtitle">{description}</p>
             </div>
 

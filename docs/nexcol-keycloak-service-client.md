@@ -56,8 +56,9 @@ TEST and PROD use separate gateway URLs and Keycloak clients.
 An authenticated request must present an unexpired access token issued for the target environment,
 with `lexis:federal-submission:submit` in its `scope` claim, as
 `Authorization: Bearer <access-token>`. The gateway validates issuer, signature, expiry, required
-scope, and audience when configured. LEXIS validates the forwarded token and applies the same
-scope-based authorization.
+scope, and audience when configured. LEXIS validates the forwarded token, requires `typ=Bearer`,
+and binds `azp` (or `client_id` when `azp` is absent) to `NEXCOL_KEYCLOAK_CLIENT_ID`; a conflicting
+`client_id` is rejected. It then applies the same scope-based authorization.
 
 The TEST and PROD deployment workflows idempotently create or check the client
 scope, confidential client, and default scope assignment. Each GitHub environment requires:
@@ -65,7 +66,9 @@ scope, confidential client, and default scope assignment. Each GitHub environmen
 - secrets `KEYCLOAK_SA_CLIENT_ID` and `KEYCLOAK_SA_CLIENT_SECRET` for the least-privilege
   provisioning service account;
 - variable `KEYCLOAK_ISSUER_URI` for the target realm; and
-- variable `NEXCOL_KEYCLOAK_CLIENT_ID` for the approved calling client.
+- variable `NEXCOL_KEYCLOAK_CLIENT_ID` for the approved calling client. The backend accepts
+  machine tokens only from this client; without it, the backend logs a warning at startup and
+  rejects every machine token.
 
 The deployment fails when required configuration is absent, the existing scope/client shape is
 unexpected, or the submission scope is assigned as a realm default or to another client. It does

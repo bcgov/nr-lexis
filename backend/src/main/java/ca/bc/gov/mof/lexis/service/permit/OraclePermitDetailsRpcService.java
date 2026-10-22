@@ -1261,10 +1261,19 @@ public class OraclePermitDetailsRpcService implements PermitDetailsRpcService {
 
   @Override
   public List<PermitGbmsInvoiceHistoryItemRpcResponseDto> getGbmsInvoiceHistory(
-      String receiptNumber, Long permitNumber, boolean readOnlyUser) {
+      String receiptNumber,
+      Long permitNumber,
+      boolean readOnlyUser,
+      Predicate<Long> permitAccess) {
+    // Keeps the requested permit's rows, and receipt-fallback rows from another permit only when
+    // that permit is accessible.
     return repository
         .findGbmsInvoiceHistoryForDisplay(receiptNumber, permitNumber, readOnlyUser)
         .stream()
+        .filter(
+            row ->
+                java.util.Objects.equals(permitNumber, row.permitNumber())
+                    || permitAccess.test(row.permitNumber()))
         .map(this::toGbmsInvoiceHistoryItem)
         .toList();
   }
@@ -1457,8 +1466,7 @@ public class OraclePermitDetailsRpcService implements PermitDetailsRpcService {
     String ownerLocationCode = trimToNull(application.ownerClientLocationCode());
     String agentClientNumber = trimToNull(application.agentClientNumber());
     String agentLocationCode = trimToNull(application.agentClientLocationCode());
-    validatePermitCreationClientBinding(
-        exemption, ownerClientNumber, agentClientNumber, errors);
+    validatePermitCreationClientBinding(exemption, ownerClientNumber, errors);
     if (application.orgUnitNo() == null || application.orgUnitNo() < 1) {
       errors.add("The application region could not be verified.");
     }
@@ -1542,21 +1550,14 @@ public class OraclePermitDetailsRpcService implements PermitDetailsRpcService {
   }
 
   private void validatePermitCreationClientBinding(
-      ValidatedExemptionBinding exemption,
-      String ownerClientNumber,
-      String agentClientNumber,
-      List<String> errors) {
+      ValidatedExemptionBinding exemption, String ownerClientNumber, List<String> errors) {
     if (!EXEMPTION_TYPE_MINISTERIAL.equalsIgnoreCase(exemption.exemptionTypeCode())) {
       return;
     }
 
     String exemptionOwner = trimToNull(exemption.detail().ownerClientNumber());
-    String exemptionAgent = trimToNull(exemption.detail().agentClientNumber());
     if (!java.util.Objects.equals(ownerClientNumber, exemptionOwner)) {
       errors.add("The permit owner does not match the selected exemption.");
-    }
-    if (!java.util.Objects.equals(agentClientNumber, exemptionAgent)) {
-      errors.add("The permit agent does not match the selected exemption.");
     }
   }
 
@@ -1656,7 +1657,7 @@ public class OraclePermitDetailsRpcService implements PermitDetailsRpcService {
     String agentLocationCode = trimToNull(request.agentClientLocation());
 
     if (exemptionBinding != null) {
-      validateClientBinding(exemptionBinding, clientNumber, agentNumber, errors);
+      validateClientBinding(exemptionBinding, clientNumber, errors);
     }
 
     if (application != null) {
@@ -1864,8 +1865,7 @@ public class OraclePermitDetailsRpcService implements PermitDetailsRpcService {
     String targetOwnerClientLocation = targetClients.ownerClientLocation();
     String targetAgentClientNumber = targetClients.agentClientNumber();
     String targetAgentClientLocation = targetClients.agentClientLocation();
-    validateClientBinding(
-        targetExemption, targetOwnerClientNumber, targetAgentClientNumber, exemptionErrors);
+    validateClientBinding(targetExemption, targetOwnerClientNumber, exemptionErrors);
     if (!exemptionErrors.isEmpty()) {
       return failureMutationResponse(exemptionErrors, permitNumber);
     }
@@ -2174,8 +2174,7 @@ public class OraclePermitDetailsRpcService implements PermitDetailsRpcService {
     ValidatedExemptionBinding exemption =
         validateExemptionBinding(current.exemptionNumber(), exemptionErrors);
     if (exemption != null) {
-      validateClientBinding(
-          exemption, current.clientNumber(), current.agentNumber(), exemptionErrors);
+      validateClientBinding(exemption, current.clientNumber(), exemptionErrors);
     }
     if (!exemptionErrors.isEmpty()) {
       return failureMutationResponse(exemptionErrors, permitNumber);
@@ -3129,12 +3128,6 @@ public class OraclePermitDetailsRpcService implements PermitDetailsRpcService {
     } else if (ScaleDomainValidator.exceedsPieces(
         permitScales, scalePieces, current.oicRequestPieces())) {
       errors.add("The total scale pieces exceed the permit request pieces.");
-    }
-    if (current.oicRequestVolume() == null) {
-      errors.add("The permit request volume limit is unavailable.");
-    } else if (ScaleDomainValidator.exceedsVolume(
-        permitScales, normalizedVolume, current.oicRequestVolume())) {
-      errors.add("The total scale volume exceeds the permit request volume.");
     }
     if (!errors.isEmpty()) {
       return failurePersistenceResponse(errors, permitNumber);
@@ -4252,23 +4245,15 @@ public class OraclePermitDetailsRpcService implements PermitDetailsRpcService {
   }
 
   private void validateClientBinding(
-      ValidatedExemptionBinding exemption,
-      String ownerClientNumber,
-      String agentClientNumber,
-      List<String> errors) {
+      ValidatedExemptionBinding exemption, String ownerClientNumber, List<String> errors) {
     if (!EXEMPTION_TYPE_MINISTERIAL.equalsIgnoreCase(exemption.exemptionTypeCode())) {
       return;
     }
 
     String submittedOwner = trimToNull(ownerClientNumber);
-    String submittedAgent = trimToNull(agentClientNumber);
     String exemptionOwner = trimToNull(exemption.detail().ownerClientNumber());
-    String exemptionAgent = trimToNull(exemption.detail().agentClientNumber());
     if (submittedOwner != null && !submittedOwner.equals(exemptionOwner)) {
       errors.add("The permit owner does not match the selected exemption.");
-    }
-    if (submittedAgent != null && !submittedAgent.equals(exemptionAgent)) {
-      errors.add("The permit agent does not match the selected exemption.");
     }
   }
 

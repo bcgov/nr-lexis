@@ -77,6 +77,13 @@ public class ExemptionActivationEligibilityValidator {
     return List.copyOf(errors);
   }
 
+  /** Validates only the approval and expiry dates an active exemption must carry. */
+  public List<String> validateActiveDates(LocalDate approvalDate, LocalDate expiryDate) {
+    List<String> errors = new ArrayList<>();
+    validateDates(approvalDate, expiryDate, errors);
+    return List.copyOf(errors);
+  }
+
   /**
    * Validates the authoritative reference data used by an exemption mutation that is not being
    * persisted as active. Active mutations use {@link #validate(ActivationCandidate)}, which also

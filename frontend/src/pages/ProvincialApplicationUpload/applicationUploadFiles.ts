@@ -87,7 +87,10 @@ export const validationIssues = (files: ApplicationUploadFile[]): ApplicationUpl
   )
 
 export const buildValidationIssuesCsv = (issues: ApplicationUploadIssue[]): string => {
-  const escape = (value: string): string => `"${value.replace(/"/g, '""')}"`
+  const escape = (value: string): string => {
+    const safeValue = value.startsWith('\t') || /^\s*[=+\-@]/.test(value) ? `'${value}` : value
+    return `"${safeValue.replace(/"/g, '""')}"`
+  }
   const rows = [
     ['Application file', 'Detail'],
     ...issues.map((issue) => [issue.fileName, issue.detail]),

@@ -174,7 +174,13 @@ class RegionalAuthorizationRegressionTest {
   static Stream<Map<String, String>> unauthorizedReportRegions() {
     return Stream.of(Map.of(), Map.of("orgUnitNumber", "1908"),
         Map.of("region", "1903", "orgUnitNumber", "1908"),
-        Map.of("region", "1908", "orgUnitNumber", "1903"));
+        Map.of("region", "1908", "orgUnitNumber", "1903"),
+        Map.of("region", ",", "orgUnitNumber", "1903"),
+        Map.of("region", "[]", "orgUnitNumber", "1903"),
+        Map.of("region", ", ,", "orgUnitNumber", "1903"),
+        Map.of("region", "1903", "orgUnitNumber", ","),
+        Map.of("region", "1903", "orgUnitNumber", "[]"),
+        Map.of("region", "1903", "orgUnitNumber", ", ,"));
   }
 
   @Test

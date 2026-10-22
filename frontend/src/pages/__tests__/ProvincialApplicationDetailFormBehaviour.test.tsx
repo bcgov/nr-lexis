@@ -11,11 +11,13 @@ import {
 import { beforeEach, describe, expect, it } from 'vitest'
 import {
   applicationDetail,
+  applicationSummarySnapshot,
   chooseComboBoxOption,
   setupApplicationDetailTests,
   getSummaryComboBox,
   mockedFetchApplicationPackageStatusCodes,
   mockedFetchApplicationReviewOptions,
+  mockedFetchApplicationSummarySnapshot,
   mockedFetchProvincialApplicationOptions,
   mockedFetchProvincialApplicationDetail,
   mockedAddApplicationPackage,
@@ -26,7 +28,9 @@ import {
   mockedUpdateApplicationSummary,
   runFramesBeforeNextRender,
   selectApplicationDetailTab,
+  selectApplicationItemDetailsTile,
   selectApplicationReviewTile,
+  selectApplicationSummaryTile,
 } from './ProvincialApplicationDetailActions.support'
 import ProvincialApplicationDetailsPage from '@/pages/ProvincialApplicationDetails'
 
@@ -184,6 +188,92 @@ describe.sequential('Provincial Application Detail - form behaviour', () => {
 
     await userEvent.type(contactName, 'N')
     expect(tile.queryByText('Contact name is required')).not.toBeInTheDocument()
+  })
+
+  it('saves a stored accented contact name unchanged and refuses newly typed accents', async () => {
+    mockedFetchApplicationSummarySnapshot.mockResolvedValue({
+      ...applicationSummarySnapshot,
+      ownerContactName: 'René Owner',
+    })
+    renderApplicationDetail()
+    const { tile, contactName } = await editApplicantDetails()
+    expect(contactName).toHaveValue('René Owner')
+    const agentContactName = tile.getAllByRole('textbox', { name: 'Contact name' })[1]
+    fireEvent.change(agentContactName, { target: { value: 'Zoë Agent' } })
+
+    await userEvent.click(tile.getByRole('button', { name: 'Save changes' }))
+
+    expect(
+      await tile.findByText(
+        'Contact name contains unsupported characters. Use unaccented letters, numbers, spaces, or standard punctuation.',
+      ),
+    ).toBeInTheDocument()
+    expect(agentContactName).toHaveAttribute('aria-invalid', 'true')
+    expect(contactName).not.toHaveAttribute('aria-invalid', 'true')
+    expect(mockedUpdateApplicationSummary).not.toHaveBeenCalled()
+
+    fireEvent.change(agentContactName, { target: { value: 'New Agent' } })
+    await userEvent.click(tile.getByRole('button', { name: 'Save changes' }))
+
+    await waitFor(() =>
+      expect(mockedUpdateApplicationSummary).toHaveBeenCalledWith(
+        expect.objectContaining({ ownerContactName: 'René Owner', agentContactName: 'New Agent' }),
+      ),
+    )
+  })
+
+  it('shows a refused region on the Region field and focuses it', async () => {
+    mockedUpdateApplicationSummary.mockResolvedValueOnce({
+      valid: false,
+      message: '',
+      applicationNumber: '321',
+      errors: ['The first scale timber mark is not valid for the application region.'],
+      warnings: [],
+    })
+    renderApplicationDetail()
+    const application = within(await selectApplicationSummaryTile())
+    const region = getSummaryComboBox(application, 'Region')
+    await waitFor(() => expect(region).toHaveValue('Coast'))
+    await chooseComboBoxOption(region, 'Interior')
+
+    await userEvent.click(application.getByRole('button', { name: 'Save changes' }))
+
+    expect(
+      await application.findByText(
+        'The first scale timber mark is not valid for the application region',
+      ),
+    ).toBeInTheDocument()
+    expect(region).toHaveAttribute('aria-invalid', 'true')
+    await waitFor(() => expect(region).toHaveFocus())
+    expect(
+      screen.queryByText('The first scale timber mark is not valid for the application region.'),
+    ).not.toBeInTheDocument()
+  })
+
+  it('keeps a refused region in the notice on a Scale save', async () => {
+    mockedUpdateApplicationSummary.mockResolvedValueOnce({
+      valid: false,
+      message: '',
+      applicationNumber: '321',
+      errors: ['The first scale timber mark is not valid for the application region.'],
+      warnings: [],
+    })
+    renderApplicationDetail()
+    const scale = within(await selectApplicationItemDetailsTile())
+    fireEvent.change(await scale.findByLabelText('Application volume (m³)'), {
+      target: { value: '99.9' },
+    })
+
+    await userEvent.click(scale.getByRole('button', { name: 'Save changes' }))
+
+    expect(
+      await screen.findByText(
+        'The first scale timber mark is not valid for the application region.',
+      ),
+    ).toBeInTheDocument()
+    expect(mockedUpdateApplicationSummary).toHaveBeenCalledWith(
+      expect.objectContaining({ saveSource: 'items' }),
+    )
   })
 
   it('returns focus to Edit after a successful save', async () => {

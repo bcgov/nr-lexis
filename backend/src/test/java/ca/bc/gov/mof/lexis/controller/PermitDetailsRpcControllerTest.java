@@ -10,6 +10,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.lenient;
+import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
@@ -47,6 +48,7 @@ import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitScalesForPackageRpcResponseDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitSummaryRpcResponseDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitTotalFeesRpcResponseDto;
 import ca.bc.gov.mof.lexis.security.LexisPrincipalService;
+import ca.bc.gov.mof.lexis.service.permit.OracleAggregateRowLockService;
 import ca.bc.gov.mof.lexis.service.permit.PermitDetailsRpcService;
 import ca.bc.gov.mof.lexis.service.permit.PermitOperationMutex;
 import ca.bc.gov.mof.lexis.service.permit.PermitService;
@@ -61,6 +63,7 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.function.Predicate;
+import java.util.function.Supplier;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -792,7 +795,8 @@ class PermitDetailsRpcControllerTest {
         List.of(
             new PermitGbmsInvoiceHistoryItemRpcResponseDto(
                 "GBMS-1", "", "", "125.00", "2026-03-01", "2026-03-01", "2026-03-02"));
-    when(service.getGbmsInvoiceHistory("RCPT-1", 7000123L, true)).thenReturn(dto);
+    when(service.getGbmsInvoiceHistory(eq("RCPT-1"), eq(7000123L), eq(true), any()))
+        .thenReturn(dto);
 
     TestingAuthenticationToken authentication =
         new TestingAuthenticationToken(
@@ -804,14 +808,40 @@ class PermitDetailsRpcControllerTest {
 
     assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
     assertThat(response.getBody()).isEqualTo(dto);
-    verify(service).getGbmsInvoiceHistory("RCPT-1", 7000123L, true);
+    verify(service).getGbmsInvoiceHistory(eq("RCPT-1"), eq(7000123L), eq(true), any());
+  }
+
+  @Test
+  void gbmsInvoiceHistoryShouldOnlyAcceptFallbackPermitsTheCallerCanAccess() {
+    when(serviceProvider.getIfAvailable()).thenReturn(service);
+    TestingAuthenticationToken authentication = scopedSubmitterWithSavePermit();
+    when(service.getGbmsInvoiceHistory(eq("RCPT-OTHER"), eq(7000123L), eq(false), any()))
+        .thenReturn(List.of());
+
+    controller.getGbmsInvoiceHistory("RCPT-OTHER", 7000123L, authentication);
+
+    verify(provincialAuthorizationService).requirePermit(authentication, 7000123L);
+    @SuppressWarnings("unchecked")
+    org.mockito.ArgumentCaptor<Predicate<Long>> accessCaptor =
+        org.mockito.ArgumentCaptor.forClass(Predicate.class);
+    verify(service)
+        .getGbmsInvoiceHistory(eq("RCPT-OTHER"), eq(7000123L), eq(false), accessCaptor.capture());
+    when(provincialAuthorizationService.canAccessPermit(authentication, 7000888L))
+        .thenReturn(true);
+    when(provincialAuthorizationService.canAccessPermit(authentication, 7000999L))
+        .thenReturn(false);
+    assertThat(accessCaptor.getValue().test(7000888L)).isTrue();
+    assertThat(accessCaptor.getValue().test(7000999L)).isFalse();
+    assertThat(accessCaptor.getValue().test(7000999L)).isFalse();
+    verify(provincialAuthorizationService).canAccessPermit(authentication, 7000999L);
   }
 
   @Test
   void gbmsInvoiceHistoryShouldUseStandardHistoryForApplicationApproverWithReadOnlyRole() {
     when(serviceProvider.getIfAvailable()).thenReturn(service);
     List<PermitGbmsInvoiceHistoryItemRpcResponseDto> dto = List.of();
-    when(service.getGbmsInvoiceHistory("RCPT-1", 7000123L, false)).thenReturn(dto);
+    when(service.getGbmsInvoiceHistory(eq("RCPT-1"), eq(7000123L), eq(false), any()))
+        .thenReturn(dto);
 
     TestingAuthenticationToken authentication =
         authenticationWithRoles(
@@ -822,7 +852,7 @@ class PermitDetailsRpcControllerTest {
 
     assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
     assertThat(response.getBody()).isEqualTo(dto);
-    verify(service).getGbmsInvoiceHistory("RCPT-1", 7000123L, false);
+    verify(service).getGbmsInvoiceHistory(eq("RCPT-1"), eq(7000123L), eq(false), any());
   }
 
   @Test
@@ -896,6 +926,118 @@ class PermitDetailsRpcControllerTest {
       releaseUpdate.countDown();
       executor.shutdownNow();
     }
+  }
+
+  @Test
+  void applicationAdditionsToDifferentPermitsShouldSerializeOnTheSharedExemption()
+      throws Exception {
+    when(serviceProvider.getIfAvailable()).thenReturn(service);
+    CountDownLatch firstEntered = new CountDownLatch(1);
+    CountDownLatch releaseFirst = new CountDownLatch(1);
+    CountDownLatch secondAttempted = new CountDownLatch(1);
+    CountDownLatch secondEntered = new CountDownLatch(1);
+    PermitPersistenceRpcResponseDto firstResult =
+        new PermitPersistenceRpcResponseDto(true, "added", List.of(), List.of(), 7000123L);
+    PermitPersistenceRpcResponseDto secondResult =
+        new PermitPersistenceRpcResponseDto(true, "saved", List.of(), List.of(), 7000124L);
+    when(service.addApplicationsToPermit(7000123L, "1000456", "idir\\jsmith"))
+        .thenAnswer(
+            ignored -> {
+              firstEntered.countDown();
+              if (!releaseFirst.await(2, SECONDS)) {
+                throw new IllegalStateException("Timed out waiting to release the first addition.");
+              }
+              return firstResult;
+            });
+    when(service.updatePermitApplications(7000124L, "1000457", null, "idir\\jsmith"))
+        .thenAnswer(
+            ignored -> {
+              secondEntered.countDown();
+              return secondResult;
+            });
+    TestingAuthenticationToken authentication = authorizedSavePermit();
+    ExecutorService executor = Executors.newFixedThreadPool(2);
+
+    try {
+      Future<ResponseEntity<PermitPersistenceRpcResponseDto>> first =
+          executor.submit(
+              () -> controller.addApplicationsToPermit(7000123L, "1000456", authentication));
+      assertThat(firstEntered.await(2, SECONDS)).isTrue();
+
+      Future<ResponseEntity<PermitPersistenceRpcResponseDto>> second =
+          executor.submit(
+              () -> {
+                secondAttempted.countDown();
+                return controller.updatePermitApplications(
+                    7000124L, "1000457", null, authentication);
+              });
+      assertThat(secondAttempted.await(2, SECONDS)).isTrue();
+      assertThat(secondEntered.await(150, MILLISECONDS)).isFalse();
+
+      releaseFirst.countDown();
+      assertThat(first.get(2, SECONDS).getBody()).isEqualTo(firstResult);
+      assertThat(second.get(2, SECONDS).getBody()).isEqualTo(secondResult);
+      assertThat(secondEntered.getCount()).isZero();
+    } finally {
+      releaseFirst.countDown();
+      executor.shutdownNow();
+    }
+  }
+
+  @ParameterizedTest
+  @ValueSource(
+      strings = {
+        "update-scale-attachment",
+        "update-scale-selection",
+        "add-applications-to-permit",
+        "update-permit-applications"
+      })
+  void scaleAdditionsShouldLockThePermitExemptionRowWithItsApplicationAndPermitRows(
+      String route) {
+    OracleAggregateRowLockService rowLocks = mock(OracleAggregateRowLockService.class);
+    @SuppressWarnings("unchecked")
+    ObjectProvider<OracleAggregateRowLockService> rowLockProvider = mock(ObjectProvider.class);
+    when(rowLockProvider.getIfAvailable()).thenReturn(rowLocks);
+    when(rowLocks.execute(any(), any(), any(), any(), any()))
+        .thenAnswer(invocation -> invocation.<Supplier<?>>getArgument(4).get());
+    PermitOperationMutex rowLockedMutex = new PermitOperationMutex(rowLockProvider);
+    PermitDetailsRpcController rowLockedController =
+        new PermitDetailsRpcController(
+            serviceProvider,
+            sessionService,
+            authorizationService,
+            rowLockedMutex,
+            new ca.bc.gov.mof.lexis.service.permit.ApplicationPermitOperationCoordinator(
+                rowLockedMutex));
+    rowLockedController.setProvincialAuthorizationService(provincialAuthorizationService);
+    rowLockedController.setPermitService(permitService);
+    when(serviceProvider.getIfAvailable()).thenReturn(service);
+    lenient()
+        .when(service.getApplicationNumberForScaleMutation("101"))
+        .thenReturn(Optional.of(1000456L));
+    TestingAuthenticationToken authentication = authorizedSavePermit();
+
+    switch (route) {
+      case "update-scale-attachment" ->
+          rowLockedController.updateScaleAttachment(
+              "101", null, 7000123L, "true", authentication);
+      case "update-scale-selection" ->
+          rowLockedController.updateScaleSelection(
+              7000123L, List.of("101"), List.of(), authentication);
+      case "add-applications-to-permit" ->
+          rowLockedController.addApplicationsToPermit(7000123L, "1000456", authentication);
+      default ->
+          rowLockedController.updatePermitApplications(
+              7000123L, "1000456", null, authentication);
+    }
+
+    verify(rowLocks)
+        .execute(
+            eq(List.of("EX-700")),
+            eq(List.of(1000456L)),
+            eq(List.of()),
+            eq(List.of(7000123L)),
+            any());
   }
 
   @Test

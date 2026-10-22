@@ -524,13 +524,17 @@ const enteredReviewValues = (
   RTM_REVIEW_SPECIES_COLUMNS.flatMap((column) =>
     buildSpeciesReviewRows(previewResult.rows, column).flatMap((row) => {
       const value = parseReviewValue(reviewValues[row.key] ?? '')
-      return typeof value === 'number' ? [{ species: column.key, grade: row.grade, value }] : []
+      return typeof value === 'number'
+        ? [{ key: row.key, species: column.key, grade: row.grade, value }]
+        : []
     }),
   )
 
+// With a saved baseline, only the cells that differ from it are sent.
 const buildReviewedSaveRequests = (
   previewResult: RtmEmsLogAmvUploadPreview,
   reviewValues: Record<string, string>,
+  savedReviewValues: Record<string, string> | null,
 ): RtmEmsLogAmvSaveRequest[] => {
   const retrievalDate = normalizeIsoDate(previewResult.retrievalDate) ?? ''
   const updateDate = normalizeIsoDate(previewResult.updateDate) ?? ''
@@ -544,9 +548,12 @@ const buildReviewedSaveRequests = (
     saveMode: 'update',
   })
 
-  const visibleValues = enteredReviewValues(previewResult, reviewValues).map(
-    ({ species, grade, value }) => request(species, grade, value),
-  )
+  const visibleValues = enteredReviewValues(previewResult, reviewValues)
+    .filter(
+      ({ key, value }) =>
+        !savedReviewValues || value !== parseReviewValue(savedReviewValues[key] ?? ''),
+    )
+    .map(({ species, grade, value }) => request(species, grade, value))
   const fixedValues = RTM_REVIEW_SPECIES_COLUMNS.flatMap((column) =>
     RTM_FIXED_GRADES.map((grade) => request(column.key, grade, 1)),
   )
@@ -1127,11 +1134,8 @@ const RtmEmsLogAmvUploadPage = () => {
     return () => cancelAnimationFrame(frame)
   }, [focusRequest])
 
-  useEffect(() => {
-    const requestId = savedValuesRequestRef.current + 1
-    savedValuesRequestRef.current = requestId
-
-    const loadSavedValues = async () => {
+  const loadSavedValues = useCallback(
+    async (requestId: number) => {
       try {
         const savedRows = await searchRtmEmsLogAmv({
           species: '',
@@ -1181,16 +1185,22 @@ const RtmEmsLogAmvUploadPage = () => {
         setSavedValuesLoadError(true)
         setIsCheckingSavedValues(false)
       }
-    }
+    },
+    [effectiveMonth],
+  )
 
-    void loadSavedValues()
+  useEffect(() => {
+    const requestId = savedValuesRequestRef.current + 1
+    savedValuesRequestRef.current = requestId
+
+    void loadSavedValues(requestId)
 
     return () => {
       if (savedValuesRequestRef.current === requestId) {
         savedValuesRequestRef.current += 1
       }
     }
-  }, [effectiveMonth])
+  }, [loadSavedValues])
 
   useEffect(() => {
     const refreshEffectiveMonth = () => {
@@ -1226,6 +1236,13 @@ const RtmEmsLogAmvUploadPage = () => {
     }
   }, [clearUploadState])
 
+  const hasValidatedUpload =
+    !!selectedUploadFile &&
+    selectedUploadFile.size > 0 &&
+    !!pendingUploadValidation &&
+    pendingUploadValidation.fileName === selectedUploadFile.name &&
+    pendingUploadValidation.fileSize === selectedUploadFile.size
+
   const submitUpload = async (focusFeedback = false) => {
     if (!canManage) {
       setUploadErrors(['You do not have permission to upload average market value rows.'])
@@ -1259,20 +1276,25 @@ const RtmEmsLogAmvUploadPage = () => {
         return
       }
 
-      const saveRequests = buildReviewedSaveRequests(previewResult, reviewValues)
+      const saveRequests = buildReviewedSaveRequests(
+        previewResult,
+        reviewValues,
+        hasValidatedUpload ? null : savedReviewValues,
+      )
       const result = await saveRtmEmsLogAmvBatch({ values: saveRequests })
       if (saveRequestRef.current !== requestId) {
         return
       }
 
-      setSaveFeedbackFocusKey(focusFeedback ? requestId : null)
       if (result.status === 'accepted') {
-        setSavedReviewValues({ ...reviewValues })
-        setSavedPreviewResult(previewResult)
-        setSavedUploadState({
-          valueCount: enteredReviewValues(previewResult, reviewValues).length,
-        })
-        setLastSaved(result.lastSaved ?? null)
+        const savedValuesRequestId = savedValuesRequestRef.current + 1
+        savedValuesRequestRef.current = savedValuesRequestId
+        await loadSavedValues(savedValuesRequestId)
+        if (saveRequestRef.current !== requestId) {
+          return
+        }
+
+        setSaveFeedbackFocusKey(focusFeedback ? requestId : null)
         setSavedNotification('saved')
         setReplacementUploadOpen(false)
         replacementPreviewRef.current = null
@@ -1282,6 +1304,7 @@ const RtmEmsLogAmvUploadPage = () => {
         setUploadInputKey((current) => current + 1)
         setNotification('')
       } else {
+        setSaveFeedbackFocusKey(focusFeedback ? requestId : null)
         setNotification(
           createResultMessage(result.message, result.errors) || RTM_UPLOAD_SYSTEM_ERROR_MESSAGE,
         )
@@ -1306,12 +1329,6 @@ const RtmEmsLogAmvUploadPage = () => {
   )
   const hasUnsavedChanges =
     savedReviewValues !== null && !reviewValuesMatch(reviewValues, savedReviewValues)
-  const hasValidatedUpload =
-    !!selectedUploadFile &&
-    selectedUploadFile.size > 0 &&
-    !!pendingUploadValidation &&
-    pendingUploadValidation.fileName === selectedUploadFile.name &&
-    pendingUploadValidation.fileSize === selectedUploadFile.size
   const requestReplacementFileRemoval = () => {
     // An accepted replacement is on screen, so removing it always asks first.
     if (hasValidatedUpload && previewResult?.status === 'accepted') {
@@ -1399,6 +1416,8 @@ const RtmEmsLogAmvUploadPage = () => {
           id={inputId}
           className="admin-upload-native-input"
           type="file"
+          // The drop zone is the keyboard stop; it opens this input.
+          tabIndex={-1}
           aria-label={inputLabel}
           aria-required="true"
           accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"

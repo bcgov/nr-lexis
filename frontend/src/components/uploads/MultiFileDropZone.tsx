@@ -118,6 +118,8 @@ function MultiFileDropZone({
         id={inputId}
         className="admin-upload-native-input"
         type="file"
+        // The drop zone is the keyboard stop; it opens this input.
+        tabIndex={-1}
         aria-label={inputLabel}
         aria-required={required || undefined}
         aria-invalid={!!invalidText}

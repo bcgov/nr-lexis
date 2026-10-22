@@ -1733,17 +1733,6 @@ $notification-types: 'error', 'info', 'success', 'warning';
   }
 }
 
-.offer-application-link-field {
-  display: flex;
-  min-block-size: var(--cds-layout-size-height-lg, 4rem);
-  flex-direction: column;
-  gap: 0.5rem;
-}
-
-.offer-application-link-field .cds--label {
-  color: var(--csp-text-primary);
-}
-
 .report-config-panel.cds--tile {
   --cds-field: var(--csp-background);
   --cds-field-hover: var(--csp-layer-hover);
@@ -2894,6 +2883,7 @@ $notification-types: 'error', 'info', 'success', 'warning';
   --fds-support-error-bg: var(--cds-notification-background-error, #2c1a1c);
   --fds-support-success-bg: var(--cds-notification-background-success, #1a2a1c);
   --fds-support-info-bg: var(--cds-notification-background-info, #1a2230);
+  --fds-support-warning-bg: #3b3300;
   --fds-notif-info-border: var(--cds-support-info);
   --fds-notif-error-border: var(--cds-support-error);
   --fds-notif-success-border: var(--cds-support-success);

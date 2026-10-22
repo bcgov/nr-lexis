@@ -97,6 +97,7 @@ describe('Protected route guard access', () => {
       await screen.findByRole('heading', { name: "You don't have access to view this page" }),
     ).toBeInTheDocument()
     expect(screen.getByTestId('forbidden-page')).toHaveClass('landing-grid-container')
+    expect(document.title).toBe("You don't have access to view this page")
     expect(screen.getByRole('img', { name: 'Government of British Columbia' })).toBeVisible()
     expect(screen.getByRole('button', { name: 'Go to my landing page' })).toHaveClass(
       'cds--btn--md',

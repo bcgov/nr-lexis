@@ -1337,6 +1337,10 @@ export const ReportsPageContent = () => {
       ...current,
       [selectedReport.id]: {},
     }))
+    setExpandedDestinationCountryReports((current) => ({
+      ...current,
+      [selectedReport.id]: false,
+    }))
     setLaunchErrorMessage('')
     setDownloadedMessage('')
   }

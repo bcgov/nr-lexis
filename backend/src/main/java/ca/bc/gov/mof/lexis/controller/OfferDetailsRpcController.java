@@ -401,6 +401,13 @@ public class OfferDetailsRpcController {
           request.applicationNumber(), null, false, "A valid application number is required.");
     }
 
+    // Record access is checked before the lock so a version conflict never describes a record
+    // the caller cannot see; the serialized operation checks it again.
+    requireOfferApplicationAccess(
+        request.applicationNumber(),
+        findApplication(request.applicationNumber()),
+        authentication,
+        true);
     return operationCoordinator.executeRootCreateApplicationLocalMutation(
         request.applicationNumber(),
         () ->
@@ -499,6 +506,18 @@ public class OfferDetailsRpcController {
       return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
     }
     Long applicationNumber = currentOffer.get().applicationNumber();
+    // Record access is checked before the lock so a version conflict never describes a record
+    // the caller cannot see; the serialized operation checks it again.
+    if (currentForestClientNumber(sessionService, authentication) != null) {
+      if (!canPerform(authentication, "/offerDetails")
+          || !isScopedOfferingClient(authentication, currentOffer.get())) {
+        return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
+      }
+    } else if (canCreateOffer) {
+      requireApplicationAccess(applicationNumber, authentication);
+    } else {
+      return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
+    }
     return operationCoordinator.executeApplicationOfferMutation(
         applicationNumber,
         offerNumber,

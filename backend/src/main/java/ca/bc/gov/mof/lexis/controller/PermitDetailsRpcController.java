@@ -46,8 +46,10 @@ import jakarta.servlet.http.HttpServletRequest;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.Set;
 import java.util.TreeSet;
 import java.util.function.Predicate;
@@ -510,7 +512,11 @@ public class PermitDetailsRpcController {
     requirePermitAccess(permitNumber, authentication);
 
     return ResponseEntity.ok(
-        service.getGbmsInvoiceHistory(receiptNumber, permitNumber, isReadOnlyUser(authentication)));
+        service.getGbmsInvoiceHistory(
+            receiptNumber,
+            permitNumber,
+            isReadOnlyUser(authentication),
+            permitAccessPredicate(authentication)));
   }
 
   @PostMapping("/add-permit")
@@ -715,6 +721,12 @@ public class PermitDetailsRpcController {
   }
 
   private List<String> exemptionNumbersForPermitMutation(
+      PermitDetailsRpcService service, Long permitNumber) {
+    return List.of(
+        requiredExemptionNumber(service.getExemptionNumberForPermitMutation(permitNumber)));
+  }
+
+  private List<String> exemptionNumbersForPermitMutation(
       PermitDetailsRpcService service, PermitMutationRequestDto mutationRequest) {
     Long permitNumber = parsePositiveLong(mutationRequest.permitNumber());
     TreeSet<String> exemptionNumbers = new TreeSet<>(String.CASE_INSENSITIVE_ORDER);
@@ -850,9 +862,10 @@ public class PermitDetailsRpcController {
         applicationNumber ->
             requirePermitApplicationAccess(
                 service, permitNumber, applicationNumber, authentication));
-    return permitOperationMutex.executeAggregate(
-        affectedApplications,
-        List.of(permitNumber),
+    return operationCoordinator.executePermitMutation(
+        permitNumber,
+        () -> exemptionNumbersForPermitMutation(service, permitNumber),
+        () -> affectedApplications,
         () -> {
           requirePermitAccess(permitNumber, authentication);
           requirePermitEditable(permitNumber, authentication);
@@ -914,9 +927,10 @@ public class PermitDetailsRpcController {
         applicationNumber ->
             requirePermitApplicationAccess(
                 service, permitNumber, applicationNumber, authentication));
-    return permitOperationMutex.executeAggregate(
-        affectedApplications,
-        List.of(permitNumber),
+    return operationCoordinator.executePermitMutation(
+        permitNumber,
+        () -> exemptionNumbersForPermitMutation(service, permitNumber),
+        () -> affectedApplications,
         () -> {
           requirePermitAccess(permitNumber, authentication);
           requirePermitEditable(permitNumber, authentication);
@@ -964,9 +978,10 @@ public class PermitDetailsRpcController {
     List<Long> applicationNumbers = parseApplicationNumbers(selectedApplications);
     applicationNumbers.forEach(
         applicationNumber -> requireApplicationAccess(applicationNumber, authentication));
-    return permitOperationMutex.executeAggregate(
-        applicationNumbers,
-        List.of(permitNumber),
+    return operationCoordinator.executePermitMutation(
+        permitNumber,
+        () -> exemptionNumbersForPermitMutation(service, permitNumber),
+        () -> applicationNumbers,
         () -> {
           requirePermitAccess(permitNumber, authentication);
           requirePermitEditable(permitNumber, authentication);
@@ -1055,9 +1070,10 @@ public class PermitDetailsRpcController {
             .toList();
     applicationNumbers.forEach(
         applicationNumber -> requireApplicationAccess(applicationNumber, authentication));
-    return permitOperationMutex.executeAggregate(
-        applicationNumbers,
-        List.of(permitNumber),
+    return operationCoordinator.executePermitMutation(
+        permitNumber,
+        () -> exemptionNumbersForPermitMutation(service, permitNumber),
+        () -> applicationNumbers,
         () -> {
           requirePermitAccess(permitNumber, authentication);
           requirePermitEditable(permitNumber, authentication);
@@ -1678,6 +1694,13 @@ public class PermitDetailsRpcController {
       }
     }
     requireApplicationAccess(applicationNumber, authentication);
+  }
+
+  private Predicate<Long> permitAccessPredicate(Authentication authentication) {
+    Map<Long, Boolean> accessByPermit = new HashMap<>();
+    return permitNumber ->
+        accessByPermit.computeIfAbsent(
+            permitNumber, number -> authorization().canAccessPermit(authentication, number));
   }
 
   private Predicate<Long> applicationAccessPredicate(Authentication authentication) {

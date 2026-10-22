@@ -1082,6 +1082,7 @@ public class ProvincialAuthorizationService {
       if (value.startsWith("[") && value.endsWith("]")) {
         value = value.substring(1, value.length() - 1);
       }
+      boolean named = false;
       for (String part : value.split(",")) {
         String trimmed = part.trim();
         if (trimmed.isEmpty()) {
@@ -1089,9 +1090,14 @@ public class ProvincialAuthorizationService {
         }
         try {
           regions.add(Long.parseLong(trimmed));
+          named = true;
         } catch (NumberFormatException exception) {
           return null;
         }
+      }
+      // A non-blank value without a region would leave the generated report unfiltered.
+      if (!named) {
+        return null;
       }
     }
     return regions;
