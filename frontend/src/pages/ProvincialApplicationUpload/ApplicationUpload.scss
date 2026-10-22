@@ -26,8 +26,18 @@
   white-space: pre-line;
 }
 
+// The file list and the step keep to the page width; a long file name is cut.
+.application-upload-page .admin-upload-workflow {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.application-upload-page .admin-upload-fspts-button-row {
+  flex-wrap: wrap;
+}
+
 .application-upload-files {
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
   gap: 0.5rem;
   max-inline-size: 50%;
   margin: 0;
@@ -219,6 +229,7 @@
 
 .application-upload-result {
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
   gap: 2rem;
 }
 
@@ -280,6 +291,21 @@
   .application-upload-files,
   .application-upload-notice {
     max-inline-size: 100%;
+  }
+
+  // The name takes the first line; the status and remove button share the second.
+  .application-upload-file {
+    flex-wrap: wrap;
+    row-gap: 0.25rem;
+    padding-block: 0.5rem;
+  }
+
+  .application-upload-file__name {
+    flex: 1 0 100%;
+  }
+
+  .application-upload-file__status {
+    margin-inline-end: auto;
   }
 
   .application-upload-review__fields {
