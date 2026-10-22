@@ -1286,7 +1286,6 @@ const RtmEmsLogAmvUploadPage = () => {
         return
       }
 
-      setSaveFeedbackFocusKey(focusFeedback ? requestId : null)
       if (result.status === 'accepted') {
         const savedValuesRequestId = savedValuesRequestRef.current + 1
         savedValuesRequestRef.current = savedValuesRequestId
@@ -1295,6 +1294,7 @@ const RtmEmsLogAmvUploadPage = () => {
           return
         }
 
+        setSaveFeedbackFocusKey(focusFeedback ? requestId : null)
         setSavedNotification('saved')
         setReplacementUploadOpen(false)
         replacementPreviewRef.current = null
@@ -1304,6 +1304,7 @@ const RtmEmsLogAmvUploadPage = () => {
         setUploadInputKey((current) => current + 1)
         setNotification('')
       } else {
+        setSaveFeedbackFocusKey(focusFeedback ? requestId : null)
         setNotification(
           createResultMessage(result.message, result.errors) || RTM_UPLOAD_SYSTEM_ERROR_MESSAGE,
         )
