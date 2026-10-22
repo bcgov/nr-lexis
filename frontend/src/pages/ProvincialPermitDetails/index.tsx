@@ -1320,7 +1320,9 @@ const ProvincialPermitDetailsPage = () => {
   )
   const [editContextLoaded, setEditContextLoaded] = useState(false)
   const [editContextLoadFailed, setEditContextLoadFailed] = useState(false)
-  const [permitDetailRefreshRequired, setPermitDetailRefreshRequired] = useState(false)
+  const [permitDetailRefreshRequired, setPermitDetailRefreshRequired] = useState<
+    false | 'saved' | 'unconfirmed'
+  >(false)
   const [feeOverrideForm, setFeeOverrideForm] = useState<PermitFeeOverrideForm | null>(null)
   const [feeOverrideFieldErrors, setFeeOverrideFieldErrors] =
     useState<PermitFeeOverrideFieldErrors>({})
@@ -2222,9 +2224,11 @@ const ProvincialPermitDetailsPage = () => {
     : ''
   const permitEditContextUnavailableMessage =
     hasPermitMutationPermission && (editContextLoadFailed || permitDetailRefreshRequired)
-      ? permitDetailRefreshRequired
+      ? permitDetailRefreshRequired === 'saved'
         ? 'The permit was saved, but its current details could not be refreshed. Reload before making another change.'
-        : 'Permit edit settings could not be loaded. Editing is unavailable until the data can be retrieved.'
+        : permitDetailRefreshRequired === 'unconfirmed'
+          ? 'Unable to confirm whether the changes were saved. Reload before making another change.'
+          : 'Permit edit settings could not be loaded. Editing is unavailable until the data can be retrieved.'
       : ''
   const permitStatusCode = detail?.permitStatusCode?.trim().toUpperCase()
   const invoiceMaterialLocked = permitStatusCode === 'COM' || permitStatusCode === 'PPD'
@@ -4042,7 +4046,7 @@ const ProvincialPermitDetailsPage = () => {
           setAgentClientData(null)
           setIsClientDataLoading(false)
           setClientDataErrorMessage('')
-          setPermitDetailRefreshRequired(true)
+          setPermitDetailRefreshRequired('saved')
           setEditContextLoaded(false)
           setPermitEditSection(null)
         } else if (!deferStatusTransition) {
@@ -4344,7 +4348,7 @@ const ProvincialPermitDetailsPage = () => {
     } catch (error) {
       if (isLatestRequest()) {
         console.error(error)
-        setPermitDetailRefreshRequired(true)
+        setPermitDetailRefreshRequired(saved ? 'saved' : 'unconfirmed')
         setEditContextLoaded(false)
         setActionResult({
           kind: 'error',
@@ -4474,7 +4478,7 @@ const ProvincialPermitDetailsPage = () => {
     } catch (error) {
       if (isLatestRequest()) {
         console.error(error)
-        setPermitDetailRefreshRequired(true)
+        setPermitDetailRefreshRequired(saved ? 'saved' : 'unconfirmed')
         setEditContextLoaded(false)
         if (saved) {
           // The changes are saved, so the ticks are no longer unsaved. Save and Cancel are gone

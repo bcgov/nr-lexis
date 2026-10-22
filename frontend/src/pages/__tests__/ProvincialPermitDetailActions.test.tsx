@@ -2543,6 +2543,43 @@ describe('Provincial Permit Detail Action Smoke', () => {
     consoleError.mockRestore()
   })
 
+  it('says the changes could not be confirmed when saving application changes gets no answer', async () => {
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => undefined)
+    configureMinisterialActivePermit({ receiptNumber: null, remarks: '' })
+    mockedUpdatePermitApplications.mockRejectedValueOnce(new Error('connection reset'))
+    mockedFetchAvailablePermitApplications.mockResolvedValue(
+      availableApplications({
+        applicationNumber: 'APP-REFRESH',
+        unassignedPieces: 8,
+        unassignedVolume: 12.5,
+      }),
+    )
+    renderPermitDetails()
+
+    await userEvent.click(await screen.findByRole('button', { name: 'Edit permit details' }))
+    await userEvent.click(
+      await screen.findByRole('checkbox', { name: 'Include application APP-REFRESH in permit' }),
+    )
+    await userEvent.click(getActiveSectionSaveButton())
+
+    expect(
+      await screen.findByText(
+        'Unable to confirm whether the application changes were saved. Reload before making another change.',
+      ),
+    ).toBeInTheDocument()
+    expect(document.body).not.toHaveTextContent('The permit was saved')
+    const banner = screen
+      .getByText(
+        'Unable to confirm whether the changes were saved. Reload before making another change.',
+      )
+      .closest('.cds--inline-notification')
+    expect(banner).toHaveTextContent('Editing unavailable')
+    expect(screen.queryByRole('button', { name: 'Edit permit details' })).not.toBeInTheDocument()
+    expect(mockedUpdatePermitApplications).toHaveBeenCalledTimes(1)
+    expect(mockedUpdatePermitDetail).not.toHaveBeenCalled()
+    consoleError.mockRestore()
+  })
+
   it('refreshes the Ministerial remaining volume and candidates after removing an application', async () => {
     const initialDetail = configureMinisterialActivePermit({ receiptNumber: null })
     const refreshedDetail = { ...initialDetail, numberOfPieces: 0, permitVolume: 0 }
