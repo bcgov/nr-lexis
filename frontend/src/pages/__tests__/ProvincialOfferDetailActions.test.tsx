@@ -861,6 +861,61 @@ describe('Provincial Offer Detail Actions', () => {
     expect(screen.getByLabelText('Offer remarks')).toHaveAttribute('maxlength', '254')
   })
 
+  it('saves and withdraws an offer whose stored text holds accented characters', async () => {
+    mockedFetchProvincialOfferDetail.mockResolvedValue({
+      ...offerDetail,
+      companyName: 'Québec Lumber',
+      contactName: 'José Tremblay',
+      offerRemark: 'Résumé',
+      pickupLocation: 'Montréal',
+      offerCondition: 'Livraison à Port Moody',
+    })
+    renderPage()
+
+    await screen.findByRole('heading', { name: 'Offer 81001' })
+    await userEvent.click(await screen.findByRole('button', { name: 'Edit' }))
+    await userEvent.type(screen.getByLabelText('Offer withdrawal date'), '2026-03-10')
+    await userEvent.type(screen.getByLabelText('Offer withdrawal reason'), 'Buyer withdrew')
+    await userEvent.click(screen.getByRole('button', { name: 'Save' }))
+
+    await waitFor(() => {
+      expect(mockedSubmitProvincialOfferUpdate).toHaveBeenCalledWith(
+        expect.objectContaining({
+          companyName: 'Québec Lumber',
+          contactName: 'José Tremblay',
+          offerRemark: 'Résumé',
+          pickupLocation: 'Montréal',
+          offerCondition: 'Livraison à Port Moody',
+          offerWithdrawalDate: '2026-03-10',
+          withdrawReason: 'Buyer withdrew',
+        }),
+      )
+    })
+  })
+
+  it('blocks newly typed accented text beside stored accented text', async () => {
+    mockedFetchProvincialOfferDetail.mockResolvedValue({
+      ...offerDetail,
+      companyName: 'Québec Lumber',
+      pickupLocation: 'Montréal',
+    })
+    renderPage()
+
+    await screen.findByRole('heading', { name: 'Offer 81001' })
+    await userEvent.click(await screen.findByRole('button', { name: 'Edit' }))
+    const pickupLocation = screen.getByLabelText('Pickup location')
+    await userEvent.clear(pickupLocation)
+    await userEvent.type(pickupLocation, 'Québec')
+    await userEvent.click(screen.getByRole('button', { name: 'Save' }))
+
+    await waitFor(() => {
+      expect(
+        screen.getAllByText(/Pickup location contains unsupported characters/).length,
+      ).toBeGreaterThan(0)
+    })
+    expect(mockedSubmitProvincialOfferUpdate).not.toHaveBeenCalled()
+  })
+
   it('blocks excess numeric scale before submitting an offer update', async () => {
     renderPage()
 

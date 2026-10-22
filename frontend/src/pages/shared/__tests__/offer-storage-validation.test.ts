@@ -98,4 +98,61 @@ describe('offer storage validation', () => {
       'Company name contains unsupported characters. Use unaccented letters, numbers, spaces, or standard punctuation.',
     )
   })
+
+  it('accepts accented text equal to the stored value', () => {
+    expect(
+      offerTextStorageFieldError(
+        'Québec Lumber',
+        OFFER_COMPANY_NAME_MAX_LENGTH,
+        'Company name',
+        true,
+        'Québec Lumber',
+      ),
+    ).toBeNull()
+    expect(
+      offerTextStorageFieldError(
+        ' Québec Lumber ',
+        OFFER_COMPANY_NAME_MAX_LENGTH,
+        'Company name',
+        true,
+        'Québec Lumber',
+      ),
+    ).toBeNull()
+  })
+
+  it('refuses accented text that differs from the stored value', () => {
+    const message =
+      'Company name contains unsupported characters. Use unaccented letters, numbers, spaces, or standard punctuation.'
+    expect(
+      offerTextStorageFieldError(
+        'Québec Lumber Ltée',
+        OFFER_COMPANY_NAME_MAX_LENGTH,
+        'Company name',
+        true,
+        'Québec Lumber',
+      ),
+    ).toBe(message)
+    expect(
+      offerTextStorageFieldError(
+        'Québec Lumber',
+        OFFER_COMPANY_NAME_MAX_LENGTH,
+        'Company name',
+        true,
+        'Example Lumber',
+      ),
+    ).toBe(message)
+  })
+
+  it('keeps the length check for accented text equal to the stored value', () => {
+    const stored = `É${'A'.repeat(OFFER_COMPANY_NAME_MAX_LENGTH)}`
+    expect(
+      offerTextStorageFieldError(
+        stored,
+        OFFER_COMPANY_NAME_MAX_LENGTH,
+        'Company name',
+        true,
+        stored,
+      ),
+    ).toBe('Company name must be 52 characters or fewer.')
+  })
 })
