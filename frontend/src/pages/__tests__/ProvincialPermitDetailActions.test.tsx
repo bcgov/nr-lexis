@@ -2317,6 +2317,9 @@ describe('Provincial Permit Detail Action Smoke', () => {
   })
 
   it('explains the empty scale and fees of an ordinary OIC permit with no applications', async () => {
+    mockedUseAuth.mockReturnValue(
+      createTestAuthContext({ canPerform: (action: string) => action !== '/permitsReview' }),
+    )
     configureActivePermit()
     mockedFetchProvincialPermitDetail.mockResolvedValue({
       ...permitDetail,
@@ -2345,6 +2348,31 @@ describe('Provincial Permit Detail Action Smoke', () => {
       "Fees are calculated from the permit's Summary of scale. They appear once an application is selected on the Permit tab.",
     )
     expect(screen.queryByText('Fee calculation details')).not.toBeInTheDocument()
+  })
+
+  it('keeps the receipt number and fee override controls on an empty ordinary OIC permit for an editor', async () => {
+    configureActivePermit()
+    mockedFetchProvincialPermitDetail.mockResolvedValue({
+      ...permitDetail,
+      permitStatusCode: 'ACT',
+      permitStatusDescription: 'Active',
+      receiptNumber: null,
+    })
+    mockedFetchPermitFeeOverrideContext.mockResolvedValue({
+      overrideEnabled: false,
+      overrideFee: '',
+      overrideComment: '',
+      locked: false,
+      lockMessage: '',
+      interior: true,
+    })
+    renderPermitDetails()
+
+    await selectPermitDetailTab('Fees')
+
+    expect(await screen.findByLabelText('Receipt number')).toBeInTheDocument()
+    expect(await screen.findByRole('button', { name: 'Edit fee override' })).toBeEnabled()
+    expect(screen.queryByRole('heading', { name: 'No fees yet' })).not.toBeInTheDocument()
   })
 
   it('counts ordinary OIC permit remarks against 250 characters', async () => {

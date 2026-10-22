@@ -2752,9 +2752,14 @@ const ProvincialPermitDetailsPage = () => {
         : deferredPermitTabLoaded.fees
           ? null
           : '—'
+  // An ordinary permit keeps its receipt number and fee override controls while the user can edit
+  // them; a Ministerial permit shows the empty state regardless.
+  const permitFeeControlsAvailable =
+    !ministerialPermit && (canEditReceiptNumber || canEditFeeOverride)
   const permitFeeShellEmpty =
     !!detail &&
     !blanketOicPermit &&
+    !permitFeeControlsAvailable &&
     !isPermitTablesLoading &&
     feeSummaryStatus === null &&
     !!tabsData &&
