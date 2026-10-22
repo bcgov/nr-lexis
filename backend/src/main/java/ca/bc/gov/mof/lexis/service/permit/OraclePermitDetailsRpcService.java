@@ -4935,20 +4935,15 @@ public class OraclePermitDetailsRpcService implements PermitDetailsRpcService {
         throw new DataRetrievalFailureException(
             "A scale application is required for internal permit invoicing.");
       }
-      ApplicationInfoRow application =
-          applicationByNumber.computeIfAbsent(
-              applicationNumber,
-              key ->
-                  repository
-                      .findApplicationInfoByNumber(key)
-                      .orElseThrow(
-                          () ->
-                              new DataRetrievalFailureException(
-                                  "The scale application was unavailable for invoicing.")));
-      if (!sameIgnoreCase(permit.exemptionNumber(), application.exemptionNumber())) {
-        throw new DataRetrievalFailureException(
-            "The permit exemption does not match its scale applications.");
-      }
+      applicationByNumber.computeIfAbsent(
+          applicationNumber,
+          key ->
+              repository
+                  .findApplicationInfoByNumber(key)
+                  .orElseThrow(
+                      () ->
+                          new DataRetrievalFailureException(
+                              "The scale application was unavailable for invoicing.")));
 
       BigDecimal amount = calculateRoundedFeeForScale(scale, context);
       BigDecimal amvRate =

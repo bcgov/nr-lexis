@@ -5846,6 +5846,45 @@ class OraclePermitDetailsRpcServiceTest {
     assertThat(transition.gbmsInvoice()).isNull();
   }
 
+  @Test
+  void updatePermitShouldInvoiceScalesWhoseApplicationIsOnAnotherExemption() {
+    PermitMutationRow current =
+        withInvoiceContext(
+            permitMutationRow("ACT"),
+            LocalDate.of(2026, 3, 15),
+            "CA",
+            "00077880",
+            "01");
+    when(repository.findPermitMutationByPermitNumber(7000123L))
+        .thenReturn(Optional.of(current));
+    stubTargetMinisterialExemption("EX-700");
+    stubCanadianInvoiceApplication(1835L, "EX-OTHER");
+    stubInvoiceOrchestration();
+    when(repository.updatePermitDetail(
+            any(PermitMutationRow.class), eq("idir\\jsmith"), eq(FEE_MASK_EFFECTIVE_DATE)))
+        .thenReturn(true);
+    when(repository.findScaleDetailsByPermitNumber(7000123L))
+        .thenReturn(List.of(scale("101", "TM-1", "FI", "A", 10.0d, 20L, "7000123", "PKG-1")));
+    when(repository.findFixedExemptionRate("EX-700"))
+        .thenReturn(Optional.of(BigDecimal.valueOf(3.25)));
+    when(repository.findFeePolicyPercentIncrease(LocalDate.of(2026, 3, 15), 1835L))
+        .thenReturn(BigDecimal.valueOf(5));
+    when(repository.findAverageMarketValueByScaleId("101"))
+        .thenReturn(Optional.of(BigDecimal.valueOf(100.25)));
+
+    PermitMutationRpcResponseDto response =
+        service.updatePermit(
+            invoiceMaterialChangeRequest("COM", "CA"), "idir\\jsmith");
+
+    assertThat(response.success()).isTrue();
+    ArgumentCaptor<Transition> transitionCaptor = ArgumentCaptor.forClass(Transition.class);
+    verify(permitInvoiceOrchestrationService)
+        .orchestrate(transitionCaptor.capture(), eq("idir\\jsmith"));
+    InternalInvoiceSnapshot invoice = transitionCaptor.getValue().internalInvoice();
+    assertThat(invoice.exemptionOverrideRate()).isEqualByComparingTo("3.25");
+    assertThat(invoice.details()).hasSize(1);
+  }
+
   @ParameterizedTest
   @CsvSource({
     "1833,EXF", "1834,EXF", "1835,FLM",
