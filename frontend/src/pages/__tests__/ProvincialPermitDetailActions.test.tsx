@@ -1220,7 +1220,6 @@ describe('Provincial Permit Detail Action Smoke', () => {
     for (const tabName of [
       'Permit',
       'Applicant',
-      'Agent',
       'Shipping',
       'Scale',
       'Documents',
@@ -1232,7 +1231,6 @@ describe('Provincial Permit Detail Action Smoke', () => {
     expect(screen.getAllByRole('tab').map((tab) => tab.textContent)).toEqual([
       'Permit',
       'Applicant',
-      'Agent',
       'Shipping',
       'Scale',
       'Documents',
@@ -1327,12 +1325,14 @@ describe('Provincial Permit Detail Action Smoke', () => {
     expect(
       screen.queryByRole('button', { name: /Edit applicant(?: details)?/ }),
     ).not.toBeInTheDocument()
-    await selectPermitDetailTab('Agent')
-    expect(await screen.findByText('Agent Co · 00012345')).toBeInTheDocument()
-    expect(screen.getByText('agent@example.test')).toBeInTheDocument()
-    expect(screen.getByText('(250) 555-3333')).toBeInTheDocument()
+    const applicantPanel = screen.getByRole('tabpanel', { name: 'Applicant' })
+    expect(within(applicantPanel).getByRole('heading', { name: 'Agent' })).toBeInTheDocument()
+    expect(await within(applicantPanel).findByText('Agent Co · 00012345')).toBeInTheDocument()
+    expect(within(applicantPanel).getByText('agent@example.test')).toBeInTheDocument()
+    expect(within(applicantPanel).getByText('(250) 555-3333')).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Edit agent' })).not.toBeInTheDocument()
-    expect(screen.getByRole('tab', { name: 'Agent' })).toHaveAttribute('aria-selected', 'true')
+    expect(screen.queryByRole('tab', { name: 'Agent' })).not.toBeInTheDocument()
+    expect(screen.getByRole('tab', { name: 'Applicant' })).toHaveAttribute('aria-selected', 'true')
     expect(screen.getByRole('tab', { name: 'Permit' })).toHaveAttribute('aria-selected', 'false')
     expect(mockedFetchApplicationClientData).toHaveBeenCalledWith('00067890', '03', {
       permitNumber: '777',
@@ -5613,7 +5613,7 @@ describe('Provincial Permit Detail Action Smoke', () => {
     expect(screen.queryByRole('tab', { name: 'Invoices' })).not.toBeInTheDocument()
   })
 
-  it('hides absent agent and GBMS tabs while keeping later panels aligned', async () => {
+  it('hides the absent Agent card and GBMS tab while keeping later panels aligned', async () => {
     mockedFetchProvincialPermitDetail.mockResolvedValue({
       ...permitDetail,
       applicantClientNumber: null,
@@ -5625,6 +5625,10 @@ describe('Provincial Permit Detail Action Smoke', () => {
     expect(await screen.findByRole('tab', { name: 'Permit' })).toBeInTheDocument()
     expect(screen.queryByRole('tab', { name: 'Agent' })).not.toBeInTheDocument()
     expect(screen.queryByRole('tab', { name: 'GBMS' })).not.toBeInTheDocument()
+
+    await selectPermitDetailTab('Applicant')
+    expect(await screen.findByRole('heading', { name: 'Applicant details' })).toBeInTheDocument()
+    expect(screen.queryByRole('heading', { name: 'Agent' })).not.toBeInTheDocument()
 
     await selectPermitDetailTab('Documents')
     expect(
@@ -9501,7 +9505,6 @@ describe('Provincial Permit Detail Action Smoke', () => {
     await selectPermitDetailTab('Owner')
     expect(await screen.findByText('Agent Co · 00070001')).toBeInTheDocument()
     expect(screen.getByText('04')).toBeInTheDocument()
-    await selectPermitDetailTab('Agent')
     expect(await screen.findByText('Agent Co · 00070002')).toBeInTheDocument()
     expect(screen.getByText('05')).toBeInTheDocument()
   })

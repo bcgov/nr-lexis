@@ -253,7 +253,6 @@ type PermitActionResultSource =
   | 'permit'
   | 'applications'
   | 'applicant'
-  | 'agent'
   | 'shipping'
   | 'fees'
   | 'email'
@@ -266,7 +265,6 @@ const SECTION_SAVE_RESULT_SOURCES = new Set<PermitActionResultSource>([
   'permit',
   'applications',
   'applicant',
-  'agent',
   'shipping',
   'fees',
   'scale-summary',
@@ -393,7 +391,6 @@ const SHIPPING_PERMIT_FIELDS = new Set<PermitDetailFormField>([
 const PERMIT_DETAIL_TABS = [
   { id: 'permit', label: 'Permit', icon: Certificate },
   { id: 'owner', label: 'Applicant', icon: Enterprise },
-  { id: 'agent', label: 'Agent', icon: undefined },
   { id: 'shipping', label: 'Shipping', icon: EarthFilled },
   { id: 'items', label: 'Scale', icon: Box },
   { id: 'documents', label: 'Documents', icon: DocumentAttachment },
@@ -419,7 +416,7 @@ type PermitEditSection =
 const PERMIT_EDIT_SECTION_TABS: Record<PermitEditSection, readonly PermitDetailTabId[]> = {
   // The Fees tab holds the permit's receipt number.
   permit: ['permit', 'fees'],
-  applicant: ['owner', 'agent'],
+  applicant: ['owner'],
   shipping: ['shipping'],
   feeOverride: ['fees'],
   scaleSelection: ['items'],
@@ -1185,11 +1182,7 @@ const withPermitMutationResult = (
 
 /** The tab a section's save reports in: the one it was saved from. */
 const permitSaveResultSource = (tab: PermitDetailTabId): PermitActionResultSource =>
-  tab === 'owner'
-    ? 'applicant'
-    : tab === 'agent' || tab === 'shipping' || tab === 'fees'
-      ? tab
-      : 'permit'
+  tab === 'owner' ? 'applicant' : tab === 'shipping' || tab === 'fees' ? tab : 'permit'
 
 /** A section's save, named for what it saved. Warnings or a follow-up make it a warning. */
 const sectionSaveResult = (
@@ -1924,9 +1917,7 @@ const ProvincialPermitDetailsPage = () => {
   const usesReviewedPermitFlow = blanketOicPermit || ministerialPermit
   const hasGbmsHistory = (tabsData?.gbmsEvents.length ?? 0) > 0 || Boolean(gbmsErrorMessage)
   const permitDetailTabs = PERMIT_DETAIL_TABS.filter(
-    ({ id }) =>
-      (id !== 'agent' || (hasPermitAgent && !usesReviewedPermitFlow)) &&
-      (id !== 'gbms' || hasGbmsHistory),
+    ({ id }) => id !== 'gbms' || hasGbmsHistory,
   ).map((tab) => ({
     ...tab,
     label: usesReviewedPermitFlow && tab.id === 'owner' ? 'Applicant' : tab.label,
@@ -1934,8 +1925,7 @@ const ProvincialPermitDetailsPage = () => {
   const activePermitTabId = permitDetailTabs.some(({ id }) => id === selectedPermitTabId)
     ? selectedPermitTabId
     : 'permit'
-  const shouldLoadClientData =
-    clientDataRequested || activePermitTabId === 'owner' || activePermitTabId === 'agent'
+  const shouldLoadClientData = clientDataRequested || activePermitTabId === 'owner'
 
   useEffect(() => {
     let isCancelled = false
@@ -3764,7 +3754,7 @@ const ProvincialPermitDetailsPage = () => {
   }
   const openPermitTab = (tabId: PermitDetailTabId): void => {
     selectPermitTab(tabId)
-    if (tabId === 'owner' || tabId === 'agent') {
+    if (tabId === 'owner') {
       setClientDataRequested(true)
     }
     if (tabId === 'fees' || tabId === 'documents') {
@@ -8063,6 +8053,19 @@ const ProvincialPermitDetailsPage = () => {
                         )}
                       </Column>
                     )}
+                    {!ownerEditMode && !usesReviewedPermitFlow && hasPermitAgent && (
+                      <Column sm={4} md={8} lg={16}>
+                        <PermitClientTile
+                          title="Agent"
+                          kind="agent"
+                          clientNumber={detail.applicantClientNumber}
+                          locationCode={detail.agentClientLocationCode}
+                          clientData={agentClientData}
+                          isLoading={isClientDataLoading}
+                          errorMessage=""
+                        />
+                      </Column>
+                    )}
                     {ownerEditMode && permitForm && (
                       <Column sm={4} md={8} lg={16}>
                         <Tile>
@@ -8104,49 +8107,6 @@ const ProvincialPermitDetailsPage = () => {
                     )}
                   </Grid>
                 </TabPanel>
-                {hasPermitAgent && !usesReviewedPermitFlow && (
-                  <TabPanel key="agent" className="application-detail-tab-panel">
-                    <Grid
-                      fullWidth
-                      ref={permitEditSections.sectionRef('applicant', 'newPermit')}
-                      className="application-detail-tab-grid"
-                    >
-                      {ownerEditMode && permitForm ? (
-                        <Column sm={4} md={8} lg={16}>
-                          <Tile>
-                            <DetailCardTitle>Edit agent</DetailCardTitle>
-                            {renderSectionSaveResult('agent')}
-                            <RequiredFieldsLegend />
-                            {renderPermitClientEditor('agent', invoiceMaterialLocked)}
-                            {renderPermitClientEditActions()}
-                          </Tile>
-                        </Column>
-                      ) : (
-                        <Column sm={4} md={8} lg={16}>
-                          <PermitClientTile
-                            title="Agent"
-                            kind="agent"
-                            headerAction={
-                              canEditPermitClients && !isEditingPermit ? (
-                                <Button kind="tertiary" size="md" onClick={startPermitClientEdit}>
-                                  Edit agent
-                                </Button>
-                              ) : undefined
-                            }
-                            result={renderSectionSaveResult('agent')}
-                            clientNumber={detail.applicantClientNumber}
-                            locationCode={detail.agentClientLocationCode}
-                            clientData={agentClientData}
-                            isLoading={isClientDataLoading}
-                            errorMessage={
-                              activePermitTabId === 'agent' ? clientDataErrorMessage : ''
-                            }
-                          />
-                        </Column>
-                      )}
-                    </Grid>
-                  </TabPanel>
-                )}
                 <TabPanel key="shipping" className="application-detail-tab-panel">
                   <Grid
                     fullWidth
