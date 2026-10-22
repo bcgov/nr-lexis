@@ -177,8 +177,8 @@ objects:
             runAsNonRoot: true
           initContainers:
             - name: ${NAME}-backend-init
-              image: ghcr.io/bcgov/nr-forest-client/common@sha256:3df2482866b1b7fa37726469ac90f73a820e36f0149029b1af7a3e4ac09ee129
-              imagePullPolicy: IfNotPresent
+              image: ghcr.io/bcgov/nr-forest-client/common:prod
+              imagePullPolicy: Always
               env:
                 - name: ORACLEDB_HOST
                   value: ${DATABASE_HOST}
