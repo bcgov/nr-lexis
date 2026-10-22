@@ -5,6 +5,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.List;
 import org.junit.jupiter.api.Test;
 
 class TestDeploymentTopologyConfigTest {
@@ -479,6 +480,22 @@ class TestDeploymentTopologyConfigTest {
             "LEXIS_MAIL_REGION_RSI_ADDRESS:"
                 + " ${{ secrets.lexis_mail_region_rsi_address }}");
     assertThat(frontendBeforeDeploy).doesNotContain("LEXIS_PROD_RTM_ONLY");
+    String vanityValidation =
+        between(
+            backendJob,
+            "      - name: Validate PROD vanity Route configuration",
+            "      - uses: actions/checkout@");
+    String vanityRouteStep =
+        frontendJob.substring(frontendJob.indexOf("      - name: Vanity Route (PROD)"));
+    for (String vanitySecret :
+        List.of(
+            "${{ secrets.vanity_tls_certificate }}",
+            "${{ secrets.vanity_tls_key }}",
+            "${{ secrets.vanity_tls_ca_certificate }}")) {
+      assertThat(occurrences(workflow, vanitySecret)).isEqualTo(2);
+      assertThat(vanityValidation).containsOnlyOnce(vanitySecret);
+      assertThat(vanityRouteStep).containsOnlyOnce(vanitySecret);
+    }
     assertThat(frontendJob)
         .doesNotContain(
             "LEXIS_MAIL_FROM",
@@ -557,6 +574,20 @@ class TestDeploymentTopologyConfigTest {
             "for setting in VANITY_HOST VANITY_TLS_CERTIFICATE VANITY_TLS_KEY"
                 + " VANITY_TLS_CA_CERTIFICATE")
         .doesNotContain("inputs.target == 'prod' && env.VANITY_HOST != ''");
+
+    String backendJob = workflowJob(workflow, "backend", "frontend");
+    String stepsBeforeProvisioning =
+        between(
+            backendJob,
+            "      - name: Validate release images",
+            "      - name: Ensure Keycloak scopes and NEXCOL client");
+    assertThat(stepsBeforeProvisioning)
+        .contains(
+            "      - name: Validate PROD vanity Route configuration\n"
+                + "        if: ${{ inputs.target == 'prod' }}",
+            "VANITY_HOST: ${{ vars.VANITY_HOST }}");
+    assertThat(workflowJob(workflow, "frontend", "deployment-result"))
+        .doesNotContain("Validate PROD vanity Route configuration");
   }
 
   @Test

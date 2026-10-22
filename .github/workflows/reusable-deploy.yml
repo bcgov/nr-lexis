@@ -209,6 +209,23 @@ jobs:
             fi
           done
 
+      # Check the PROD vanity Route settings before the backend rolls out too.
+      - name: Validate PROD vanity Route configuration
+        if: ${{ inputs.target == 'prod' }}
+        env:
+          VANITY_HOST: ${{ vars.VANITY_HOST }}
+          VANITY_TLS_CERTIFICATE: ${{ secrets.vanity_tls_certificate }}
+          VANITY_TLS_KEY: ${{ secrets.vanity_tls_key }}
+          VANITY_TLS_CA_CERTIFICATE: ${{ secrets.vanity_tls_ca_certificate }}
+        run: |
+          set -euo pipefail
+          for setting in VANITY_HOST VANITY_TLS_CERTIFICATE VANITY_TLS_KEY VANITY_TLS_CA_CERTIFICATE; do
+            if [ -z "${!setting}" ]; then
+              echo "::error title=Missing PROD vanity Route configuration::${setting} must be configured in the PROD GitHub Environment."
+              exit 1
+            fi
+          done
+
       - uses: actions/checkout@v6
         with:
           persist-credentials: false
@@ -350,21 +367,6 @@ jobs:
           cp frontend/openshift.deploy.yml "$RUNNER_TEMP/lexis-deploy/frontend.yml"
           cp frontend/openshift.route.yml "$RUNNER_TEMP/lexis-deploy/route.yml"
           cp frontend/openshift.vanity-route.yml "$RUNNER_TEMP/lexis-deploy/vanity-route.yml"
-
-      - name: Validate PROD vanity Route configuration
-        if: ${{ inputs.target == 'prod' }}
-        env:
-          VANITY_TLS_CERTIFICATE: ${{ secrets.vanity_tls_certificate }}
-          VANITY_TLS_KEY: ${{ secrets.vanity_tls_key }}
-          VANITY_TLS_CA_CERTIFICATE: ${{ secrets.vanity_tls_ca_certificate }}
-        run: |
-          set -euo pipefail
-          for setting in VANITY_HOST VANITY_TLS_CERTIFICATE VANITY_TLS_KEY VANITY_TLS_CA_CERTIFICATE; do
-            if [ -z "${!setting}" ]; then
-              echo "::error title=Missing PROD vanity Route configuration::${setting} must be configured in the PROD GitHub Environment."
-              exit 1
-            fi
-          done
 
       - uses: bcgov/action-deployer-openshift@bb9d143f4f03187239580c17c4b77da04cdb6e66 # v4.2.2
         id: deploy
