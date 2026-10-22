@@ -87,6 +87,8 @@ const renderPage = () => {
   return router
 }
 
+const fieldValue = (label: string) => screen.getByText(label, { selector: 'dt' }).nextElementSibling
+
 const editButton = () => screen.getByRole('button', { name: 'Edit' })
 
 const startEditing = async () => {
@@ -162,7 +164,8 @@ describe('Provincial offer detail form behaviour', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Save' }))
 
     expect(await screen.findByText('Validation error')).toBeInTheDocument()
-    expect(screen.getByLabelText('Company')).not.toHaveAttribute('aria-invalid', 'true')
+    expect(screen.queryByLabelText('Company')).not.toBeInTheDocument()
+    expect(document.querySelector('[aria-invalid="true"]')).not.toBeInTheDocument()
     expect(mockedSubmitProvincialOfferUpdate).not.toHaveBeenCalled()
   })
 
@@ -244,7 +247,8 @@ describe('Provincial offer detail form behaviour', () => {
     await userEvent.click(await screen.findByRole('button', { name: 'Discard changes' }))
 
     await waitFor(() => expect(editButton()).toHaveFocus())
-    expect(screen.getByLabelText('Offer remarks')).toHaveValue('Original remark')
+    expect(screen.queryByLabelText('Offer remarks')).not.toBeInTheDocument()
+    expect(fieldValue('Offer remarks')).toHaveTextContent('Original remark')
     expect(screen.queryByRole('button', { name: 'Save' })).not.toBeInTheDocument()
   })
 

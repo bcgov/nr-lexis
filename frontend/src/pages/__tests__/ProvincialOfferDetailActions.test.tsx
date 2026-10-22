@@ -79,6 +79,8 @@ const LocationDisplay = () => {
   return <div data-testid="location">{`${location.pathname}${location.search}`}</div>
 }
 
+const fieldValue = (label: string) => screen.getByText(label, { selector: 'dt' }).nextElementSibling
+
 const renderPage = () =>
   render(
     <MemoryRouter initialEntries={['/provincial/offers/81001']}>
@@ -204,13 +206,14 @@ describe('Provincial Offer Detail Actions', () => {
     renderPage()
 
     await screen.findByRole('heading', { name: 'Offer 81001' })
-    expect(screen.getByLabelText('TEAC review date')).toHaveValue('2026-03-05')
-    expect(screen.getByLabelText('TEAC review date')).toBeDisabled()
+    expect(screen.queryByLabelText('TEAC review date')).not.toBeInTheDocument()
+    expect(fieldValue('TEAC review date')).toHaveTextContent('Mar 5, 2026')
     await userEvent.click(await screen.findByRole('button', { name: 'Edit' }))
+    expect(screen.getByLabelText('TEAC review date')).toHaveValue('2026-03-05')
     expect(screen.getByLabelText('TEAC review date')).not.toBeDisabled()
 
-    const companyInput = screen.getByLabelText('Company')
-    expect(companyInput).toHaveAttribute('readonly')
+    expect(screen.queryByLabelText('Company')).not.toBeInTheDocument()
+    expect(fieldValue('Company')).toHaveTextContent('Original Buyer')
 
     const amountInput = screen.getByLabelText('Offer amount ($/m³)')
     await userEvent.clear(amountInput)
@@ -487,7 +490,8 @@ describe('Provincial Offer Detail Actions', () => {
     renderPage()
 
     await screen.findByRole('heading', { name: 'Offer 81001' })
-    expect(screen.getByLabelText('Application/package volume (m³)')).toHaveValue('12.2')
+    expect(fieldValue('Application/package volume (m³)')).toHaveTextContent('12.2')
+    expect(fieldValue('Offer volume (m³)')).toHaveTextContent('12.1')
     await userEvent.click(await screen.findByRole('button', { name: 'Edit' }))
     const offerVolumeInput = screen.getByLabelText('Offer volume (m³)')
     await userEvent.clear(offerVolumeInput)
@@ -571,7 +575,7 @@ describe('Provincial Offer Detail Actions', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Save' }))
 
     await waitFor(() => expect(mockedFetchProvincialOfferDetail).toHaveBeenCalledTimes(2))
-    expect(await screen.findByLabelText('Offer volume (m³)')).toHaveValue('95.5')
+    await waitFor(() => expect(fieldValue('Offer volume (m³)')).toHaveTextContent(/^95\.5$/))
     expect(mockedSubmitProvincialOfferUpdate).toHaveBeenNthCalledWith(
       1,
       expect.objectContaining({ offerVolume: '95.54' }),
@@ -650,8 +654,10 @@ describe('Provincial Offer Detail Actions', () => {
 
     renderPage()
 
-    expect(await screen.findByDisplayValue('Original Buyer')).toBeInTheDocument()
+    expect(await screen.findByText('Original Buyer')).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Edit' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('textbox')).not.toBeInTheDocument()
+    expect(screen.queryByRole('combobox')).not.toBeInTheDocument()
     expect(screen.queryByLabelText('Offer remarks')).not.toBeInTheDocument()
     expect(mockedSubmitProvincialOfferUpdate).not.toHaveBeenCalled()
   })
@@ -713,10 +719,38 @@ describe('Provincial Offer Detail Actions', () => {
       'href',
       '/provincial/application/1000456',
     )
-    expect(await screen.findByLabelText('Application/package volume (m³)')).toHaveDisplayValue(
-      '45.5',
-    )
-    expect(screen.getByLabelText('Species/grade')).toHaveDisplayValue('FI/HE/LUM')
+    expect(fieldValue('Application/package volume (m³)')).toHaveTextContent('45.5')
+    expect(fieldValue('Species/grade')).toHaveTextContent('FI/HE/LUM')
+  })
+
+  it('shows an empty value as a dash that reads as Not provided', async () => {
+    mockedFetchProvincialOfferDetail.mockResolvedValue({
+      ...offerDetail,
+      speciesGradeCode: null,
+      offerVolume: null,
+      pickupLocation: null,
+      offerCondition: null,
+      offerWithdrawalDate: null,
+      withdrawReason: null,
+    })
+    renderPage()
+
+    await screen.findByRole('heading', { name: 'Offer 81001' })
+    for (const label of [
+      'Species/grade',
+      'Offer volume (m³)',
+      'Pickup location',
+      'Offer conditions / remarks',
+      'Offer withdrawal date',
+      'Offer withdrawal reason',
+    ]) {
+      expect(fieldValue(label)).toHaveTextContent('—Not provided')
+    }
+    expect(fieldValue('Offer amount ($/m³)')).toHaveTextContent('12500')
+    expect(fieldValue('Offer received date')).toHaveTextContent('Mar 2, 2026')
+    expect(fieldValue('Fair market value')).toHaveTextContent(/^No$/)
+    expect(fieldValue('Valid offer')).toHaveTextContent(/^Yes$/)
+    expect(screen.queryByRole('textbox')).not.toBeInTheDocument()
   })
 
   it('shows read-only offer scale details without opening the parent application', async () => {
@@ -798,8 +832,6 @@ describe('Provincial Offer Detail Actions', () => {
     expect(screen.getByLabelText('Offer conditions / remarks')).toHaveAttribute('maxlength', '254')
     expect(screen.getByLabelText('Offer withdrawal reason')).toHaveAttribute('maxlength', '254')
     expect(screen.getByLabelText('Offer remarks')).toHaveAttribute('maxlength', '254')
-    expect(screen.getByLabelText('Company')).toHaveAttribute('maxlength', '52')
-    expect(screen.getByLabelText('Contact name')).toHaveAttribute('maxlength', '120')
   })
 
   it('blocks excess numeric scale before submitting an offer update', async () => {
@@ -831,16 +863,17 @@ describe('Provincial Offer Detail Actions', () => {
     renderPage()
 
     await screen.findByRole('heading', { name: 'Offer 81001' })
-    expect(screen.queryByLabelText('TEAC review date')).not.toBeInTheDocument()
+    expect(screen.queryByText('TEAC review date')).not.toBeInTheDocument()
     await userEvent.click(await screen.findByRole('button', { name: 'Edit' }))
-    expect(screen.queryByLabelText('TEAC review date')).not.toBeInTheDocument()
+    expect(screen.queryByText('TEAC review date')).not.toBeInTheDocument()
 
-    expect(screen.getByLabelText('Offer amount ($/m³)')).not.toHaveAttribute('readonly')
-    expect(screen.getByLabelText('Pickup location')).not.toHaveAttribute('readonly')
-    expect(screen.getByLabelText('Company')).toHaveAttribute('readonly')
-    expect(screen.getByLabelText('Offer withdrawal reason')).toHaveAttribute('readonly')
-    expect(screen.queryByLabelText('Offer remarks')).not.toBeInTheDocument()
-    expect(screen.getByRole('combobox', { name: 'Fair market value' })).toBeDisabled()
+    expect(screen.getByLabelText('Offer amount ($/m³)')).toBeInTheDocument()
+    expect(screen.getByLabelText('Pickup location')).toBeInTheDocument()
+    expect(screen.queryByLabelText('Company')).not.toBeInTheDocument()
+    expect(screen.queryByLabelText('Offer withdrawal reason')).not.toBeInTheDocument()
+    expect(screen.queryByText('Offer remarks')).not.toBeInTheDocument()
+    expect(screen.queryByRole('combobox', { name: 'Fair market value' })).not.toBeInTheDocument()
+    expect(fieldValue('Fair market value')).toHaveTextContent(/^No$/)
 
     const conditionsInput = screen.getByLabelText('Offer conditions / remarks')
     await userEvent.clear(conditionsInput)
@@ -872,11 +905,11 @@ describe('Provincial Offer Detail Actions', () => {
     await userEvent.click(await screen.findByRole('button', { name: 'Edit' }))
 
     const offerCondition = screen.getByLabelText('Offer conditions / remarks')
-    expect(offerCondition).not.toHaveAttribute('readonly')
-    expect(screen.getByLabelText('Offer withdrawal reason')).not.toHaveAttribute('readonly')
-    expect(screen.getByLabelText('Offer amount ($/m³)')).toHaveAttribute('readonly')
-    expect(screen.getByLabelText('Offer volume (m³)')).toHaveAttribute('readonly')
-    expect(screen.getByLabelText('Pickup location')).toHaveAttribute('readonly')
+    expect(screen.getByLabelText('Offer withdrawal reason')).toBeInTheDocument()
+    expect(screen.queryByLabelText('Offer amount ($/m³)')).not.toBeInTheDocument()
+    expect(screen.queryByLabelText('Offer volume (m³)')).not.toBeInTheDocument()
+    expect(screen.queryByLabelText('Pickup location')).not.toBeInTheDocument()
+    expect(fieldValue('Pickup location')).toHaveTextContent('Port Moody')
 
     await userEvent.clear(offerCondition)
     await userEvent.type(offerCondition, 'Withdraw if loading conditions cannot be met')

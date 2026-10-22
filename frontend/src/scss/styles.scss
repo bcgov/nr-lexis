@@ -1733,17 +1733,6 @@ $notification-types: 'error', 'info', 'success', 'warning';
   }
 }
 
-.offer-application-link-field {
-  display: flex;
-  min-block-size: var(--cds-layout-size-height-lg, 4rem);
-  flex-direction: column;
-  gap: 0.5rem;
-}
-
-.offer-application-link-field .cds--label {
-  color: var(--csp-text-primary);
-}
-
 .report-config-panel.cds--tile {
   --cds-field: var(--csp-background);
   --cds-field-hover: var(--csp-layer-hover);
