@@ -317,9 +317,14 @@ export const updatePermitDetail = async (
     '/lexis/rpc/permit-details/update-permit',
     normalizePermitDetailMutationPayload(request),
     {
-      // An explicit blank clears an active Blanket OIC draft date, or removes a Blanket OIC
-      // permit's agent; omitted fields retain them.
-      preserveEmptyKeys: ['permitIssueDate', 'permitExpiryDate', 'agentClientNumber'],
+      // An explicit blank clears an active Blanket OIC draft date, removes a Blanket OIC
+      // permit's agent, or clears the stored remark; omitted fields retain them.
+      preserveEmptyKeys: [
+        'permitIssueDate',
+        'permitExpiryDate',
+        'agentClientNumber',
+        'permitRemarks',
+      ],
     },
   )
   return parsePermitDetailMutationResponse(payload, 'api')

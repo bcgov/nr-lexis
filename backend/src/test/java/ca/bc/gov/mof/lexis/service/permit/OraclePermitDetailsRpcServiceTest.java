@@ -4294,6 +4294,28 @@ class OraclePermitDetailsRpcServiceTest {
   }
 
   @Test
+  void updatePermitShouldClearTheStoredRemarkWhenTheRemarkIsSubmittedBlank() {
+    PermitMutationRow current = permitMutationRow();
+    assertThat(current.remarks()).isEqualTo("Legacy notes");
+    when(repository.findPermitMutationByPermitNumber(7000123L)).thenReturn(Optional.of(current));
+    stubTargetMinisterialExemption("EX-700");
+    when(repository.updatePermitDetail(
+            any(PermitMutationRow.class), eq("idir\\jsmith"), eq(FEE_MASK_EFFECTIVE_DATE)))
+        .thenReturn(true);
+
+    PermitMutationRpcResponseDto response =
+        service.updatePermit(formCheckRequest("ACT", "42", ""), "idir\\jsmith");
+
+    assertThat(response.success()).isTrue();
+    ArgumentCaptor<PermitMutationRow> permitCaptor =
+        ArgumentCaptor.forClass(PermitMutationRow.class);
+    verify(repository)
+        .updatePermitDetail(
+            permitCaptor.capture(), eq("idir\\jsmith"), eq(FEE_MASK_EFFECTIVE_DATE));
+    assertThat(permitCaptor.getValue().remarks()).isNull();
+  }
+
+  @Test
   void updatePermitShouldRejectForgedBlanketOicLimitsForANonBlanketPermit() {
     when(repository.findPermitMutationByPermitNumber(7000123L))
         .thenReturn(Optional.of(permitMutationRow()));
