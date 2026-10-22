@@ -1099,8 +1099,8 @@ public class OracleApplicationDetailsRpcService implements ApplicationDetailsRpc
               normalized, BLANKET_OIC_PACKAGE_STATUS_ACTIVE, BLANKET_OIC_PACKAGE_REPROCESSED_NO);
     }
     String newPackageNumber = trimToNull(normalized.packageNumber());
-    // Creating an application package doesn't check the regional species/enduse sort; only the
-    // Blanket OIC workflow does.
+    // Creating an application package doesn't check its species, end use or their regional sort;
+    // only the Blanket OIC workflow does.
     List<String> errors =
         validatePackageMutation(
             normalized, false, null, hiddenBlanketOicWorkflow, null, hiddenBlanketOicWorkflow);
@@ -1505,7 +1505,7 @@ public class OracleApplicationDetailsRpcService implements ApplicationDetailsRpc
       ApplicationDetailsRpcRepository.PackageMutationRow existing,
       boolean hiddenBlanketOicWorkflow,
       Long referenceOrgUnitNumber,
-      boolean checkSpeciesSort) {
+      boolean checkSpeciesEndUse) {
     List<String> errors = new ArrayList<>();
     String packageNumber =
         existing == null
@@ -1592,7 +1592,7 @@ public class OracleApplicationDetailsRpcService implements ApplicationDetailsRpc
         productTypeKept,
         ageClassKept,
         productTypeKept && keepsStoredSpeciesEndUse(request, existing),
-        checkSpeciesSort,
+        checkSpeciesEndUse,
         errors);
 
     if (update && packageNumber != null && request.volume() != null) {
@@ -1628,7 +1628,7 @@ public class OracleApplicationDetailsRpcService implements ApplicationDetailsRpc
       boolean productTypeKept,
       boolean ageClassKept,
       boolean speciesEndUseKept,
-      boolean checkSpeciesSort,
+      boolean checkSpeciesEndUse,
       List<String> errors) {
     String packageStatus =
         firstNonBlank(request.status(), existing == null ? null : existing.packageStatusCode());
@@ -1653,7 +1653,7 @@ public class OracleApplicationDetailsRpcService implements ApplicationDetailsRpc
     }
 
     List<String> speciesCodes = normalizeCodes(request.speciesCodes());
-    if (speciesCodes.isEmpty() || speciesEndUseKept) {
+    if (speciesCodes.isEmpty() || speciesEndUseKept || !checkSpeciesEndUse) {
       return;
     }
 
@@ -1669,9 +1669,6 @@ public class OracleApplicationDetailsRpcService implements ApplicationDetailsRpc
     boolean validEndUse = repository.findEndUseCodeRequired(endUseCode).isPresent();
     if (!validEndUse) {
       errors.add("Package end-use code does not exist.");
-    }
-    if (!checkSpeciesSort) {
-      return;
     }
 
     Long orgUnitNumber = referenceOrgUnitNumber;

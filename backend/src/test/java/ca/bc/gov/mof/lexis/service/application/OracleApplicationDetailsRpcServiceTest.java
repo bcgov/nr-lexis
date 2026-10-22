@@ -2499,8 +2499,6 @@ class OracleApplicationDetailsRpcServiceTest {
     when(repository.isPackageStatusCodeValidRequired("A")).thenReturn(false);
     when(repository.isProductTypeCodeValidRequired("H")).thenReturn(false);
     when(repository.isGrowthTypeCodeValidRequired("O")).thenReturn(false);
-    when(repository.findSpeciesCodeRequired("FI")).thenReturn(Optional.empty());
-    when(repository.findEndUseCodeRequired("LU")).thenReturn(Optional.empty());
 
     ApplicationDetailsRpcService.PackagePersistenceResult response =
         service.addPackage(
@@ -2525,9 +2523,9 @@ class OracleApplicationDetailsRpcServiceTest {
         .containsExactly(
             "Package status code does not exist.",
             "Package product type code does not exist.",
-            "Package growth type code does not exist.",
-            "Package species code FI does not exist.",
-            "Package end-use code does not exist.");
+            "Package growth type code does not exist.");
+    verify(repository, never()).findSpeciesCodeRequired(any());
+    verify(repository, never()).findEndUseCodeRequired(any());
     verify(repository, never())
         .findCandidateExcolCodesRequired(
             org.mockito.ArgumentMatchers.anyInt(),
@@ -2582,6 +2580,52 @@ class OracleApplicationDetailsRpcServiceTest {
             org.mockito.ArgumentMatchers.anyString(),
             org.mockito.ArgumentMatchers.anyString(),
             org.mockito.ArgumentMatchers.anyLong());
+  }
+
+  @Test
+  void addPackageShouldSaveSpeciesAndEndUseThatAreNoLongerCurrent() {
+    when(repository.packageExists("PKG-903")).thenReturn(false);
+    when(repository.findPackagesByApplicationNumber(1000456L)).thenReturn(List.of());
+    org.mockito.Mockito.lenient()
+        .when(repository.findSpeciesCodeRequired("FI"))
+        .thenReturn(Optional.empty());
+    org.mockito.Mockito.lenient()
+        .when(repository.findEndUseCodeRequired("LU"))
+        .thenReturn(Optional.empty());
+    when(repository.insertPackage(any()))
+        .thenReturn(
+            Optional.of(
+                new ApplicationDetailsRpcRepository.PackageMutationRow(
+                    "PKG-903", 1000456L, "N", 25.0d, 12.0d, 24.0d, "Test", null,
+                    null, null, "A", "O", "H", "idir\\jsmith", Instant.now())));
+
+    ApplicationDetailsRpcService.PackagePersistenceResult response =
+        service.addPackage(
+            new ApplicationDetailsRpcService.PackageMutationRequest(
+                "PKG-903",
+                null,
+                1000456L,
+                25.0d,
+                12.0d,
+                24.0d,
+                "A",
+                "Test",
+                "N",
+                "O",
+                "H",
+                "LU",
+                List.of("FI")),
+            "idir\\jsmith");
+
+    assertThat(response.errors()).isEmpty();
+    assertThat(response.valid()).isTrue();
+    ArgumentCaptor<ApplicationDetailsRpcRepository.PackageMutationRecord> recordCaptor =
+        ArgumentCaptor.forClass(ApplicationDetailsRpcRepository.PackageMutationRecord.class);
+    verify(repository).insertPackage(recordCaptor.capture());
+    assertThat(recordCaptor.getValue().endUses())
+        .containsExactly(new ApplicationDetailsRpcRepository.EndUseMutationRecord("FI", "LU"));
+    verify(repository, never()).findSpeciesCodeRequired(any());
+    verify(repository, never()).findEndUseCodeRequired(any());
   }
 
   @Test
@@ -2695,6 +2739,40 @@ class OracleApplicationDetailsRpcServiceTest {
     assertThat(response.valid()).isFalse();
     assertThat(response.errors())
         .containsExactly("The package species/enduse sort is not valid for the selected region.");
+    verify(repository, never()).insertPackage(any());
+  }
+
+  @Test
+  void hiddenBlanketOicPackageAddShouldRejectUnknownSpeciesAndEndUse() {
+    when(repository.findApplicationUpdateRecord(1000456L))
+        .thenReturn(Optional.of(applicationUpdateRecordWithOicIndicator("Y")));
+    when(repository.packageExists("PKG-903")).thenReturn(false);
+    when(repository.findPackagesByApplicationNumber(1000456L)).thenReturn(List.of());
+    when(repository.findSpeciesCodeRequired("FI")).thenReturn(Optional.empty());
+    when(repository.findEndUseCodeRequired("LU")).thenReturn(Optional.empty());
+
+    ApplicationDetailsRpcService.PackagePersistenceResult response =
+        service.addHiddenBlanketOicPackage(
+            new ApplicationDetailsRpcService.PackageMutationRequest(
+                "PKG-903",
+                null,
+                1000456L,
+                100.0d,
+                10.0d,
+                20.0d,
+                "SHT",
+                "Test",
+                "Y",
+                "O",
+                "H",
+                "LU",
+                List.of("FI")),
+            "idir\\jsmith");
+
+    assertThat(response.valid()).isFalse();
+    assertThat(response.errors())
+        .containsExactly(
+            "Package species code FI does not exist.", "Package end-use code does not exist.");
     verify(repository, never()).insertPackage(any());
   }
 
@@ -3952,6 +4030,23 @@ class OracleApplicationDetailsRpcServiceTest {
     assertThat(response.valid()).isFalse();
     assertThat(response.errors())
         .contains("The package species/enduse sort is not valid for the selected region.");
+    verify(repository, never()).insertApplication(any());
+    verify(repository, never()).insertPackage(any());
+  }
+
+  @Test
+  void validateApplicationSubmissionImportShouldRejectUnknownPackageSpeciesAndEndUse() {
+    when(repository.findSpeciesCodeRequired("HE")).thenReturn(Optional.empty());
+    when(repository.findEndUseCodeRequired("PL")).thenReturn(Optional.empty());
+
+    ApplicationDetailsRpcService.SubmissionImportValidationResult response =
+        service.validateApplicationSubmissionImport(
+            importApplicationRequest("F"), importPackageRequest(), List.of());
+
+    assertThat(response.valid()).isFalse();
+    assertThat(response.errors())
+        .contains(
+            "Package species code HE does not exist.", "Package end-use code does not exist.");
     verify(repository, never()).insertApplication(any());
     verify(repository, never()).insertPackage(any());
   }
