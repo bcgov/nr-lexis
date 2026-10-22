@@ -87,6 +87,23 @@ class OracleLegacyPermitInvoiceOrchestrationServiceTest {
   }
 
   @Test
+  void shouldReadGbmsHistoryWithoutTheTypedReceiptWhenLeaving() {
+    when(invoiceRepository.findByPermitDetailNumberRequired(PERMIT_NUMBER)).thenReturn(List.of());
+    when(permitRepository.findGbmsInvoiceHistoryRequired("", PERMIT_NUMBER))
+        .thenReturn(
+            List.of(history("GBMS-OLD", 10.0d, null, null, LocalDate.of(2010, 3, 1))),
+            List.of(
+                history("GBMS-OLD", 10.0d, "GBMS-CANCEL", null, LocalDate.of(2010, 3, 1)),
+                history("GBMS-CANCEL", -10.0d, null, null, null)));
+
+    TransitionResult result = service.orchestrate(leavingTransition(), "idir\\jsmith");
+
+    assertThat(result.success()).isTrue();
+    verify(permitRepository, times(3)).findGbmsInvoiceHistoryRequired("", PERMIT_NUMBER);
+    verify(permitRepository, never()).findGbmsInvoiceHistoryRequired(eq("RCPT-1"), any());
+  }
+
+  @Test
   void shouldKeepCanadianInvoicesInternalInLegacyMode() {
     InternalInvoiceSnapshot snapshot = canadianInternalSnapshot();
     PermitInvoiceRow prior = cancelledInternal("GBMS-OLD");
@@ -241,7 +258,7 @@ class OracleLegacyPermitInvoiceOrchestrationServiceTest {
     PermitInvoiceRow cancelled = cancelledInternal("GBMS-100");
     when(invoiceRepository.findByPermitDetailNumberRequired(PERMIT_NUMBER))
         .thenReturn(List.of(active), List.of(cancelled));
-    when(permitRepository.findGbmsInvoiceHistoryRequired("RCPT-1", PERMIT_NUMBER))
+    when(permitRepository.findGbmsInvoiceHistoryRequired("", PERMIT_NUMBER))
         .thenReturn(
             List.of(history("GBMS-100", 10.0d, null, null, LocalDate.of(2026, 3, 20))),
             List.of(
@@ -270,7 +287,7 @@ class OracleLegacyPermitInvoiceOrchestrationServiceTest {
     PermitInvoiceRow cancelled = cancelledInternal("GBMS-100");
     when(invoiceRepository.findByPermitDetailNumberRequired(PERMIT_NUMBER))
         .thenReturn(List.of(active), List.of(cancelled));
-    when(permitRepository.findGbmsInvoiceHistoryRequired("RCPT-1", PERMIT_NUMBER))
+    when(permitRepository.findGbmsInvoiceHistoryRequired("", PERMIT_NUMBER))
         .thenReturn(
             List.of(history("GBMS-100", 10.0d, null, null, null)),
             List.of());
@@ -286,7 +303,7 @@ class OracleLegacyPermitInvoiceOrchestrationServiceTest {
     PermitInvoiceRow active = activeInternal("GBMS-100");
     when(invoiceRepository.findByPermitDetailNumberRequired(PERMIT_NUMBER))
         .thenReturn(List.of(active), List.of(cancelled(active)));
-    when(permitRepository.findGbmsInvoiceHistoryRequired("RCPT-1", PERMIT_NUMBER))
+    when(permitRepository.findGbmsInvoiceHistoryRequired("", PERMIT_NUMBER))
         .thenReturn(
             List.of(
                 history("GBMS-100", 10.0d, null, null, null),
@@ -310,7 +327,7 @@ class OracleLegacyPermitInvoiceOrchestrationServiceTest {
   void shouldSaveWithNoInvoiceWritesWhenNothingIsActive(String country, String targetStatus) {
     when(invoiceRepository.findByPermitDetailNumberRequired(PERMIT_NUMBER))
         .thenReturn(List.of(cancelledInternal("GBMS-OLD")));
-    when(permitRepository.findGbmsInvoiceHistoryRequired("RCPT-1", PERMIT_NUMBER))
+    when(permitRepository.findGbmsInvoiceHistoryRequired("", PERMIT_NUMBER))
         .thenReturn(
             List.of(
                 history("GBMS-OLD", 10.0d, "GBMS-CANCEL", null, LocalDate.of(2026, 3, 1)),
@@ -327,7 +344,7 @@ class OracleLegacyPermitInvoiceOrchestrationServiceTest {
   @Test
   void shouldSaveWithNoInvoiceWritesWhenThePermitHasNoInvoiceHistory() {
     when(invoiceRepository.findByPermitDetailNumberRequired(PERMIT_NUMBER)).thenReturn(List.of());
-    when(permitRepository.findGbmsInvoiceHistoryRequired("RCPT-1", PERMIT_NUMBER))
+    when(permitRepository.findGbmsInvoiceHistoryRequired("", PERMIT_NUMBER))
         .thenReturn(List.of());
 
     TransitionResult result = service.orchestrate(leavingTransition(), "idir\\jsmith");
@@ -340,7 +357,7 @@ class OracleLegacyPermitInvoiceOrchestrationServiceTest {
   @Test
   void shouldCancelTheOnlyActiveGbmsInvoiceWhenNoInternalInvoiceIsActive() {
     when(invoiceRepository.findByPermitDetailNumberRequired(PERMIT_NUMBER)).thenReturn(List.of());
-    when(permitRepository.findGbmsInvoiceHistoryRequired("RCPT-1", PERMIT_NUMBER))
+    when(permitRepository.findGbmsInvoiceHistoryRequired("", PERMIT_NUMBER))
         .thenReturn(
             List.of(history("GBMS-OLD", 10.0d, null, null, LocalDate.of(2010, 3, 1))),
             List.of(
@@ -357,7 +374,7 @@ class OracleLegacyPermitInvoiceOrchestrationServiceTest {
   @Test
   void shouldCancelEveryActiveGbmsInvoiceWhenNoInternalInvoiceIsActive() {
     when(invoiceRepository.findByPermitDetailNumberRequired(PERMIT_NUMBER)).thenReturn(List.of());
-    when(permitRepository.findGbmsInvoiceHistoryRequired("RCPT-1", PERMIT_NUMBER))
+    when(permitRepository.findGbmsInvoiceHistoryRequired("", PERMIT_NUMBER))
         .thenReturn(
             List.of(
                 history("GBMS-1", 10.0d, null, null, LocalDate.of(2010, 3, 1)),
@@ -385,7 +402,7 @@ class OracleLegacyPermitInvoiceOrchestrationServiceTest {
     PermitInvoiceRow second = activeInternal(INTERNAL_INVOICE_NUMBER + 1, "GBMS-2");
     when(invoiceRepository.findByPermitDetailNumberRequired(PERMIT_NUMBER))
         .thenReturn(List.of(first, second), List.of(cancelled(first), cancelled(second)));
-    when(permitRepository.findGbmsInvoiceHistoryRequired("RCPT-1", PERMIT_NUMBER))
+    when(permitRepository.findGbmsInvoiceHistoryRequired("", PERMIT_NUMBER))
         .thenReturn(
             List.of(
                 history("GBMS-1", 10.0d, null, null, null),
@@ -412,7 +429,7 @@ class OracleLegacyPermitInvoiceOrchestrationServiceTest {
     PermitInvoiceRow active = activeInternal("GBMS-100");
     when(invoiceRepository.findByPermitDetailNumberRequired(PERMIT_NUMBER))
         .thenReturn(List.of(active), List.of(cancelled(active)));
-    when(permitRepository.findGbmsInvoiceHistoryRequired("RCPT-1", PERMIT_NUMBER))
+    when(permitRepository.findGbmsInvoiceHistoryRequired("", PERMIT_NUMBER))
         .thenReturn(
             List.of(
                 history("GBMS-100", 10.0d, null, "GBMS-200", LocalDate.of(2026, 3, 1)),
@@ -434,7 +451,7 @@ class OracleLegacyPermitInvoiceOrchestrationServiceTest {
     PermitInvoiceRow active = activeInternal("GBMS-100");
     when(invoiceRepository.findByPermitDetailNumberRequired(PERMIT_NUMBER))
         .thenReturn(List.of(active), List.of(cancelled(active)));
-    when(permitRepository.findGbmsInvoiceHistoryRequired("RCPT-1", PERMIT_NUMBER))
+    when(permitRepository.findGbmsInvoiceHistoryRequired("", PERMIT_NUMBER))
         .thenReturn(
             List.of(history("GBMS-100", 10.0d, null, null, null)),
             List.of(history("GBMS-300", 10.0d, null, null, null)));
@@ -454,7 +471,7 @@ class OracleLegacyPermitInvoiceOrchestrationServiceTest {
     PermitInvoiceRow active = canadianActiveInternal();
     when(invoiceRepository.findByPermitDetailNumberRequired(PERMIT_NUMBER))
         .thenReturn(List.of(active), List.of(cancelled(active)));
-    when(permitRepository.findGbmsInvoiceHistoryRequired("RCPT-1", PERMIT_NUMBER))
+    when(permitRepository.findGbmsInvoiceHistoryRequired("", PERMIT_NUMBER))
         .thenReturn(List.of());
 
     TransitionResult result =
@@ -474,7 +491,7 @@ class OracleLegacyPermitInvoiceOrchestrationServiceTest {
     PermitInvoiceRow active = activeInternal("GBMS-100");
     when(invoiceRepository.findByPermitDetailNumberRequired(PERMIT_NUMBER))
         .thenReturn(List.of(active), List.of(cancelledInternal("GBMS-100")));
-    when(permitRepository.findGbmsInvoiceHistoryRequired("RCPT-1", PERMIT_NUMBER))
+    when(permitRepository.findGbmsInvoiceHistoryRequired("", PERMIT_NUMBER))
         .thenReturn(
             List.of(history("GBMS-100", 10.0d, null, null, LocalDate.of(2026, 3, 20))),
             List.of(
@@ -503,7 +520,7 @@ class OracleLegacyPermitInvoiceOrchestrationServiceTest {
     PermitInvoiceRow active = canadianActiveInternal();
     when(invoiceRepository.findByPermitDetailNumberRequired(PERMIT_NUMBER))
         .thenReturn(List.of(active), List.of(cancelled(active)));
-    when(permitRepository.findGbmsInvoiceHistoryRequired("RCPT-1", PERMIT_NUMBER))
+    when(permitRepository.findGbmsInvoiceHistoryRequired("", PERMIT_NUMBER))
         .thenReturn(List.of(history("GBMS-ORPHAN", 10.0d, null, null, null)), List.of());
 
     TransitionResult result =
@@ -524,7 +541,7 @@ class OracleLegacyPermitInvoiceOrchestrationServiceTest {
     when(invoiceRepository.findByPermitDetailNumberRequired(PERMIT_NUMBER))
         .thenReturn(
             List.of(internalOnly, linked), List.of(cancelled(internalOnly), cancelled(linked)));
-    when(permitRepository.findGbmsInvoiceHistoryRequired("RCPT-1", PERMIT_NUMBER))
+    when(permitRepository.findGbmsInvoiceHistoryRequired("", PERMIT_NUMBER))
         .thenReturn(List.of(history("GBMS-100", 10.0d, null, null, null)), List.of());
 
     TransitionResult result =
@@ -545,7 +562,7 @@ class OracleLegacyPermitInvoiceOrchestrationServiceTest {
     PermitInvoiceRow active = activeInternal("GBMS-100");
     when(invoiceRepository.findByPermitDetailNumberRequired(PERMIT_NUMBER))
         .thenReturn(List.of(active), List.of(cancelled(active)));
-    when(permitRepository.findGbmsInvoiceHistoryRequired("RCPT-1", PERMIT_NUMBER))
+    when(permitRepository.findGbmsInvoiceHistoryRequired("", PERMIT_NUMBER))
         .thenReturn(List.of(history("GBMS-100", 9.0d, null, null, null)), List.of());
 
     TransitionResult result = service.orchestrate(leavingTransition(), "idir\\jsmith");

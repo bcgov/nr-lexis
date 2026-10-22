@@ -89,7 +89,7 @@ public class OracleCanadianPermitInvoiceOrchestrationService
         List<PermitInvoiceRow> internalHistory =
             internalInvoices.findHistory(transition.permitNumber());
         gbmsHistory.validateActiveAlignment(
-            internalHistory, gbmsHistory.findRequired(transition));
+            internalHistory, gbmsHistory.findRequiredWithoutReceipt(transition));
         List<PermitInvoiceRow> activeInvoices = internalInvoices.activeRows(internalHistory);
         if (activeInvoices.stream().anyMatch(row -> trimToNull(row.gbmsInvoiceNumber()) != null)) {
           throw new DataRetrievalFailureException(

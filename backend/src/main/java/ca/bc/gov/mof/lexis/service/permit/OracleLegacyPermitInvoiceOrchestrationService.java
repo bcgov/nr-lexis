@@ -104,7 +104,7 @@ public class OracleLegacyPermitInvoiceOrchestrationService
         List<PermitInvoiceRow> activeInvoices =
             internalInvoices.activeRows(internalInvoices.findHistory(transition.permitNumber()));
         List<GbmsInvoiceHistoryRow> activeGbmsInvoices =
-            gbmsHistory.activeRows(gbmsHistory.findRequired(transition));
+            gbmsHistory.activeRows(gbmsHistory.findRequiredWithoutReceipt(transition));
 
         stage = "internal_cancel";
         internalInvoices.cancel(transition.permitNumber(), activeInvoices, oracleUserId);
@@ -117,7 +117,9 @@ public class OracleLegacyPermitInvoiceOrchestrationService
           requireCancelledHistory(transition, source);
         }
         if (!activeGbmsInvoices.isEmpty()
-            && !gbmsHistory.activeRows(gbmsHistory.findRequired(transition)).isEmpty()) {
+            && !gbmsHistory
+                .activeRows(gbmsHistory.findRequiredWithoutReceipt(transition))
+                .isEmpty()) {
           throw new DataRetrievalFailureException(
               "A GBMS invoice remained active after cancellation.");
         }
@@ -278,7 +280,7 @@ public class OracleLegacyPermitInvoiceOrchestrationService
 
   private void requireCancelledHistory(
       Transition transition, GbmsInvoiceHistoryRow source) {
-    List<GbmsInvoiceHistoryRow> history = gbmsHistory.findRequired(transition);
+    List<GbmsInvoiceHistoryRow> history = gbmsHistory.findRequiredWithoutReceipt(transition);
     List<GbmsInvoiceHistoryRow> originals =
         history.stream()
             .filter(

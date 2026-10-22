@@ -3,6 +3,7 @@ package ca.bc.gov.mof.lexis.service.permit;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.groups.Tuple.tuple;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
@@ -324,7 +325,8 @@ class OracleCanadianPermitInvoiceOrchestrationServiceTest {
         service.orchestrate(transition("COM", "CAN", "CA", null), "idir\\jsmith");
 
     assertThat(result.success()).isTrue();
-    verify(permitRepository).findGbmsInvoiceHistoryRequired("RCPT-1", PERMIT_NUMBER);
+    verify(permitRepository).findGbmsInvoiceHistoryRequired("", PERMIT_NUMBER);
+    verify(permitRepository, never()).findGbmsInvoiceHistoryRequired(eq("RCPT-1"), any());
     verify(repository, never()).updatePermitInvoiceRequired(any());
     assertNoGbmsWrites();
   }
@@ -353,7 +355,7 @@ class OracleCanadianPermitInvoiceOrchestrationServiceTest {
   @Test
   void shouldRejectACancellationThatWouldLeaveAGbmsInvoiceActive() {
     when(repository.findByPermitDetailNumberRequired(PERMIT_NUMBER)).thenReturn(List.of());
-    when(permitRepository.findGbmsInvoiceHistoryRequired("RCPT-1", PERMIT_NUMBER))
+    when(permitRepository.findGbmsInvoiceHistoryRequired("", PERMIT_NUMBER))
         .thenReturn(List.of(gbmsHistory("GBMS-100", 10.0d, null, null)));
 
     TransitionResult result =

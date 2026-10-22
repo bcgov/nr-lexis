@@ -35,9 +35,8 @@ Both active modes read GBMS history before Canadian invoice mutations so a prior
 cycle cannot leave a second active bill. Fully cancelled or replaced history does not block a
 Canadian reissue.
 
-Completing a permit or moving it to Payment pending reads GBMS history without the permit's
-receipt, so the history procedure never looks the receipt up as an invoice number. Cancelling and
-reactivating pass the receipt.
+Every permit invoice transition reads GBMS history without the permit's receipt, so the history
+procedure never looks the receipt up as an invoice number.
 
 ## Non-Canadian flow
 

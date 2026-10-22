@@ -24,11 +24,6 @@ final class OracleGbmsInvoiceHistoryService {
     this.repository = repository;
   }
 
-  /** Reads the permit's history with the transition's receipt. */
-  List<GbmsInvoiceHistoryRow> findRequired(Transition transition) {
-    return findRequired(transition.receiptNumber(), transition.permitNumber());
-  }
-
   /**
    * Reads the permit's history with no receipt, so the procedure never looks the receipt up as an
    * invoice number.

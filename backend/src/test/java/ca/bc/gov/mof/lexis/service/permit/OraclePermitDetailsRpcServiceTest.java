@@ -5364,7 +5364,7 @@ class OraclePermitDetailsRpcServiceTest {
             new OracleLegacyPermitInvoiceOrchestrationService(
                 invoiceRepository, repository, gbmsInvoices));
     when(invoiceRepository.findByPermitDetailNumberRequired(7000123L)).thenReturn(List.of());
-    when(repository.findGbmsInvoiceHistoryRequired("RCPT-100", 7000123L)).thenReturn(List.of());
+    when(repository.findGbmsInvoiceHistoryRequired("", 7000123L)).thenReturn(List.of());
     when(repository.findPermitMutationByPermitNumber(7000123L))
         .thenReturn(Optional.of(permitMutationRow("COM")));
     stubTargetMinisterialExemption("EX-700");
