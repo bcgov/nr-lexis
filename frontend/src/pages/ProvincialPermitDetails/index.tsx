@@ -360,7 +360,7 @@ const MAX_OIC_REQUEST_PIECES = 9_999_999_999
 const MAX_OIC_REQUEST_VOLUME_LENGTH = 9
 const MAX_PERMIT_OVERRIDE_FEE = 9_999_999.99
 const MAX_PERMIT_OVERRIDE_COMMENT_LENGTH = 254
-const MAX_REVIEWED_PERMIT_REMARKS_LENGTH = 250
+const MAX_PERMIT_REMARKS_LENGTH = 250
 const PACKAGE_COMMENTS_MAX_LENGTH = 180
 const ASCII_PATTERN = /^[\u0000-\u007f]*$/
 // Legacy allows an approver to move a permit to EXP; once expired, the record is read-only.
@@ -2206,8 +2206,9 @@ const ProvincialPermitDetailsPage = () => {
     }
     return totals
   }, [ministerialScaleSelectionDraft, tabsData?.items])
-  const ministerialScaleEmpty =
-    ministerialPermit &&
+  const permitScaleEmpty =
+    !!detail &&
+    !blanketOicPermit &&
     !isPermitTablesLoading &&
     !permitTablesErrorMessage &&
     (tabsData?.packages.length ?? 0) === 0 &&
@@ -2761,8 +2762,9 @@ const ProvincialPermitDetailsPage = () => {
         : deferredPermitTabLoaded.fees
           ? null
           : '—'
-  const ministerialFeeShellEmpty =
-    ministerialPermit &&
+  const permitFeeShellEmpty =
+    !!detail &&
+    !blanketOicPermit &&
     !isPermitTablesLoading &&
     feeSummaryStatus === null &&
     !!tabsData &&
@@ -3062,7 +3064,7 @@ const ProvincialPermitDetailsPage = () => {
           () =>
             maxLengthFieldError(
               permitForm.permitRemarks,
-              usesReviewedPermitFlow ? MAX_REVIEWED_PERMIT_REMARKS_LENGTH : 254,
+              MAX_PERMIT_REMARKS_LENGTH,
               'Permit remarks',
             ),
         ) ?? undefined,
@@ -3149,7 +3151,6 @@ const ProvincialPermitDetailsPage = () => {
     editablePermitRegionOptions,
     invoiceMaterialLocked,
     requiresPositiveOicRequestLimits,
-    usesReviewedPermitFlow,
     permitForm,
     requiresCompletionSubmitDate,
     requiresPermitCompletionDates,
@@ -5990,9 +5991,9 @@ const ProvincialPermitDetailsPage = () => {
       onChange={(event) => setPermitFormField(field, event.target.value)}
       disabled={isDisabled}
       rows={3}
-      enableCounter={usesReviewedPermitFlow && field === 'permitRemarks'}
+      enableCounter={field === 'permitRemarks'}
       maxCount={maxCount}
-      maxLength={usesReviewedPermitFlow ? maxCount : undefined}
+      maxLength={maxCount}
     />
   )
 
@@ -6412,12 +6413,7 @@ const ProvincialPermitDetailsPage = () => {
               span="full"
               value={detail.remarks}
               edit={() =>
-                renderPermitTextArea(
-                  'permitRemarks',
-                  'Remarks',
-                  false,
-                  MAX_REVIEWED_PERMIT_REMARKS_LENGTH,
-                )
+                renderPermitTextArea('permitRemarks', 'Remarks', false, MAX_PERMIT_REMARKS_LENGTH)
               }
             />
           </RecordFieldRow>
@@ -6539,7 +6535,9 @@ const ProvincialPermitDetailsPage = () => {
             label="Remarks"
             span="full"
             value={detail.remarks}
-            edit={() => renderPermitTextArea('permitRemarks', 'Remarks', false, 254)}
+            edit={() =>
+              renderPermitTextArea('permitRemarks', 'Remarks', false, MAX_PERMIT_REMARKS_LENGTH)
+            }
           />
         </RecordFieldRow>
       </RecordFieldGrid>
@@ -6572,7 +6570,7 @@ const ProvincialPermitDetailsPage = () => {
                 false,
                 52,
                 true,
-                usesReviewedPermitFlow ? 'Company name' : undefined,
+                'Company name',
               )
             }
           />
@@ -7021,7 +7019,7 @@ const ProvincialPermitDetailsPage = () => {
 
   // A Summary of scale result moves to the top of the tab while the summary itself is hidden.
   const scaleSummaryShown =
-    !ministerialScaleEmpty &&
+    !permitScaleEmpty &&
     !blanketOicPackageCreationRequired &&
     !isPermitTablesLoading &&
     !permitTablesErrorMessage &&
@@ -7051,7 +7049,7 @@ const ProvincialPermitDetailsPage = () => {
         aria-labelledby="permit-scale-summary-title"
         hidden={
           blanketOicPackageCreationRequired ||
-          ministerialScaleEmpty ||
+          permitScaleEmpty ||
           (ministerialPermit && isPermitTablesLoading) ||
           tabsData === null
         }
@@ -7155,7 +7153,7 @@ const ProvincialPermitDetailsPage = () => {
           />
         )}
         {!permitTablesErrorMessage &&
-          !ministerialScaleEmpty &&
+          !permitScaleEmpty &&
           (packageScopedItems.length > 0 ? (
             <TableFrame ariaLabel={usesReviewedPermitFlow ? 'Scale rows' : 'Permit item rows'}>
               <Table size="md" useZebraStyles>
@@ -7388,7 +7386,7 @@ const ProvincialPermitDetailsPage = () => {
             </RecordFieldGrid>
           </>
         )}
-        {usesReviewedPermitFlow && !ministerialFeeShellEmpty && (
+        {usesReviewedPermitFlow && !permitFeeShellEmpty && (
           <h3 className="detail-section-subtitle">Fee details</h3>
         )}
         {permitFeesErrorMessage ? (
@@ -7478,8 +7476,8 @@ const ProvincialPermitDetailsPage = () => {
     !deferredPermitTabLoading.documents &&
     !documentsErrorMessage &&
     documentRows.length === 0
-  const emptyPermitScale = ministerialScaleEmpty || blanketOicPackageCreationRequired
-  const ScaleContainer = ministerialPermit && !ministerialScaleEmpty ? Tile : 'section'
+  const emptyPermitScale = permitScaleEmpty || blanketOicPackageCreationRequired
+  const ScaleContainer = ministerialPermit && !permitScaleEmpty ? Tile : 'section'
   // Only a Ministerial permit's package details need a group label; the other permits show their
   // package in a card of its own.
   const PackageDetailsContainer = ministerialPermit ? 'fieldset' : 'div'
@@ -8267,7 +8265,7 @@ const ProvincialPermitDetailsPage = () => {
                         {!emptyPermitScale && !detail.blanketOic && (
                           <DetailCardTitle icon={Box}>Scale</DetailCardTitle>
                         )}
-                        {ministerialScaleEmpty && (
+                        {permitScaleEmpty && (
                           <EmptyState
                             className="permit-empty-state--sentences"
                             title="No scale yet"
@@ -8596,7 +8594,7 @@ const ProvincialPermitDetailsPage = () => {
                                 headingLevel={3}
                                 variant="tab"
                               />
-                            ) : ministerialScaleEmpty ? null : (
+                            ) : permitScaleEmpty ? null : (
                               <EmptyState
                                 title="No package details"
                                 description="No package detail rows are available for this permit."
@@ -8612,10 +8610,10 @@ const ProvincialPermitDetailsPage = () => {
                 </TabPanel>
                 <TabPanel
                   key="fees"
-                  className={`application-detail-tab-panel${ministerialFeeShellEmpty ? ' application-detail-tab-panel--empty' : ''}`}
+                  className={`application-detail-tab-panel${permitFeeShellEmpty ? ' application-detail-tab-panel--empty' : ''}`}
                 >
                   <Grid fullWidth className="application-detail-tab-grid">
-                    {ministerialFeeShellEmpty ? (
+                    {permitFeeShellEmpty ? (
                       <Column sm={4} md={8} lg={16}>
                         <EmptyState
                           className="permit-empty-state--sentences"

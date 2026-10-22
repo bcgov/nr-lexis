@@ -325,6 +325,12 @@ const tabsResult: ProvincialPermitDetailTabsData = {
   boicItems: [],
 }
 
+// Tabs for a permit with an application on it, so its Scale and Fees tabs aren't empty.
+const tabsWithApplication: ProvincialPermitDetailTabsData = {
+  ...tabsResult,
+  applications: ['1000456'],
+}
+
 const calculatedPermitFees = {
   totalFeeVolume: 10,
   packageFeeSummaries: [
@@ -2310,6 +2316,57 @@ describe('Provincial Permit Detail Action Smoke', () => {
     await waitFor(() => expect(screen.getByRole('tab', { name: 'Permit' })).toHaveFocus())
   })
 
+  it('explains the empty scale and fees of an ordinary OIC permit with no applications', async () => {
+    configureActivePermit()
+    mockedFetchProvincialPermitDetail.mockResolvedValue({
+      ...permitDetail,
+      permitStatusCode: 'ACT',
+      permitStatusDescription: 'Active',
+      receiptNumber: null,
+    })
+    renderPermitDetails()
+
+    await selectPermitDetailTab('Scale')
+    const scaleEmptyState = (await screen.findByRole('heading', { name: 'No scale yet' })).closest(
+      '.lexis-empty-state',
+    )
+    expect(scaleEmptyState).toHaveTextContent(
+      'Scale comes from the applications selected for this permit. Select an application on the Permit tab.',
+    )
+    expect(screen.queryByRole('heading', { name: 'No package details' })).not.toBeInTheDocument()
+    await userEvent.click(screen.getByRole('button', { name: 'Permit tab' }))
+    expect(screen.getByRole('tab', { name: 'Permit' })).toHaveAttribute('aria-selected', 'true')
+
+    await selectPermitDetailTab('Fees')
+    const feesEmptyState = (await screen.findByRole('heading', { name: 'No fees yet' })).closest(
+      '.lexis-empty-state',
+    )
+    expect(feesEmptyState).toHaveTextContent(
+      "Fees are calculated from the permit's Summary of scale. They appear once an application is selected on the Permit tab.",
+    )
+    expect(screen.queryByText('Fee calculation details')).not.toBeInTheDocument()
+  })
+
+  it('counts ordinary OIC permit remarks against 250 characters', async () => {
+    configureActivePermit()
+    renderPermitDetails()
+
+    await userEvent.click(await screen.findByRole('button', { name: /Edit permit(?: details)?/ }))
+
+    expect(screen.getByLabelText('Remarks')).toHaveAttribute('maxlength', '250')
+    expect(screen.getByText('2/250')).toBeVisible()
+  })
+
+  it('describes the ordinary OIC Purchaser as a company name', async () => {
+    configureActivePermit()
+    renderPermitDetails()
+
+    await selectPermitDetailTab('Shipping')
+    await userEvent.click(await screen.findByRole('button', { name: 'Edit shipping' }))
+
+    expect(screen.getByLabelText('Purchaser')).toHaveAccessibleDescription('Company name')
+  })
+
   it('shows a failed Ministerial application lookup once and retries only when requested', async () => {
     const consoleError = vi.spyOn(console, 'error').mockImplementation(() => undefined)
     configureMinisterialActivePermit()
@@ -2758,6 +2815,7 @@ describe('Provincial Permit Detail Action Smoke', () => {
     'shows Receipt number only with a receipt or on an Interior permit (%o)',
     async ({ receiptNumber, interior, shown }) => {
       mockedFetchProvincialPermitDetail.mockResolvedValue({ ...permitDetail, receiptNumber })
+      mockedFetchProvincialPermitDetailTabs.mockResolvedValue(tabsWithApplication)
       mockedFetchPermitFeeOverrideContext.mockResolvedValue({
         overrideEnabled: false,
         overrideFee: '',
@@ -5537,10 +5595,7 @@ describe('Provincial Permit Detail Action Smoke', () => {
 
     await selectPermitDetailTab('Items')
     expect(
-      await screen.findByRole('heading', { name: 'No package details', level: 3 }),
-    ).toBeInTheDocument()
-    expect(
-      screen.getByRole('heading', { name: 'No permit items available', level: 3 }),
+      await screen.findByRole('heading', { name: 'No scale yet', level: 3 }),
     ).toBeInTheDocument()
 
     await selectPermitDetailTab('Fees')
@@ -9628,7 +9683,7 @@ describe('Provincial Permit Detail Action Smoke', () => {
     await userEvent.click(saveButton)
 
     expect(
-      (await screen.findAllByText('Permit remarks must be 254 characters or fewer')).length,
+      (await screen.findAllByText('Permit remarks must be 250 characters or fewer')).length,
     ).toBeGreaterThanOrEqual(1)
     expect(mockedUpdatePermitDetail).not.toHaveBeenCalled()
 
@@ -11388,6 +11443,7 @@ describe('Provincial Permit Detail Action Smoke', () => {
       permitStatusDescription: 'Payment pending',
       receiptNumber: null,
     })
+    mockedFetchProvincialPermitDetailTabs.mockResolvedValue(tabsWithApplication)
     renderPermitDetails()
 
     await selectPermitDetailTab('Owner')
@@ -11450,6 +11506,7 @@ describe('Provincial Permit Detail Action Smoke', () => {
       permitStatusDescription: 'Payment pending',
       receiptNumber: null,
     })
+    mockedFetchProvincialPermitDetailTabs.mockResolvedValue(tabsWithApplication)
     renderPermitDetails()
 
     await selectPermitDetailTab('Fees')
@@ -11535,6 +11592,7 @@ describe('Provincial Permit Detail Action Smoke', () => {
       permitStatusDescription: 'Payment pending',
       receiptNumber: null,
     })
+    mockedFetchProvincialPermitDetailTabs.mockResolvedValue(tabsWithApplication)
     renderPermitDetails()
 
     await selectPermitDetailTab('Fees')
@@ -11599,6 +11657,7 @@ describe('Provincial Permit Detail Action Smoke', () => {
         .mockResolvedValueOnce(paymentPendingPermit)
         .mockResolvedValueOnce(paymentPendingPermit)
         .mockResolvedValue({ ...paymentPendingPermit, permitStatusCode: targetStatus })
+      mockedFetchProvincialPermitDetailTabs.mockResolvedValue(tabsWithApplication)
       mockedUpdatePermitDetail.mockResolvedValue({
         success: true,
         message: 'The permit was updated successfully.',
