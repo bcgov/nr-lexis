@@ -94,56 +94,40 @@ final class OracleInternalPermitInvoiceService {
     return inserted;
   }
 
-  PermitInvoiceRow requireSingleActive(Long permitNumber, boolean gbmsRequired) {
-    return requireSingleActive(findInvoices(permitNumber), gbmsRequired);
-  }
-
   List<PermitInvoiceRow> findHistory(Long permitNumber) {
     return findInvoices(permitNumber);
   }
 
-  PermitInvoiceRow requireSingleActive(List<PermitInvoiceRow> rows) {
-    List<PermitInvoiceRow> active = activeRows(rows);
-    if (active.size() != 1) {
-      throw new InvoiceBlockedException(
-          "This permit does not have exactly one active invoice, so its status cannot be changed."
-              + " Contact the LEXIS administrator.");
+  /** Cancels each invoice, then checks that the permit has no active invoice left. */
+  void cancel(Long permitNumber, List<PermitInvoiceRow> invoices, String userId) {
+    if (invoices.isEmpty()) {
+      return;
     }
-    return active.get(0);
-  }
-
-  PermitInvoiceRow requireSingleActive(
-      List<PermitInvoiceRow> rows, boolean gbmsRequired) {
-    PermitInvoiceRow invoice = requireSingleActive(rows);
-    if (gbmsRequired != (trimToNull(invoice.gbmsInvoiceNumber()) != null)) {
-      throw new DataRetrievalFailureException(
-          "The active permit invoice GBMS relationship is invalid.");
+    for (PermitInvoiceRow invoice : invoices) {
+      repository.updatePermitInvoiceRequired(
+          new PermitInvoiceUpdate(
+              invoice.permitInvoiceNumber(), invoice.gbmsInvoiceNumber(), userId));
     }
-    return invoice;
-  }
-
-  void cancel(Long permitNumber, PermitInvoiceRow invoice, String userId) {
-    repository.updatePermitInvoiceRequired(
-        new PermitInvoiceUpdate(
-            invoice.permitInvoiceNumber(), invoice.gbmsInvoiceNumber(), userId));
 
     List<PermitInvoiceRow> after = findInvoices(permitNumber);
     if (!activeRows(after).isEmpty()) {
       throw new DataRetrievalFailureException(
           "The permit invoice remained active after cancellation.");
     }
-    PermitInvoiceRow cancelled =
-        after.stream()
-            .filter(row -> invoice.permitInvoiceNumber().equals(row.permitInvoiceNumber()))
-            .findFirst()
-            .orElseThrow(
-                () ->
-                    new DataRetrievalFailureException(
-                        "The cancelled permit invoice was not returned by Oracle."));
-    if (cancelled.cancelTimestamp() == null
-        || !userId.equalsIgnoreCase(trimToNull(cancelled.cancelUserId()))) {
-      throw new DataRetrievalFailureException(
-          "The permit invoice cancellation audit did not match the submitted user.");
+    for (PermitInvoiceRow invoice : invoices) {
+      PermitInvoiceRow cancelled =
+          after.stream()
+              .filter(row -> invoice.permitInvoiceNumber().equals(row.permitInvoiceNumber()))
+              .findFirst()
+              .orElseThrow(
+                  () ->
+                      new DataRetrievalFailureException(
+                          "The cancelled permit invoice was not returned by Oracle."));
+      if (cancelled.cancelTimestamp() == null
+          || !userId.equalsIgnoreCase(trimToNull(cancelled.cancelUserId()))) {
+        throw new DataRetrievalFailureException(
+            "The permit invoice cancellation audit did not match the submitted user.");
+      }
     }
   }
 
@@ -225,7 +209,7 @@ final class OracleInternalPermitInvoiceService {
     return List.copyOf(rows);
   }
 
-  private List<PermitInvoiceRow> activeRows(List<PermitInvoiceRow> rows) {
+  List<PermitInvoiceRow> activeRows(List<PermitInvoiceRow> rows) {
     return rows.stream()
         .filter(row -> row.cancelTimestamp() == null && trimToNull(row.cancelUserId()) == null)
         .toList();

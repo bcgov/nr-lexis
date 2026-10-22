@@ -14,6 +14,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.context.annotation.Profile;
+import org.springframework.dao.DataRetrievalFailureException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.NoTransactionException;
 import org.springframework.transaction.annotation.Propagation;
@@ -21,8 +22,8 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.interceptor.TransactionAspectSupport;
 
 /**
- * Creates Canadian internal permit invoices only, and reverses only active invoices without a GBMS
- * link.
+ * Creates Canadian internal permit invoices only, and reverses every active invoice when none has a
+ * GBMS link.
  */
 @Service
 @Profile("oracle")
@@ -79,18 +80,22 @@ public class OracleCanadianPermitInvoiceOrchestrationService
 
     try {
       String oracleUserId = encode(userId);
-      List<PermitInvoiceRow> internalHistory =
-          entering
-              ? internalInvoices.prepareCreate(transition, false)
-              : internalInvoices.findHistory(transition.permitNumber());
-      gbmsHistory.validateActiveAlignment(
-          internalHistory, gbmsHistory.findRequired(transition));
       if (entering) {
+        List<PermitInvoiceRow> internalHistory = internalInvoices.prepareCreate(transition, false);
+        gbmsHistory.validateActiveAlignment(
+            internalHistory, gbmsHistory.findRequiredWithoutReceipt(transition));
         internalInvoices.create(transition, oracleUserId, null, false);
       } else {
-        PermitInvoiceRow active =
-            internalInvoices.requireSingleActive(internalHistory, false);
-        internalInvoices.cancel(transition.permitNumber(), active, oracleUserId);
+        List<PermitInvoiceRow> internalHistory =
+            internalInvoices.findHistory(transition.permitNumber());
+        gbmsHistory.validateActiveAlignment(
+            internalHistory, gbmsHistory.findRequired(transition));
+        List<PermitInvoiceRow> activeInvoices = internalInvoices.activeRows(internalHistory);
+        if (activeInvoices.stream().anyMatch(row -> trimToNull(row.gbmsInvoiceNumber()) != null)) {
+          throw new DataRetrievalFailureException(
+              "The active permit invoice GBMS relationship is invalid.");
+        }
+        internalInvoices.cancel(transition.permitNumber(), activeInvoices, oracleUserId);
       }
       return TransitionResult.succeeded();
     } catch (RuntimeException ex) {

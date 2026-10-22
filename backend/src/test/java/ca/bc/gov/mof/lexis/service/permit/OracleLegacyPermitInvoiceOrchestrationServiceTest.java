@@ -2,8 +2,10 @@ package ca.bc.gov.mof.lexis.service.permit;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
@@ -52,7 +54,7 @@ class OracleLegacyPermitInvoiceOrchestrationServiceTest {
   @Test
   void shouldCreateGbmsBeforeTheLinkedInternalInvoice() {
     stubNewInvoicePersistence("GBMS-100", List.of(), List.of());
-    when(permitRepository.findGbmsInvoiceHistoryRequired("RCPT-1", PERMIT_NUMBER))
+    when(permitRepository.findGbmsInvoiceHistoryRequired("", PERMIT_NUMBER))
         .thenReturn(List.of(), List.of(history("GBMS-100", 10.0d, null, null, null)));
     when(gbmsInvoices.createInvoice(PERMIT_NUMBER, gbmsSnapshot(), "idir\\jsmith"))
         .thenReturn("GBMS-100");
@@ -70,12 +72,27 @@ class OracleLegacyPermitInvoiceOrchestrationServiceTest {
   }
 
   @Test
+  void shouldReadGbmsHistoryWithoutTheTypedReceiptWhenCompleting() {
+    stubNewInvoicePersistence("GBMS-100", List.of(), List.of());
+    when(permitRepository.findGbmsInvoiceHistoryRequired("", PERMIT_NUMBER))
+        .thenReturn(List.of(), List.of(history("GBMS-100", 10.0d, null, null, null)));
+    when(gbmsInvoices.createInvoice(PERMIT_NUMBER, gbmsSnapshot(), "idir\\jsmith"))
+        .thenReturn("GBMS-100");
+
+    TransitionResult result = service.orchestrate(enteringTransition(), "idir\\jsmith");
+
+    assertThat(result.success()).isTrue();
+    verify(permitRepository, times(2)).findGbmsInvoiceHistoryRequired("", PERMIT_NUMBER);
+    verify(permitRepository, never()).findGbmsInvoiceHistoryRequired(eq("RCPT-1"), any());
+  }
+
+  @Test
   void shouldKeepCanadianInvoicesInternalInLegacyMode() {
     InternalInvoiceSnapshot snapshot = canadianInternalSnapshot();
     PermitInvoiceRow prior = cancelledInternal("GBMS-OLD");
     when(invoiceRepository.findByPermitDetailNumberRequired(PERMIT_NUMBER))
         .thenReturn(List.of(prior), List.of(prior));
-    when(permitRepository.findGbmsInvoiceHistoryRequired("RCPT-1", PERMIT_NUMBER))
+    when(permitRepository.findGbmsInvoiceHistoryRequired("", PERMIT_NUMBER))
         .thenReturn(
             List.of(
                 history("GBMS-OLD", 10.0d, "GBMS-CANCEL", null, null),
@@ -114,7 +131,7 @@ class OracleLegacyPermitInvoiceOrchestrationServiceTest {
             "idir\\jsmith");
 
     assertThat(result.success()).isTrue();
-    verify(permitRepository).findGbmsInvoiceHistoryRequired("RCPT-1", PERMIT_NUMBER);
+    verify(permitRepository).findGbmsInvoiceHistoryRequired("", PERMIT_NUMBER);
     verifyNoInteractions(gbmsInvoices);
   }
 
@@ -124,7 +141,7 @@ class OracleLegacyPermitInvoiceOrchestrationServiceTest {
     PermitInvoiceRow prior = cancelledInternal("GBMS-OLD");
     when(invoiceRepository.findByPermitDetailNumberRequired(PERMIT_NUMBER))
         .thenReturn(List.of(prior));
-    when(permitRepository.findGbmsInvoiceHistoryRequired("RCPT-1", PERMIT_NUMBER))
+    when(permitRepository.findGbmsInvoiceHistoryRequired("", PERMIT_NUMBER))
         .thenReturn(List.of(history("GBMS-OLD", 10.0d, null, null, null)));
 
     TransitionResult result =
@@ -152,7 +169,7 @@ class OracleLegacyPermitInvoiceOrchestrationServiceTest {
   void shouldBlockAnUnlinkedPositiveGbmsInvoiceBeforeCreatingAnother() {
     when(invoiceRepository.findByPermitDetailNumberRequired(PERMIT_NUMBER))
         .thenReturn(List.of());
-    when(permitRepository.findGbmsInvoiceHistoryRequired("RCPT-1", PERMIT_NUMBER))
+    when(permitRepository.findGbmsInvoiceHistoryRequired("", PERMIT_NUMBER))
         .thenReturn(List.of(history("GBMS-ORPHAN", 10.0d, null, null, null)));
 
     TransitionResult result = service.orchestrate(enteringTransition(), "idir\\jsmith");
@@ -170,7 +187,7 @@ class OracleLegacyPermitInvoiceOrchestrationServiceTest {
     PermitInvoiceRow prior = cancelledInternal("GBMS-OLD");
     when(invoiceRepository.findByPermitDetailNumberRequired(PERMIT_NUMBER))
         .thenReturn(List.of(prior));
-    when(permitRepository.findGbmsInvoiceHistoryRequired("RCPT-1", PERMIT_NUMBER))
+    when(permitRepository.findGbmsInvoiceHistoryRequired("", PERMIT_NUMBER))
         .thenReturn(List.of(history("GBMS-OLD", 10.0d, null, null, null)));
 
     TransitionResult result = service.orchestrate(enteringTransition(), "idir\\jsmith");
@@ -185,7 +202,7 @@ class OracleLegacyPermitInvoiceOrchestrationServiceTest {
   void shouldRequireReconciliationWhenInternalLinkingFailsAfterGbmsCreation() {
     when(invoiceRepository.findByPermitDetailNumberRequired(PERMIT_NUMBER))
         .thenReturn(List.of(), List.of());
-    when(permitRepository.findGbmsInvoiceHistoryRequired("RCPT-1", PERMIT_NUMBER))
+    when(permitRepository.findGbmsInvoiceHistoryRequired("", PERMIT_NUMBER))
         .thenReturn(List.of(), List.of(history("GBMS-100", 10.0d, null, null, null)));
     when(gbmsInvoices.createInvoice(PERMIT_NUMBER, gbmsSnapshot(), "idir\\jsmith"))
         .thenReturn("GBMS-100");
@@ -204,7 +221,7 @@ class OracleLegacyPermitInvoiceOrchestrationServiceTest {
   void shouldRejectACreatedInvoiceThatIsAlreadyInactive() {
     when(invoiceRepository.findByPermitDetailNumberRequired(PERMIT_NUMBER))
         .thenReturn(List.of());
-    when(permitRepository.findGbmsInvoiceHistoryRequired("RCPT-1", PERMIT_NUMBER))
+    when(permitRepository.findGbmsInvoiceHistoryRequired("", PERMIT_NUMBER))
         .thenReturn(
             List.of(),
             List.of(history("GBMS-100", 10.0d, "GBMS-CANCEL", null, null)));
@@ -265,24 +282,169 @@ class OracleLegacyPermitInvoiceOrchestrationServiceTest {
   }
 
   @Test
-  void shouldBlockCancellationWhenGbmsContainsAnUnlinkedActiveInvoice() {
+  void shouldCancelAnUnlinkedActiveGbmsInvoiceWithTheLinkedOne() {
     PermitInvoiceRow active = activeInternal("GBMS-100");
     when(invoiceRepository.findByPermitDetailNumberRequired(PERMIT_NUMBER))
-        .thenReturn(List.of(active));
+        .thenReturn(List.of(active), List.of(cancelled(active)));
     when(permitRepository.findGbmsInvoiceHistoryRequired("RCPT-1", PERMIT_NUMBER))
         .thenReturn(
             List.of(
                 history("GBMS-100", 10.0d, null, null, null),
-                history("GBMS-ORPHAN", 5.0d, null, null, null)));
+                history("GBMS-ORPHAN", 5.0d, null, null, null)),
+            List.of(history("GBMS-ORPHAN", 5.0d, null, null, null)),
+            List.of());
+
+    TransitionResult result = service.orchestrate(leavingTransition(), "idir\\jsmith");
+
+    assertThat(result.success()).isTrue();
+    InOrder order = inOrder(invoiceRepository, gbmsInvoices);
+    order.verify(invoiceRepository)
+        .updatePermitInvoiceRequired(
+            new PermitInvoiceUpdate(INTERNAL_INVOICE_NUMBER, "GBMS-100", "idir\\jsmith"));
+    order.verify(gbmsInvoices).cancelInvoice("GBMS-100", "idir\\jsmith");
+    order.verify(gbmsInvoices).cancelInvoice("GBMS-ORPHAN", "idir\\jsmith");
+  }
+
+  @ParameterizedTest
+  @CsvSource({"US,ACT", "US,CAN", "CA,ACT", "CA,CAN"})
+  void shouldSaveWithNoInvoiceWritesWhenNothingIsActive(String country, String targetStatus) {
+    when(invoiceRepository.findByPermitDetailNumberRequired(PERMIT_NUMBER))
+        .thenReturn(List.of(cancelledInternal("GBMS-OLD")));
+    when(permitRepository.findGbmsInvoiceHistoryRequired("RCPT-1", PERMIT_NUMBER))
+        .thenReturn(
+            List.of(
+                history("GBMS-OLD", 10.0d, "GBMS-CANCEL", null, LocalDate.of(2026, 3, 1)),
+                history("GBMS-CANCEL", -10.0d, null, null, null)));
+
+    TransitionResult result =
+        service.orchestrate(leavingTransition(country, targetStatus), "idir\\jsmith");
+
+    assertThat(result.success()).isTrue();
+    verify(invoiceRepository, never()).updatePermitInvoiceRequired(any());
+    verifyNoInteractions(gbmsInvoices);
+  }
+
+  @Test
+  void shouldSaveWithNoInvoiceWritesWhenThePermitHasNoInvoiceHistory() {
+    when(invoiceRepository.findByPermitDetailNumberRequired(PERMIT_NUMBER)).thenReturn(List.of());
+    when(permitRepository.findGbmsInvoiceHistoryRequired("RCPT-1", PERMIT_NUMBER))
+        .thenReturn(List.of());
+
+    TransitionResult result = service.orchestrate(leavingTransition(), "idir\\jsmith");
+
+    assertThat(result.success()).isTrue();
+    verify(invoiceRepository, never()).updatePermitInvoiceRequired(any());
+    verifyNoInteractions(gbmsInvoices);
+  }
+
+  @Test
+  void shouldCancelTheOnlyActiveGbmsInvoiceWhenNoInternalInvoiceIsActive() {
+    when(invoiceRepository.findByPermitDetailNumberRequired(PERMIT_NUMBER)).thenReturn(List.of());
+    when(permitRepository.findGbmsInvoiceHistoryRequired("RCPT-1", PERMIT_NUMBER))
+        .thenReturn(
+            List.of(history("GBMS-OLD", 10.0d, null, null, LocalDate.of(2010, 3, 1))),
+            List.of(
+                history("GBMS-OLD", 10.0d, "GBMS-CANCEL", null, LocalDate.of(2010, 3, 1)),
+                history("GBMS-CANCEL", -10.0d, null, null, null)));
+
+    TransitionResult result = service.orchestrate(leavingTransition(), "idir\\jsmith");
+
+    assertThat(result.success()).isTrue();
+    verify(gbmsInvoices).cancelInvoice("GBMS-OLD", "idir\\jsmith");
+    verify(invoiceRepository, never()).updatePermitInvoiceRequired(any());
+  }
+
+  @Test
+  void shouldCancelEveryActiveGbmsInvoiceWhenNoInternalInvoiceIsActive() {
+    when(invoiceRepository.findByPermitDetailNumberRequired(PERMIT_NUMBER)).thenReturn(List.of());
+    when(permitRepository.findGbmsInvoiceHistoryRequired("RCPT-1", PERMIT_NUMBER))
+        .thenReturn(
+            List.of(
+                history("GBMS-1", 10.0d, null, null, LocalDate.of(2010, 3, 1)),
+                history("GBMS-2", 5.0d, null, null, null)),
+            List.of(
+                history("GBMS-1", 10.0d, "GBMS-CANCEL", null, LocalDate.of(2010, 3, 1)),
+                history("GBMS-CANCEL", -10.0d, null, null, null),
+                history("GBMS-2", 5.0d, null, null, null)),
+            List.of(
+                history("GBMS-1", 10.0d, "GBMS-CANCEL", null, LocalDate.of(2010, 3, 1)),
+                history("GBMS-CANCEL", -10.0d, null, null, null)));
+
+    TransitionResult result = service.orchestrate(leavingTransition(), "idir\\jsmith");
+
+    assertThat(result.success()).isTrue();
+    InOrder order = inOrder(gbmsInvoices);
+    order.verify(gbmsInvoices).cancelInvoice("GBMS-1", "idir\\jsmith");
+    order.verify(gbmsInvoices).cancelInvoice("GBMS-2", "idir\\jsmith");
+    verify(invoiceRepository, never()).updatePermitInvoiceRequired(any());
+  }
+
+  @Test
+  void shouldCancelBothLinkedInvoicesInternallyAndInGbms() {
+    PermitInvoiceRow first = activeInternal(INTERNAL_INVOICE_NUMBER, "GBMS-1");
+    PermitInvoiceRow second = activeInternal(INTERNAL_INVOICE_NUMBER + 1, "GBMS-2");
+    when(invoiceRepository.findByPermitDetailNumberRequired(PERMIT_NUMBER))
+        .thenReturn(List.of(first, second), List.of(cancelled(first), cancelled(second)));
+    when(permitRepository.findGbmsInvoiceHistoryRequired("RCPT-1", PERMIT_NUMBER))
+        .thenReturn(
+            List.of(
+                history("GBMS-1", 10.0d, null, null, null),
+                history("GBMS-2", 10.0d, null, null, null)),
+            List.of(history("GBMS-2", 10.0d, null, null, null)),
+            List.of());
+
+    TransitionResult result = service.orchestrate(leavingTransition(), "idir\\jsmith");
+
+    assertThat(result.success()).isTrue();
+    InOrder order = inOrder(invoiceRepository, gbmsInvoices);
+    order.verify(invoiceRepository)
+        .updatePermitInvoiceRequired(
+            new PermitInvoiceUpdate(INTERNAL_INVOICE_NUMBER, "GBMS-1", "idir\\jsmith"));
+    order.verify(invoiceRepository)
+        .updatePermitInvoiceRequired(
+            new PermitInvoiceUpdate(INTERNAL_INVOICE_NUMBER + 1, "GBMS-2", "idir\\jsmith"));
+    order.verify(gbmsInvoices).cancelInvoice("GBMS-1", "idir\\jsmith");
+    order.verify(gbmsInvoices).cancelInvoice("GBMS-2", "idir\\jsmith");
+  }
+
+  @Test
+  void shouldCancelTheReplacementGbmsInvoiceWhenTheLinkedOneWasReplaced() {
+    PermitInvoiceRow active = activeInternal("GBMS-100");
+    when(invoiceRepository.findByPermitDetailNumberRequired(PERMIT_NUMBER))
+        .thenReturn(List.of(active), List.of(cancelled(active)));
+    when(permitRepository.findGbmsInvoiceHistoryRequired("RCPT-1", PERMIT_NUMBER))
+        .thenReturn(
+            List.of(
+                history("GBMS-100", 10.0d, null, "GBMS-200", LocalDate.of(2026, 3, 1)),
+                history("GBMS-200", 10.0d, null, null, null)),
+            List.of(history("GBMS-100", 10.0d, null, "GBMS-200", LocalDate.of(2026, 3, 1))));
+
+    TransitionResult result = service.orchestrate(leavingTransition(), "idir\\jsmith");
+
+    assertThat(result.success()).isTrue();
+    verify(invoiceRepository)
+        .updatePermitInvoiceRequired(
+            new PermitInvoiceUpdate(INTERNAL_INVOICE_NUMBER, "GBMS-100", "idir\\jsmith"));
+    verify(gbmsInvoices).cancelInvoice("GBMS-200", "idir\\jsmith");
+    verify(gbmsInvoices, never()).cancelInvoice(eq("GBMS-100"), any());
+  }
+
+  @Test
+  void shouldFailWhenAGbmsInvoiceIsStillActiveAfterCancelling() {
+    PermitInvoiceRow active = activeInternal("GBMS-100");
+    when(invoiceRepository.findByPermitDetailNumberRequired(PERMIT_NUMBER))
+        .thenReturn(List.of(active), List.of(cancelled(active)));
+    when(permitRepository.findGbmsInvoiceHistoryRequired("RCPT-1", PERMIT_NUMBER))
+        .thenReturn(
+            List.of(history("GBMS-100", 10.0d, null, null, null)),
+            List.of(history("GBMS-300", 10.0d, null, null, null)));
 
     TransitionResult result = service.orchestrate(leavingTransition(), "idir\\jsmith");
 
     assertThat(result.success()).isFalse();
     assertThat(result.message())
         .isEqualTo(
-            "The GBMS invoices for this permit do not match its LEXIS invoices, so its status cannot be changed. Contact the LEXIS administrator.");
-    verify(invoiceRepository, never()).updatePermitInvoiceRequired(any());
-    verify(gbmsInvoices, never()).cancelInvoice(any(), any());
+            "The permit invoice was only partly processed in GBMS, so the permit was not changed. Contact the LEXIS administrator before trying again.");
   }
 
   @ParameterizedTest
@@ -337,56 +499,62 @@ class OracleLegacyPermitInvoiceOrchestrationServiceTest {
 
   @ParameterizedTest
   @ValueSource(strings = {"US", "CA"})
-  void shouldBlockInternalOnlyCancellationWhenGbmsHasAnUnlinkedActiveInvoice(String country) {
+  void shouldCancelAnUnlinkedActiveGbmsInvoiceWithAnInternalOnlyInvoice(String country) {
+    PermitInvoiceRow active = canadianActiveInternal();
     when(invoiceRepository.findByPermitDetailNumberRequired(PERMIT_NUMBER))
-        .thenReturn(List.of(canadianActiveInternal()));
+        .thenReturn(List.of(active), List.of(cancelled(active)));
     when(permitRepository.findGbmsInvoiceHistoryRequired("RCPT-1", PERMIT_NUMBER))
-        .thenReturn(List.of(history("GBMS-ORPHAN", 10.0d, null, null, null)));
+        .thenReturn(List.of(history("GBMS-ORPHAN", 10.0d, null, null, null)), List.of());
 
     TransitionResult result =
         service.orchestrate(leavingTransition(country, "CAN"), "idir\\jsmith");
 
-    assertThat(result.success()).isFalse();
-    assertThat(result.message())
-        .isEqualTo(
-            "The GBMS invoices for this permit do not match its LEXIS invoices, so its status cannot be changed. Contact the LEXIS administrator.");
-    verify(invoiceRepository, never()).updatePermitInvoiceRequired(any());
-    verifyNoInteractions(gbmsInvoices);
+    assertThat(result.success()).isTrue();
+    verify(invoiceRepository)
+        .updatePermitInvoiceRequired(
+            new PermitInvoiceUpdate(INTERNAL_INVOICE_NUMBER, null, "idir\\jsmith"));
+    verify(gbmsInvoices).cancelInvoice("GBMS-ORPHAN", "idir\\jsmith");
   }
 
   @ParameterizedTest
   @ValueSource(strings = {"US", "CA"})
-  void shouldRequireExactlyOneActiveInternalInvoiceToCancel(String country) {
+  void shouldCancelAnInternalOnlyInvoiceAndALinkedInvoiceTogether(String country) {
+    PermitInvoiceRow internalOnly = canadianActiveInternal();
+    PermitInvoiceRow linked = activeInternal(INTERNAL_INVOICE_NUMBER + 1, "GBMS-100");
     when(invoiceRepository.findByPermitDetailNumberRequired(PERMIT_NUMBER))
-        .thenReturn(List.of(canadianActiveInternal(), activeInternal("GBMS-100")));
+        .thenReturn(
+            List.of(internalOnly, linked), List.of(cancelled(internalOnly), cancelled(linked)));
+    when(permitRepository.findGbmsInvoiceHistoryRequired("RCPT-1", PERMIT_NUMBER))
+        .thenReturn(List.of(history("GBMS-100", 10.0d, null, null, null)), List.of());
 
     TransitionResult result =
         service.orchestrate(leavingTransition(country, "ACT"), "idir\\jsmith");
 
-    assertThat(result.success()).isFalse();
-    assertThat(result.message())
-        .isEqualTo(
-            "This permit does not have exactly one active invoice, so its status cannot be changed. Contact the LEXIS administrator.");
-    verify(invoiceRepository, never()).updatePermitInvoiceRequired(any());
-    verifyNoInteractions(gbmsInvoices);
+    assertThat(result.success()).isTrue();
+    verify(invoiceRepository)
+        .updatePermitInvoiceRequired(
+            new PermitInvoiceUpdate(INTERNAL_INVOICE_NUMBER, null, "idir\\jsmith"));
+    verify(invoiceRepository)
+        .updatePermitInvoiceRequired(
+            new PermitInvoiceUpdate(INTERNAL_INVOICE_NUMBER + 1, "GBMS-100", "idir\\jsmith"));
+    verify(gbmsInvoices).cancelInvoice("GBMS-100", "idir\\jsmith");
   }
 
   @Test
-  void shouldBlockCancellationWhenGbmsAmountDoesNotMatch() {
+  void shouldCancelALinkedGbmsInvoiceWhoseAmountDiffers() {
     PermitInvoiceRow active = activeInternal("GBMS-100");
     when(invoiceRepository.findByPermitDetailNumberRequired(PERMIT_NUMBER))
-        .thenReturn(List.of(active));
+        .thenReturn(List.of(active), List.of(cancelled(active)));
     when(permitRepository.findGbmsInvoiceHistoryRequired("RCPT-1", PERMIT_NUMBER))
-        .thenReturn(List.of(history("GBMS-100", 9.0d, null, null, null)));
+        .thenReturn(List.of(history("GBMS-100", 9.0d, null, null, null)), List.of());
 
     TransitionResult result = service.orchestrate(leavingTransition(), "idir\\jsmith");
 
-    assertThat(result.success()).isFalse();
-    assertThat(result.message())
-        .isEqualTo(
-            "The active GBMS invoice does not match the permit's LEXIS invoice, so its status cannot be changed. Contact the LEXIS administrator.");
-    verify(invoiceRepository, never()).updatePermitInvoiceRequired(any());
-    verify(gbmsInvoices, never()).cancelInvoice(any(), any());
+    assertThat(result.success()).isTrue();
+    verify(invoiceRepository)
+        .updatePermitInvoiceRequired(
+            new PermitInvoiceUpdate(INTERNAL_INVOICE_NUMBER, "GBMS-100", "idir\\jsmith"));
+    verify(gbmsInvoices).cancelInvoice("GBMS-100", "idir\\jsmith");
   }
 
   @Test
@@ -395,7 +563,7 @@ class OracleLegacyPermitInvoiceOrchestrationServiceTest {
     PermitInvoiceRow second = cancelledInternal("GBMS-OLD-2");
     when(invoiceRepository.findByPermitDetailNumberRequired(PERMIT_NUMBER))
         .thenReturn(List.of(first, second));
-    when(permitRepository.findGbmsInvoiceHistoryRequired("RCPT-1", PERMIT_NUMBER))
+    when(permitRepository.findGbmsInvoiceHistoryRequired("", PERMIT_NUMBER))
         .thenReturn(
             List.of(
                 history("GBMS-OLD-1", 8.0d, "GBMS-CANCEL-1", null, LocalDate.of(2026, 3, 1)),
@@ -455,7 +623,7 @@ class OracleLegacyPermitInvoiceOrchestrationServiceTest {
             "GBMS-NEW",
             LocalDate.of(2026, 3, 1));
     GbmsInvoiceHistoryRow created = history("GBMS-NEW", 10.0d, null, null, null);
-    when(permitRepository.findGbmsInvoiceHistoryRequired("RCPT-1", PERMIT_NUMBER))
+    when(permitRepository.findGbmsInvoiceHistoryRequired("", PERMIT_NUMBER))
         .thenReturn(
             List.of(oldBefore),
             List.of(created, oldBefore),
@@ -576,8 +744,12 @@ class OracleLegacyPermitInvoiceOrchestrationServiceTest {
   }
 
   private PermitInvoiceRow activeInternal(String gbmsInvoiceNumber) {
+    return activeInternal(INTERNAL_INVOICE_NUMBER, gbmsInvoiceNumber);
+  }
+
+  private PermitInvoiceRow activeInternal(long invoiceNumber, String gbmsInvoiceNumber) {
     return new PermitInvoiceRow(
-        INTERNAL_INVOICE_NUMBER,
+        invoiceNumber,
         PERMIT_NUMBER,
         gbmsInvoiceNumber,
         BigDecimal.TEN,

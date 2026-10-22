@@ -315,6 +315,55 @@ class OracleCanadianPermitInvoiceOrchestrationServiceTest {
     assertNoGbmsWrites();
   }
 
+  @Test
+  void shouldSaveACancellationWithNoActiveInvoiceWithoutInvoiceWrites() {
+    when(repository.findByPermitDetailNumberRequired(PERMIT_NUMBER))
+        .thenReturn(List.of(cancelledInvoice(null)));
+
+    TransitionResult result =
+        service.orchestrate(transition("COM", "CAN", "CA", null), "idir\\jsmith");
+
+    assertThat(result.success()).isTrue();
+    verify(permitRepository).findGbmsInvoiceHistoryRequired("RCPT-1", PERMIT_NUMBER);
+    verify(repository, never()).updatePermitInvoiceRequired(any());
+    assertNoGbmsWrites();
+  }
+
+  @Test
+  void shouldCancelEveryActiveInternalInvoice() {
+    PermitInvoiceRow first = activeInvoice(null);
+    PermitInvoiceRow second = activeInvoice(INVOICE_NUMBER + 1, null);
+    when(repository.findByPermitDetailNumberRequired(PERMIT_NUMBER))
+        .thenReturn(
+            List.of(first, second),
+            List.of(cancelledBy(first, "idir\\jsmith"), cancelledBy(second, "idir\\jsmith")));
+
+    TransitionResult result =
+        service.orchestrate(transition("COM", "ACT", "CA", null), "idir\\jsmith");
+
+    assertThat(result.success()).isTrue();
+    verify(repository)
+        .updatePermitInvoiceRequired(new PermitInvoiceUpdate(INVOICE_NUMBER, null, "idir\\jsmith"));
+    verify(repository)
+        .updatePermitInvoiceRequired(
+            new PermitInvoiceUpdate(INVOICE_NUMBER + 1, null, "idir\\jsmith"));
+    assertNoGbmsWrites();
+  }
+
+  @Test
+  void shouldRejectACancellationThatWouldLeaveAGbmsInvoiceActive() {
+    when(repository.findByPermitDetailNumberRequired(PERMIT_NUMBER)).thenReturn(List.of());
+    when(permitRepository.findGbmsInvoiceHistoryRequired("RCPT-1", PERMIT_NUMBER))
+        .thenReturn(List.of(gbmsHistory("GBMS-100", 10.0d, null, null)));
+
+    TransitionResult result =
+        service.orchestrate(transition("COM", "CAN", "CA", null), "idir\\jsmith");
+
+    assertThat(result.success()).isFalse();
+    verify(repository, never()).updatePermitInvoiceRequired(any());
+    assertNoGbmsWrites();
+  }
+
   @ParameterizedTest
   @ValueSource(strings = {"ACT", "CAN"})
   void shouldCancelAnInvoiceWithoutAGbmsLinkForANonCanadianPermit(String targetStatus) {
@@ -351,7 +400,7 @@ class OracleCanadianPermitInvoiceOrchestrationServiceTest {
     PermitInvoiceRow cancelledPrior = cancelledInvoice("GBMS-100");
     when(repository.findByPermitDetailNumberRequired(PERMIT_NUMBER))
         .thenReturn(List.of(cancelledPrior));
-    when(permitRepository.findGbmsInvoiceHistoryRequired("RCPT-1", PERMIT_NUMBER))
+    when(permitRepository.findGbmsInvoiceHistoryRequired("", PERMIT_NUMBER))
         .thenReturn(
             List.of(
                 gbmsHistory("GBMS-100", 10.0d, "GBMS-CANCEL", null),
@@ -403,7 +452,7 @@ class OracleCanadianPermitInvoiceOrchestrationServiceTest {
   void shouldRejectCanadianReissueWhilePriorGbmsInvoiceIsActive() {
     when(repository.findByPermitDetailNumberRequired(PERMIT_NUMBER))
         .thenReturn(List.of(cancelledInvoice("GBMS-100")));
-    when(permitRepository.findGbmsInvoiceHistoryRequired("RCPT-1", PERMIT_NUMBER))
+    when(permitRepository.findGbmsInvoiceHistoryRequired("", PERMIT_NUMBER))
         .thenReturn(List.of(gbmsHistory("GBMS-100", 10.0d, null, null)));
 
     TransitionResult result =
@@ -546,8 +595,12 @@ class OracleCanadianPermitInvoiceOrchestrationServiceTest {
   }
 
   private PermitInvoiceRow activeInvoice(String gbmsInvoiceNumber) {
+    return activeInvoice(INVOICE_NUMBER, gbmsInvoiceNumber);
+  }
+
+  private PermitInvoiceRow activeInvoice(long invoiceNumber, String gbmsInvoiceNumber) {
     return new PermitInvoiceRow(
-        INVOICE_NUMBER,
+        invoiceNumber,
         PERMIT_NUMBER,
         gbmsInvoiceNumber,
         BigDecimal.ZERO,

@@ -11,6 +11,7 @@ import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.atLeastOnce;
 import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.lenient;
+import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
@@ -48,6 +49,7 @@ import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitScalesForPackageRpcResponseDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitSummaryRpcResponseDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitTotalFeesRpcResponseDto;
 import ca.bc.gov.mof.lexis.repository.exemption.ExemptionDetailsRpcRepository;
+import ca.bc.gov.mof.lexis.repository.permit.PermitInvoiceRepository;
 import ca.bc.gov.mof.lexis.repository.permit.PermitRpcRepository;
 import ca.bc.gov.mof.lexis.repository.permit.PermitRpcRepository.ApplicationInfoRow;
 import ca.bc.gov.mof.lexis.repository.permit.PermitRpcRepository.BoicScaleMutationRecord;
@@ -5351,6 +5353,43 @@ class OraclePermitDetailsRpcServiceTest {
     verify(applicationReviewRepository)
         .updateStatusWithRemarkFromAllowedSources(
             1000456L, "EXE", null, "idir\\jsmith", List.of("PMT"));
+  }
+
+  @Test
+  void updatePermitShouldCancelACompletedPermitThatHasNoActiveInvoice() {
+    PermitInvoiceRepository invoiceRepository = mock(PermitInvoiceRepository.class);
+    OracleGbmsPermitInvoiceService gbmsInvoices = mock(OracleGbmsPermitInvoiceService.class);
+    when(permitInvoiceOrchestrationServiceProvider.getIfAvailable())
+        .thenReturn(
+            new OracleLegacyPermitInvoiceOrchestrationService(
+                invoiceRepository, repository, gbmsInvoices));
+    when(invoiceRepository.findByPermitDetailNumberRequired(7000123L)).thenReturn(List.of());
+    when(repository.findGbmsInvoiceHistoryRequired("RCPT-100", 7000123L)).thenReturn(List.of());
+    when(repository.findPermitMutationByPermitNumber(7000123L))
+        .thenReturn(Optional.of(permitMutationRow("COM")));
+    stubTargetMinisterialExemption("EX-700");
+    when(repository.updatePermitDetail(
+            any(PermitMutationRow.class), eq("idir\\jsmith"), eq(FEE_MASK_EFFECTIVE_DATE)))
+        .thenReturn(true);
+    when(repository.findApplicationNumbersByPermitNumberRequired(7000123L))
+        .thenReturn(List.of(1000456L));
+    when(repository.findApplicationStatusCodeByNumber(1000456L))
+        .thenReturn(Optional.of("PMT"));
+    when(applicationReviewRepository.updateStatusWithRemarkFromAllowedSources(
+            1000456L, "EXE", null, "idir\\jsmith", List.of("PMT")))
+        .thenReturn(
+            new ApplicationReviewRepository.ApplicationStatusTransitionRow(
+                true, true, true, "PMT", null));
+
+    PermitMutationRpcResponseDto response =
+        service.updatePermit(formCheckRequest("CAN", "42", "Legacy notes"), "idir\\jsmith");
+
+    assertThat(response.success()).isTrue();
+    verify(applicationReviewRepository)
+        .updateStatusWithRemarkFromAllowedSources(
+            1000456L, "EXE", null, "idir\\jsmith", List.of("PMT"));
+    verify(invoiceRepository, never()).updatePermitInvoiceRequired(any());
+    verifyNoInteractions(gbmsInvoices);
   }
 
   @Test

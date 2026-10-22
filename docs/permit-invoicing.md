@@ -28,12 +28,16 @@ the final GBMS invoice tables. LEXIS uses these procedures:
 | Mode | Behaviour |
 |---|---|
 | `legacy-best-effort` | Default mode. Processes Canadian internal invoices and preserves the successful legacy non-Canadian GBMS sequence with additional failure checks. |
-| `canadian-internal` | Rollback mode. Creates Canadian internal invoices only. Cancelling or reactivating reverses an internal invoice without a GBMS link for any destination and refuses one linked to GBMS. |
+| `canadian-internal` | Rollback mode. Creates Canadian internal invoices only. Cancelling or reactivating cancels every active internal invoice for any destination, and refuses when one is linked to GBMS or the permit has an active GBMS invoice without an active LEXIS link. |
 | `disabled` | Operational stop. Rejects every permit transition that requires invoice work. |
 
 Both active modes read GBMS history before Canadian invoice mutations so a prior non-Canadian
 cycle cannot leave a second active bill. Fully cancelled or replaced history does not block a
 Canadian reissue.
+
+Completing a permit or moving it to Payment pending reads GBMS history without the permit's
+receipt, so the history procedure never looks the receipt up as an invoice number. Cancelling and
+reactivating pass the receipt.
 
 ## Non-Canadian flow
 
@@ -47,11 +51,12 @@ application changes in the surrounding transaction. It then performs the legacy 
 4. Link one eligible prior invoice as replaced when applicable.
 5. Commit the staged permit, invoice, and linked-application changes.
 
-Cancellation and reactivation follow the active invoice's GBMS link, not the permit's current
-country. An invoice without a link is cancelled internally only. For a linked invoice, LEXIS marks
-the internal invoice cancelled, asks GBMS to cancel or discard its invoice, and verifies that the
-original GBMS invoice is no longer active. `PPD` to `COM` receipt completion
-does not create a second invoice.
+Cancellation and reactivation do not depend on the permit's current country. LEXIS marks every
+active internal invoice of the permit cancelled. It then asks GBMS to cancel or discard every active
+GBMS invoice of the permit, verifies each one, and checks that none is left active. An active GBMS
+invoice is one that is not negative, not cancelled, not replaced and not itself a cancellation,
+whether or not a LEXIS invoice links to it. A permit with no active invoice saves with no invoice
+writes. `PPD` to `COM` receipt completion does not create a second invoice.
 
 GBMS calls use a separate transaction and connection so commits performed inside its Oracle
 procedures do not commit the surrounding LEXIS permit transaction. Each isolated transaction
@@ -75,11 +80,14 @@ the first matching history row without verifying the result. Modern LEXIS instea
 
 - writes the internal invoice only after GBMS creation is verified;
 - rolls back the surrounding permit and linked-application changes when orchestration fails;
-- rejects ambiguous or unlinked active history; and
+- rejects ambiguous or unlinked active history before creating an invoice;
+- cancels every active internal and GBMS invoice on cancellation or reactivation, where legacy
+  cancelled the first uncancelled one of each (`PERMIT_CANCEL_EVERY_ACTIVE_INVOICE` in the
+  [intentional legacy divergences](intentional-legacy-divergences.md)); and
 - verifies creation, cancellation, and replacement through GBMS history.
 
 These checks preserve the legacy business outcome for valid data. Inconsistent legacy history can
-stop the transition and require reconciliation instead of producing another partial invoice.
+stop completion and require reconciliation instead of producing another partial invoice.
 
 A refused transition names the cause in plain language. When the user can fix it, such as a missing
 submit date or destination country, the message says where to correct it. When the cause is in the
@@ -90,8 +98,8 @@ GBMS or LEXIS invoice history, it tells the user to contact the LEXIS administra
 This integration is ordered synchronous best effort, not an atomic distributed transaction. The
 existing GBMS detail and notation procedures contain commits, so earlier header, general, or detail
 work can be committed before a later step fails. A timeout can also leave the result unknown.
-LEXIS therefore does not automatically retry a failed GBMS operation. A later request stops when
-the permit-history lookup returns an active non-negative GBMS invoice without an internal link.
+LEXIS therefore does not automatically retry a failed GBMS operation. A later completion stops
+when the permit-history lookup returns an active non-negative GBMS invoice without an internal link.
 History can show that an invoice exists, but it does not prove that every detail and notation step
 completed.
 

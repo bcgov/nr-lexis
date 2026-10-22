@@ -100,41 +100,41 @@ public class OracleLegacyPermitInvoiceOrchestrationService
     try {
       String oracleUserId = encode(userId);
       if (leaving) {
-        // Reversal follows the active invoice's GBMS link, whatever the permit's current country.
-        List<PermitInvoiceRow> internalHistory =
-            internalInvoices.findHistory(transition.permitNumber());
-        PermitInvoiceRow active = internalInvoices.requireSingleActive(internalHistory);
-        gbmsInvoiceNumber = trimToNull(active.gbmsInvoiceNumber());
-        List<GbmsInvoiceHistoryRow> history = gbmsHistory.findRequired(transition);
-        gbmsHistory.validateActiveAlignment(internalHistory, history);
-        if (gbmsInvoiceNumber == null) {
-          stage = "internal_cancel";
-          internalInvoices.cancel(transition.permitNumber(), active, oracleUserId);
-          return TransitionResult.succeeded();
-        }
-        GbmsInvoiceHistoryRow source = requireCancellableHistory(history, active);
+        // Cancels every active internal and GBMS invoice of the permit, whatever its country.
+        List<PermitInvoiceRow> activeInvoices =
+            internalInvoices.activeRows(internalInvoices.findHistory(transition.permitNumber()));
+        List<GbmsInvoiceHistoryRow> activeGbmsInvoices =
+            gbmsHistory.activeRows(gbmsHistory.findRequired(transition));
 
         stage = "internal_cancel";
-        internalInvoices.cancel(transition.permitNumber(), active, oracleUserId);
+        internalInvoices.cancel(transition.permitNumber(), activeInvoices, oracleUserId);
 
-        stage = "gbms_cancel";
-        gbmsWriteStarted = true;
-        gbmsInvoices.cancelInvoice(gbmsInvoiceNumber, oracleUserId);
-        requireCancelledHistory(transition, source);
+        for (GbmsInvoiceHistoryRow source : activeGbmsInvoices) {
+          stage = "gbms_cancel";
+          gbmsWriteStarted = true;
+          gbmsInvoiceNumber = trimToNull(source.invoiceNumber());
+          gbmsInvoices.cancelInvoice(gbmsInvoiceNumber, oracleUserId);
+          requireCancelledHistory(transition, source);
+        }
+        if (!activeGbmsInvoices.isEmpty()
+            && !gbmsHistory.activeRows(gbmsHistory.findRequired(transition)).isEmpty()) {
+          throw new DataRetrievalFailureException(
+              "A GBMS invoice remained active after cancellation.");
+        }
         return TransitionResult.succeeded();
       }
 
       if (CANADA.equalsIgnoreCase(trimToNull(transition.countryCode()))) {
         List<PermitInvoiceRow> internalHistory = internalInvoices.prepareCreate(transition, false);
         gbmsHistory.validateActiveAlignment(
-            internalHistory, gbmsHistory.findRequired(transition));
+            internalHistory, gbmsHistory.findRequiredWithoutReceipt(transition));
         internalInvoices.create(transition, oracleUserId, null, false);
         return TransitionResult.succeeded();
       }
 
       List<PermitInvoiceRow> internalHistory = internalInvoices.prepareCreate(transition, true);
       GbmsInvoiceSnapshot snapshot = validateGbmsSnapshot(transition);
-      List<GbmsInvoiceHistoryRow> history = gbmsHistory.findRequired(transition);
+      List<GbmsInvoiceHistoryRow> history = gbmsHistory.findRequiredWithoutReceipt(transition);
       gbmsHistory.validateActiveAlignment(internalHistory, history);
       GbmsInvoiceHistoryRow replacement = replacementCandidate(internalHistory, history);
 
@@ -246,7 +246,7 @@ public class OracleLegacyPermitInvoiceOrchestrationService
 
   private void requireCreatedHistory(Transition transition, String invoiceNumber) {
     boolean found =
-        gbmsHistory.findRequired(transition).stream()
+        gbmsHistory.findRequiredWithoutReceipt(transition).stream()
             .anyMatch(
                 row ->
                     invoiceNumber.equalsIgnoreCase(trimToNull(row.invoiceNumber()))
@@ -264,7 +264,7 @@ public class OracleLegacyPermitInvoiceOrchestrationService
   private void requireReplacementHistory(
       Transition transition, String originalInvoice, String replacementInvoice) {
     boolean found =
-        gbmsHistory.findRequired(transition).stream()
+        gbmsHistory.findRequiredWithoutReceipt(transition).stream()
             .anyMatch(
                 row ->
                     originalInvoice.equalsIgnoreCase(trimToNull(row.invoiceNumber()))
@@ -274,31 +274,6 @@ public class OracleLegacyPermitInvoiceOrchestrationService
       throw new DataRetrievalFailureException(
           "The GBMS replacement relationship was not returned by invoice history.");
     }
-  }
-
-  private GbmsInvoiceHistoryRow requireCancellableHistory(
-      List<GbmsInvoiceHistoryRow> history, PermitInvoiceRow active) {
-    List<GbmsInvoiceHistoryRow> activeMatches =
-        history.stream()
-            .filter(
-                row ->
-                    active.gbmsInvoiceNumber().equalsIgnoreCase(
-                        trimToNull(row.invoiceNumber())))
-            .filter(row -> trimToNull(row.cancelledByInvoice()) == null)
-            .toList();
-    if (activeMatches.size() != 1) {
-      throw new OracleInternalPermitInvoiceService.InvoiceBlockedException(
-          "The permit does not have exactly one active GBMS invoice, so its status cannot be"
-              + " changed. Contact the LEXIS administrator.");
-    }
-    GbmsInvoiceHistoryRow source = activeMatches.get(0);
-    if (trimToNull(source.replacedByInvoice()) != null
-        || BigDecimal.valueOf(source.invoiceAmount()).compareTo(active.invoiceTotal()) != 0) {
-      throw new OracleInternalPermitInvoiceService.InvoiceBlockedException(
-          "The active GBMS invoice does not match the permit's LEXIS invoice, so its status cannot"
-              + " be changed. Contact the LEXIS administrator.");
-    }
-    return source;
   }
 
   private void requireCancelledHistory(
