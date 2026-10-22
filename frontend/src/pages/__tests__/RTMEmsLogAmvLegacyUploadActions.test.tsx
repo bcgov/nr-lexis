@@ -208,6 +208,20 @@ describe('RTM EMS Log AMV spreadsheet upload actions', () => {
     expect(document.title).toBe('Average market values')
   })
 
+  it('reaches the spreadsheet drop zone with one tab stop, past the native file input', async () => {
+    await renderUploadPage()
+
+    expect(screen.getByLabelText('Average market values spreadsheet')).toHaveAttribute(
+      'tabindex',
+      '-1',
+    )
+    act(() => screen.getByRole('link', { name: 'Download template' }).focus())
+
+    await userEvent.tab()
+
+    expect(uploadDropZone()).toHaveFocus()
+  })
+
   it('restores next-month saved values as an editable review without file metadata', async () => {
     const currentMonth = `${formatBusinessIsoDate().slice(0, 7)}-01`
     const nextMonth = monthOffset(currentMonth, 1)

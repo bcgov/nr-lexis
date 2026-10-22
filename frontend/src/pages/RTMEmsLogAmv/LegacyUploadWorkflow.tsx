@@ -1416,6 +1416,8 @@ const RtmEmsLogAmvUploadPage = () => {
           id={inputId}
           className="admin-upload-native-input"
           type="file"
+          // The drop zone is the keyboard stop; it opens this input.
+          tabIndex={-1}
           aria-label={inputLabel}
           aria-required="true"
           accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"

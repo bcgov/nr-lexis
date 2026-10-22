@@ -177,6 +177,17 @@ describe('Upload applications', () => {
     expect(screen.queryByRole('heading', { level: 2, name: 'Review' })).not.toBeInTheDocument()
   })
 
+  it('reaches the drop zone with one tab stop, past the native file input', async () => {
+    renderPage()
+
+    expect(screen.getByLabelText('Application files')).toHaveAttribute('tabindex', '-1')
+    act(() => screen.getByRole('heading', { level: 2, name: 'Upload' }).focus())
+
+    await userEvent.tab()
+
+    expect(screen.getByRole('button', { name: 'Choose files for Application files' })).toHaveFocus()
+  })
+
   it('focuses the page heading when the page opens with focus lost', async () => {
     renderPage()
 
