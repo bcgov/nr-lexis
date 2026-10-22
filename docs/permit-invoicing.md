@@ -47,7 +47,7 @@ application changes in the surrounding transaction. It then performs the legacy 
 1. Create the GBMS header, general record, detail lines, and notation.
 2. Verify the new invoice through GBMS history.
 3. Create the internal LEXIS invoice and scale-level details linked to the GBMS number.
-4. Link one eligible prior invoice as replaced when applicable.
+4. Link the first eligible prior invoice in GBMS history order as replaced when applicable.
 5. Commit the staged permit, invoice, and linked-application changes.
 
 Cancellation and reactivation do not depend on the permit's current country. LEXIS marks every
@@ -67,10 +67,10 @@ unknown.
 
 The successful flow is aligned with legacy. Both implementations use the same Oracle procedures,
 invoice types, accounting codes, fee calculations, header-to-notation order, cancellation rules,
-and one eligible prior replacement invoice. Both create an invoice for `ACT` or `CAN` to `COM` or
-`PPD`; `PPD` to `COM` does not create another invoice. One difference is kept: a permit's GBMS
-invoice lines and internal invoice total count only the scales on that permit when a package is
-split across permits (`GBMS_PACKAGE_LINES_THIS_PERMIT_ONLY` in the
+and replacement of the first eligible prior invoice. Both create an invoice for `ACT` or `CAN` to
+`COM` or `PPD`; `PPD` to `COM` does not create another invoice. One difference is kept: a permit's
+GBMS invoice lines and internal invoice total count only the scales on that permit when a package
+is split across permits (`GBMS_PACKAGE_LINES_THIS_PERMIT_ONLY` in the
 [intentional legacy divergences](intentional-legacy-divergences.md)).
 
 Modern LEXIS deliberately does not reproduce legacy failure defects. Legacy could create an
@@ -79,7 +79,7 @@ the first matching history row without verifying the result. Modern LEXIS instea
 
 - writes the internal invoice only after GBMS creation is verified;
 - rolls back the surrounding permit and linked-application changes when orchestration fails;
-- rejects ambiguous or unlinked active history before creating an invoice;
+- rejects unlinked active history before creating an invoice;
 - cancels every active internal and GBMS invoice on cancellation or reactivation, where legacy
   cancelled the first uncancelled one of each (`PERMIT_CANCEL_EVERY_ACTIVE_INVOICE` in the
   [intentional legacy divergences](intentional-legacy-divergences.md)); and

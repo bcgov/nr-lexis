@@ -229,21 +229,15 @@ public class OracleLegacyPermitInvoiceOrchestrationService
         linkedInvoices.add(invoiceNumber.toUpperCase(java.util.Locale.ROOT));
       }
     }
-    List<GbmsInvoiceHistoryRow> candidates =
-        gbmsHistory.stream()
-            .filter(row -> BigDecimal.valueOf(row.invoiceAmount()).compareTo(BigDecimal.ZERO) > 0)
-            .filter(row -> trimToNull(row.replacedByInvoice()) == null)
-            .filter(
-                row ->
-                    linkedInvoices.contains(
-                        trimToNull(row.invoiceNumber()).toUpperCase(java.util.Locale.ROOT)))
-            .toList();
-    if (candidates.size() > 1) {
-      throw new OracleInternalPermitInvoiceService.InvoiceBlockedException(
-          "More than one earlier GBMS invoice could be replaced by this permit's invoice."
-              + " Contact the LEXIS administrator.");
-    }
-    return candidates.isEmpty() ? null : candidates.get(0);
+    return gbmsHistory.stream()
+        .filter(row -> BigDecimal.valueOf(row.invoiceAmount()).compareTo(BigDecimal.ZERO) > 0)
+        .filter(row -> trimToNull(row.replacedByInvoice()) == null)
+        .filter(
+            row ->
+                linkedInvoices.contains(
+                    trimToNull(row.invoiceNumber()).toUpperCase(java.util.Locale.ROOT)))
+        .findFirst()
+        .orElse(null);
   }
 
   private void requireCreatedHistory(Transition transition, String invoiceNumber) {
