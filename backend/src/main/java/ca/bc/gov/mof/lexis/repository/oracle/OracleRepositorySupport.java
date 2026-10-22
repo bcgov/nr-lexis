@@ -614,7 +614,7 @@ public abstract class OracleRepositorySupport {
     char[] characters = value.toCharArray();
     boolean mapped = false;
     for (int index = 0; index < characters.length; index++) {
-      if (characters[index] >= 'ﾀ') {
+      if (characters[index] >= '\uFF80') {
         characters[index] = (char) (characters[index] & 0xFF);
         mapped = true;
       }

@@ -6111,12 +6111,12 @@ class OracleApplicationDetailsRpcServiceTest {
     assertThat(itemsSave.valid()).isTrue();
     ArgumentCaptor<ApplicationDetailsRpcRepository.ApplicationUpdateRecord> recordCaptor =
         ArgumentCaptor.forClass(ApplicationDetailsRpcRepository.ApplicationUpdateRecord.class);
-    verify(repository, org.mockito.Mockito.times(2)).updateApplication(recordCaptor.capture());
+    verify(repository, times(2)).updateApplication(recordCaptor.capture());
     assertThat(recordCaptor.getAllValues())
         .extracting(
             ApplicationDetailsRpcRepository.ApplicationUpdateRecord::agentContactName,
             ApplicationDetailsRpcRepository.ApplicationUpdateRecord::ownerContactName)
-        .containsOnly(org.assertj.core.groups.Tuple.tuple("Agent Ren\u00e9", "Ren\u00e9 Owner"));
+        .containsOnly(tuple("Agent Ren\u00e9", "Ren\u00e9 Owner"));
     assertThat(recordCaptor.getAllValues())
         .extracting(ApplicationDetailsRpcRepository.ApplicationUpdateRecord::productLocation)
         .containsOnly("Caf\u00e9 camp");
