@@ -3477,6 +3477,7 @@ describe('Create Page Core Flows', () => {
       state: {
         offerCreationNotice: {
           warnings: ['Offer saved, but no client email address was found.'],
+          message: 'ok',
         },
       },
     })
