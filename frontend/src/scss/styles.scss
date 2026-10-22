@@ -2894,6 +2894,7 @@ $notification-types: 'error', 'info', 'success', 'warning';
   --fds-support-error-bg: var(--cds-notification-background-error, #2c1a1c);
   --fds-support-success-bg: var(--cds-notification-background-success, #1a2a1c);
   --fds-support-info-bg: var(--cds-notification-background-info, #1a2230);
+  --fds-support-warning-bg: #3b3300;
   --fds-notif-info-border: var(--cds-support-info);
   --fds-notif-error-border: var(--cds-support-error);
   --fds-notif-success-border: var(--cds-support-success);
