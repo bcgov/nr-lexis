@@ -320,7 +320,7 @@ describe('Provincial offer create page', () => {
       })
     })
 
-    it('carries only the warnings when the save raised them', async () => {
+    it('carries the save message with the warnings when the save raised them', async () => {
       mockedSubmitProvincialOfferCreate.mockResolvedValue(
         createResult('8090', {
           message: 'The purchase offer was saved successfully.',
@@ -336,7 +336,12 @@ describe('Provincial offer create page', () => {
 
       await waitFor(() => {
         expect(mockNavigate).toHaveBeenCalledWith('/provincial/offers/8090', {
-          state: { offerCreationNotice: { warnings: [NO_CLIENT_EMAIL_WARNING] } },
+          state: {
+            offerCreationNotice: {
+              warnings: [NO_CLIENT_EMAIL_WARNING],
+              message: 'The purchase offer was saved successfully.',
+            },
+          },
         })
       })
     })

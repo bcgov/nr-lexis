@@ -256,7 +256,9 @@ describe('Provincial Offer Detail Actions', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Save' }))
 
     expect(await screen.findByText('Offer saved with warning')).toBeInTheDocument()
-    expect(screen.getByText(NO_CLIENT_EMAIL_WARNING)).toBeInTheDocument()
+    expect(
+      screen.getByText(`The purchase offer was updated successfully. ${NO_CLIENT_EMAIL_WARNING}`),
+    ).toBeInTheDocument()
   })
 
   it('shows an offer notification warning carried from the create page', async () => {
@@ -268,8 +270,32 @@ describe('Provincial Offer Detail Actions', () => {
             state: {
               offerCreationNotice: {
                 warnings: [NO_CLIENT_EMAIL_WARNING],
+                message: 'The purchase offer was saved successfully.',
               },
             },
+          },
+        ]}
+      >
+        <Routes>
+          <Route path="/provincial/offers/:offerNumber" element={<ProvincialOfferDetailsPage />} />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    await screen.findByRole('heading', { name: 'Offer 81001' })
+    expect(await screen.findByText('Offer saved with warning')).toBeInTheDocument()
+    expect(
+      screen.getByText(`The purchase offer was saved successfully. ${NO_CLIENT_EMAIL_WARNING}`),
+    ).toBeInTheDocument()
+  })
+
+  it('shows only the warnings when the create page carried a blank save message', async () => {
+    render(
+      <MemoryRouter
+        initialEntries={[
+          {
+            pathname: '/provincial/offers/81001',
+            state: { offerCreationNotice: { warnings: [NO_CLIENT_EMAIL_WARNING], message: '' } },
           },
         ]}
       >
@@ -332,7 +358,7 @@ describe('Provincial Offer Detail Actions', () => {
     expect(screen.queryByText('Offer saved with warning')).not.toBeInTheDocument()
   })
 
-  it('prefers the warnings over the save message when the create page carried both', async () => {
+  it('puts the save message ahead of the warnings when the create page carried both', async () => {
     render(
       <MemoryRouter
         initialEntries={[
@@ -355,8 +381,9 @@ describe('Provincial Offer Detail Actions', () => {
 
     await screen.findByRole('heading', { name: 'Offer 81001' })
     expect(await screen.findByText('Offer saved with warning')).toBeInTheDocument()
-    expect(screen.getByText(NO_CLIENT_EMAIL_WARNING)).toBeInTheDocument()
-    expect(screen.queryByText('The purchase offer was saved successfully.')).not.toBeInTheDocument()
+    expect(
+      screen.getByText(`The purchase offer was saved successfully. ${NO_CLIENT_EMAIL_WARNING}`),
+    ).toBeInTheDocument()
   })
 
   it('hides Edit when the server grants an offering client no rights after the withdrawal day', async () => {

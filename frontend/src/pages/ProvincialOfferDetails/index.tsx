@@ -145,7 +145,9 @@ const ProvincialOfferDetailsPage = () => {
       .filter(Boolean)
       .join(' ') ?? ''
   const creationSuccessMessage = navigationState?.offerCreationNotice?.message?.trim() ?? ''
-  const creationNoticeMessage = creationWarningMessage || creationSuccessMessage
+  const creationNoticeMessage = creationWarningMessage
+    ? [creationSuccessMessage, creationWarningMessage].filter(Boolean).join(' ')
+    : creationSuccessMessage
   const preserveStatusOnNextLoadRef = useRef(Boolean(creationNoticeMessage))
   const [detail, setDetail] = useState<ProvincialOfferDetail | null>(null)
   const [form, setForm] = useState<ProvincialOfferUpdateSubmission | null>(null)
@@ -159,7 +161,7 @@ const ProvincialOfferDetailsPage = () => {
       ? {
           kind: 'warning',
           title: 'Offer saved with warning',
-          message: creationWarningMessage,
+          message: creationNoticeMessage,
         }
       : creationSuccessMessage
         ? {
@@ -479,7 +481,9 @@ const ProvincialOfferDetailsPage = () => {
         setStatus({
           kind: warningMessage ? 'warning' : 'success',
           title: warningMessage ? 'Offer saved with warning' : 'Offer saved',
-          message: warningMessage || result.message || 'Offer saved successfully.',
+          message: warningMessage
+            ? [result.message.trim(), warningMessage].filter(Boolean).join(' ')
+            : result.message || 'Offer saved successfully.',
         })
         preserveStatusOnNextLoadRef.current = true
         setDetail(null)
