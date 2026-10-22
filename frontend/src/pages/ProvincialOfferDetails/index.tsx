@@ -8,7 +8,6 @@ import {
   Loading,
   TextArea,
   TextInput,
-  Tile,
 } from '@carbon/react'
 import { Link, useLocation, useNavigate, useParams } from 'react-router-dom'
 import { AppNotification } from '../../components/AppNotification'
@@ -613,9 +612,9 @@ const ProvincialOfferDetailsPage = () => {
               onCloseButtonClick={() => setStatus(null)}
             />
           )}
-          <Tile
+          <div
             ref={sections.sectionRef('offer')}
-            className="provincial-offer-create provincial-offer-sections"
+            className="provincial-offer-create create-form-tile provincial-offer-sections provincial-offer-section-stack"
           >
             {isEditing && <RequiredFieldsLegend />}
             <fieldset className="legacy-form-fieldset offer-form-section">
@@ -954,7 +953,7 @@ const ProvincialOfferDetailsPage = () => {
                 ) : null}
               </div>
             </div>
-          </Tile>
+          </div>
         </Column>
       )}
       <UnsavedChangesGuard
