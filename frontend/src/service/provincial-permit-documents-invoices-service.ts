@@ -318,11 +318,13 @@ export const updatePermitDetail = async (
     normalizePermitDetailMutationPayload(request),
     {
       // An explicit blank clears an active Blanket OIC draft date, removes a Blanket OIC
-      // permit's agent, or clears the stored remark; omitted fields retain them.
+      // permit's agent, or clears the stored receipt number or remark; omitted fields retain
+      // them.
       preserveEmptyKeys: [
         'permitIssueDate',
         'permitExpiryDate',
         'agentClientNumber',
+        'permitReceiptNo',
         'permitRemarks',
       ],
     },

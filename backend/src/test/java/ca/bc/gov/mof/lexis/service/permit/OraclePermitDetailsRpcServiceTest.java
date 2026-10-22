@@ -4390,6 +4390,51 @@ class OraclePermitDetailsRpcServiceTest {
   }
 
   @Test
+  void updatePermitShouldClearTheStoredReceiptWhenTheReceiptIsSubmittedBlank() {
+    PermitMutationRow current = permitMutationRow();
+    assertThat(current.receiptNumber()).isEqualTo("RCPT-100");
+    when(repository.findPermitMutationByPermitNumber(7000123L)).thenReturn(Optional.of(current));
+    stubTargetMinisterialExemption("EX-700");
+    when(repository.updatePermitDetail(
+            any(PermitMutationRow.class), eq("idir\\jsmith"), eq(FEE_MASK_EFFECTIVE_DATE)))
+        .thenReturn(true);
+
+    PermitMutationRpcResponseDto response =
+        service.updatePermit(formCheckRequest("ACT", "42", "Legacy notes", ""), "idir\\jsmith");
+
+    assertThat(response.success()).isTrue();
+    assertThat(response.permitStatus()).isEqualTo("ACT");
+    assertThat(response.permitReceiptNo()).isNull();
+    ArgumentCaptor<PermitMutationRow> permitCaptor =
+        ArgumentCaptor.forClass(PermitMutationRow.class);
+    verify(repository)
+        .updatePermitDetail(
+            permitCaptor.capture(), eq("idir\\jsmith"), eq(FEE_MASK_EFFECTIVE_DATE));
+    assertThat(permitCaptor.getValue().receiptNumber()).isNull();
+  }
+
+  @Test
+  void updatePermitShouldKeepTheStoredReceiptWhenTheReceiptIsNotSubmitted() {
+    PermitMutationRow current = permitMutationRow();
+    when(repository.findPermitMutationByPermitNumber(7000123L)).thenReturn(Optional.of(current));
+    stubTargetMinisterialExemption("EX-700");
+    when(repository.updatePermitDetail(
+            any(PermitMutationRow.class), eq("idir\\jsmith"), eq(FEE_MASK_EFFECTIVE_DATE)))
+        .thenReturn(true);
+
+    PermitMutationRpcResponseDto response =
+        service.updatePermit(formCheckRequest("ACT", "42", "Legacy notes", null), "idir\\jsmith");
+
+    assertThat(response.success()).isTrue();
+    ArgumentCaptor<PermitMutationRow> permitCaptor =
+        ArgumentCaptor.forClass(PermitMutationRow.class);
+    verify(repository)
+        .updatePermitDetail(
+            permitCaptor.capture(), eq("idir\\jsmith"), eq(FEE_MASK_EFFECTIVE_DATE));
+    assertThat(permitCaptor.getValue().receiptNumber()).isEqualTo("RCPT-100");
+  }
+
+  @Test
   void updatePermitShouldRejectForgedBlanketOicLimitsForANonBlanketPermit() {
     when(repository.findPermitMutationByPermitNumber(7000123L))
         .thenReturn(Optional.of(permitMutationRow()));
