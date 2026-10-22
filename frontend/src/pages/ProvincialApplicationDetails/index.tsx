@@ -559,16 +559,18 @@ const applicationClientNumberFieldError = (value: string, label: string): string
         : `${label} must be 1 to 8 digits.`,
   )
 
+// Text equal to the stored value skips the character check, so stored text saves unchanged.
 const applicationTextStorageFieldError = (
   value: string,
   maximumLength: number,
   label: string,
   required = false,
+  storedValue = '',
 ): string | undefined =>
   firstValidationError(
     () => (required ? requiredFieldError(value, label) : null),
     () =>
-      ASCII_PATTERN.test(value.trim())
+      ASCII_PATTERN.test(value.trim()) || value.trim() === storedValue.trim()
         ? null
         : `${label} contains unsupported characters. Use unaccented letters, numbers, spaces, or standard punctuation.`,
     () => maxLengthFieldError(value, maximumLength, label),
@@ -1722,6 +1724,7 @@ const ProvincialApplicationDetailsPage = () => {
         APPLICATION_CONTACT_NAME_MAX_LENGTH,
         'Contact name',
         true,
+        summaryBaselineForm?.ownerContactName,
       ),
       agentClientNumber: isAgentApplicant(summaryForm.applicantTypeCode)
         ? applicationClientNumberFieldError(summaryForm.agentClientNumber, 'Agent client') ||
@@ -1740,6 +1743,7 @@ const ProvincialApplicationDetailsPage = () => {
             APPLICATION_CONTACT_NAME_MAX_LENGTH,
             'Contact name',
             true,
+            summaryBaselineForm?.agentContactName,
           )
         : undefined,
       applicantTypeCode: firstValidationError(
@@ -1824,6 +1828,7 @@ const ProvincialApplicationDetailsPage = () => {
         APPLICATION_PRODUCT_LOCATION_MAX_LENGTH,
         'Location of logs',
         productTypeRequiresLogDetails(summaryForm.productTypeCode),
+        summaryBaselineForm?.productLocation,
       ),
       applicationVolume: firstValidationError(
         () => requiredFieldError(summaryForm.applicationVolume, 'Application volume'),

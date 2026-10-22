@@ -769,6 +769,43 @@ describe.sequential('Provincial Application Detail Actions - items', () => {
     )
   })
 
+  it('saves a stored accented Location of logs unchanged and refuses newly typed accents', async () => {
+    mockedFetchApplicationSummarySnapshot.mockResolvedValue({
+      ...applicationSummarySnapshot,
+      productLocation: 'Café camp',
+    })
+    renderApplicationItems()
+    const itemDetails = within(await selectApplicationItemDetailsTile())
+    const locationOfLogs = await itemDetails.findByLabelText('Location of logs')
+    expect(locationOfLogs).toHaveValue('Café camp')
+
+    fireEvent.change(locationOfLogs, { target: { value: 'Café camp 2' } })
+    await userEvent.click(itemDetails.getByRole('button', { name: 'Save changes' }))
+
+    expect(
+      await itemDetails.findByText(
+        'Location of logs contains unsupported characters. Use unaccented letters, numbers, spaces, or standard punctuation.',
+      ),
+    ).toBeVisible()
+    expect(mockedUpdateApplicationSummary).not.toHaveBeenCalled()
+
+    fireEvent.change(locationOfLogs, { target: { value: 'Café camp' } })
+    fireEvent.change(itemDetails.getByLabelText('Application volume (m³)'), {
+      target: { value: '99.9' },
+    })
+    await userEvent.click(itemDetails.getByRole('button', { name: 'Save changes' }))
+
+    await waitFor(() =>
+      expect(mockedUpdateApplicationSummary).toHaveBeenCalledWith(
+        expect.objectContaining({
+          saveSource: 'items',
+          productLocation: 'Café camp',
+          applicationVolume: '99.9',
+        }),
+      ),
+    )
+  })
+
   it("moves focus to the new package card's Edit package button after creating the first package", async () => {
     mockedFetchProvincialApplicationDetail.mockResolvedValue({
       ...applicationDetail,

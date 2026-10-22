@@ -183,6 +183,18 @@ class OracleRepositorySupportTest {
   }
 
   @Test
+  void textReadsShouldMapSignExtendedStoredBytesToTheirLatin1Characters() throws Exception {
+    ResultSet resultSet = mock(ResultSet.class);
+    when(resultSet.getString("REQUIRED_VALUE"))
+        .thenReturn(" Ren\uFFE9 \uFF80\uFFFF ", " Caf\uFFE9 ", "\u00e9 \u2019 \uFF7F");
+    RequiredRepository repository = new RequiredRepository(mock(JdbcTemplate.class));
+
+    assertThat(repository.readOptionalColumn(resultSet)).isEqualTo("Ren\u00e9 \u0080\u00ff");
+    assertThat(repository.readRawColumn(resultSet)).isEqualTo(" Caf\u00e9 ");
+    assertThat(repository.readOptionalColumn(resultSet)).isEqualTo("\u00e9 \u2019 \uFF7F");
+  }
+
+  @Test
   @SuppressWarnings("unchecked")
   void requiredDirectQueryShouldDistinguishEmptyResultsFromDependencyFailure() {
     JdbcTemplate jdbcTemplate = mock(JdbcTemplate.class);
@@ -454,6 +466,10 @@ class OracleRepositorySupportTest {
 
     String readOptionalColumn(ResultSet resultSet) {
       return getString(resultSet, "REQUIRED_VALUE");
+    }
+
+    String readRawColumn(ResultSet resultSet) {
+      return getRawString(resultSet, "REQUIRED_VALUE");
     }
 
     List<String> loadOptional() {

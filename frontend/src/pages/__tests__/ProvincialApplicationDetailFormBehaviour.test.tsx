@@ -11,11 +11,13 @@ import {
 import { beforeEach, describe, expect, it } from 'vitest'
 import {
   applicationDetail,
+  applicationSummarySnapshot,
   chooseComboBoxOption,
   setupApplicationDetailTests,
   getSummaryComboBox,
   mockedFetchApplicationPackageStatusCodes,
   mockedFetchApplicationReviewOptions,
+  mockedFetchApplicationSummarySnapshot,
   mockedFetchProvincialApplicationOptions,
   mockedFetchProvincialApplicationDetail,
   mockedAddApplicationPackage,
@@ -184,6 +186,38 @@ describe.sequential('Provincial Application Detail - form behaviour', () => {
 
     await userEvent.type(contactName, 'N')
     expect(tile.queryByText('Contact name is required')).not.toBeInTheDocument()
+  })
+
+  it('saves a stored accented contact name unchanged and refuses newly typed accents', async () => {
+    mockedFetchApplicationSummarySnapshot.mockResolvedValue({
+      ...applicationSummarySnapshot,
+      ownerContactName: 'René Owner',
+    })
+    renderApplicationDetail()
+    const { tile, contactName } = await editApplicantDetails()
+    expect(contactName).toHaveValue('René Owner')
+    const agentContactName = tile.getAllByRole('textbox', { name: 'Contact name' })[1]
+    fireEvent.change(agentContactName, { target: { value: 'Zoë Agent' } })
+
+    await userEvent.click(tile.getByRole('button', { name: 'Save changes' }))
+
+    expect(
+      await tile.findByText(
+        'Contact name contains unsupported characters. Use unaccented letters, numbers, spaces, or standard punctuation.',
+      ),
+    ).toBeInTheDocument()
+    expect(agentContactName).toHaveAttribute('aria-invalid', 'true')
+    expect(contactName).not.toHaveAttribute('aria-invalid', 'true')
+    expect(mockedUpdateApplicationSummary).not.toHaveBeenCalled()
+
+    fireEvent.change(agentContactName, { target: { value: 'New Agent' } })
+    await userEvent.click(tile.getByRole('button', { name: 'Save changes' }))
+
+    await waitFor(() =>
+      expect(mockedUpdateApplicationSummary).toHaveBeenCalledWith(
+        expect.objectContaining({ ownerContactName: 'René Owner', agentContactName: 'New Agent' }),
+      ),
+    )
   })
 
   it('returns focus to Edit after a successful save', async () => {

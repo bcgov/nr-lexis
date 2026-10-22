@@ -2937,23 +2937,24 @@ public class OracleApplicationDetailsRpcService implements ApplicationDetailsRpc
       ApplicationSummaryUpdateRequest request,
       boolean agentChangeOnly) {
     return switch (request.saveSource()) {
-      case FULL -> validateFullApplicationUpdate(record, request);
+      case FULL -> validateFullApplicationUpdate(existing, record, request);
       case SUMMARY -> validateSummaryApplicationUpdate(existing, record, request);
       case SUMMARY_ITEMS -> {
         List<String> errors = validateSummaryApplicationUpdate(existing, record, request);
         if (errors.isEmpty()) {
-          errors.addAll(validateItemsApplicationUpdate(record, request));
+          errors.addAll(validateItemsApplicationUpdate(existing, record, request));
         }
         yield errors;
       }
       case OWNER -> validateOwnerApplicationUpdate(existing, record, request, agentChangeOnly);
-      case AGENT -> validateAgentApplicationUpdate(record);
-      case OWNER_AGENT -> validateOwnerAgentApplicationUpdate(record, agentChangeOnly);
-      case ITEMS -> validateItemsApplicationUpdate(record, request);
+      case AGENT -> validateAgentApplicationUpdate(existing, record);
+      case OWNER_AGENT -> validateOwnerAgentApplicationUpdate(existing, record, agentChangeOnly);
+      case ITEMS -> validateItemsApplicationUpdate(existing, record, request);
     };
   }
 
   private List<String> validateFullApplicationUpdate(
+      ApplicationDetailsRpcRepository.ApplicationUpdateRecord existing,
       ApplicationDetailsRpcRepository.ApplicationUpdateRecord record,
       ApplicationSummaryUpdateRequest request) {
     List<String> errors = new ArrayList<>();
@@ -2993,7 +2994,7 @@ public class OracleApplicationDetailsRpcService implements ApplicationDetailsRpc
     } else if (exemptionReasonCode.length() > 1) {
       errors.add(maxLength("application exemption reason code", 1));
     }
-    validateApplicationStorageText(record, errors);
+    validateApplicationStorageText(existing, record, errors);
     if (trimToNull(record.productTypeCode()) == null) {
       errors.add(required("product type code"));
     }
@@ -3087,7 +3088,7 @@ public class OracleApplicationDetailsRpcService implements ApplicationDetailsRpc
     }
     // An agent-only change keeps the stored owner, so the owner isn't checked again.
     if (!agentChangeOnly) {
-      validateOwnerFields(record, errors);
+      validateOwnerFields(existing, record, errors);
     }
     if (request.applicantTypeCode() != null) {
       validateApplicantType(record.applicantTypeCode(), errors);
@@ -3110,6 +3111,7 @@ public class OracleApplicationDetailsRpcService implements ApplicationDetailsRpc
   }
 
   private List<String> validateAgentApplicationUpdate(
+      ApplicationDetailsRpcRepository.ApplicationUpdateRecord existing,
       ApplicationDetailsRpcRepository.ApplicationUpdateRecord record) {
     List<String> errors = validateScopedApplicationFixedFields(record);
     if (!errors.isEmpty()) {
@@ -3119,7 +3121,7 @@ public class OracleApplicationDetailsRpcService implements ApplicationDetailsRpc
       errors.add("Application agent details can only be changed for an agent applicant.");
       return errors;
     }
-    validateAgentFields(record, errors);
+    validateAgentFields(existing, record, errors);
     if (errors.isEmpty()) {
       validateApplicationClientLocation(
           "agent", record.agentClientNumber(), record.agentClientLocationCode(), errors);
@@ -3128,7 +3130,9 @@ public class OracleApplicationDetailsRpcService implements ApplicationDetailsRpc
   }
 
   private List<String> validateOwnerAgentApplicationUpdate(
-      ApplicationDetailsRpcRepository.ApplicationUpdateRecord record, boolean agentChangeOnly) {
+      ApplicationDetailsRpcRepository.ApplicationUpdateRecord existing,
+      ApplicationDetailsRpcRepository.ApplicationUpdateRecord record,
+      boolean agentChangeOnly) {
     List<String> errors = validateScopedApplicationFixedFields(record, agentChangeOnly);
     if (!errors.isEmpty()) {
       return errors;
@@ -3139,10 +3143,10 @@ public class OracleApplicationDetailsRpcService implements ApplicationDetailsRpc
     }
     // An agent-only change keeps the stored owner, so the owner isn't checked again.
     if (!agentChangeOnly) {
-      validateOwnerFields(record, errors);
+      validateOwnerFields(existing, record, errors);
     }
     validateApplicantType(record.applicantTypeCode(), errors);
-    validateAgentFields(record, errors);
+    validateAgentFields(existing, record, errors);
     if (errors.isEmpty()) {
       if (!agentChangeOnly) {
         validateApplicationClientLocation(
@@ -3158,13 +3162,14 @@ public class OracleApplicationDetailsRpcService implements ApplicationDetailsRpc
   }
 
   private List<String> validateItemsApplicationUpdate(
+      ApplicationDetailsRpcRepository.ApplicationUpdateRecord existing,
       ApplicationDetailsRpcRepository.ApplicationUpdateRecord record,
       ApplicationSummaryUpdateRequest request) {
     List<String> errors = validateScopedApplicationFixedFields(record);
     if (!errors.isEmpty()) {
       return errors;
     }
-    validateItemFields(record, errors);
+    validateItemFields(existing, record, errors);
     if (errors.isEmpty()) {
       validateItemReferences(record, errors);
       validateStoredPackageVolume(record, errors);
@@ -3226,7 +3231,9 @@ public class OracleApplicationDetailsRpcService implements ApplicationDetailsRpc
   }
 
   private void validateOwnerFields(
-      ApplicationDetailsRpcRepository.ApplicationUpdateRecord record, List<String> errors) {
+      ApplicationDetailsRpcRepository.ApplicationUpdateRecord existing,
+      ApplicationDetailsRpcRepository.ApplicationUpdateRecord record,
+      List<String> errors) {
     if (trimToNull(record.ownerClientNumber()) == null) {
       errors.add(required("application owner number"));
     }
@@ -3239,11 +3246,18 @@ public class OracleApplicationDetailsRpcService implements ApplicationDetailsRpc
     if (trimToNull(record.ownerContactName()) == null) {
       errors.add(required("application owner name"));
     }
-    validateOracleText(record.ownerContactName(), "Owner contact name", CONTACT_NAME_MAX_BYTES, errors);
+    validateOracleText(
+        record.ownerContactName(),
+        existing.ownerContactName(),
+        "Owner contact name",
+        CONTACT_NAME_MAX_BYTES,
+        errors);
   }
 
   private void validateAgentFields(
-      ApplicationDetailsRpcRepository.ApplicationUpdateRecord record, List<String> errors) {
+      ApplicationDetailsRpcRepository.ApplicationUpdateRecord existing,
+      ApplicationDetailsRpcRepository.ApplicationUpdateRecord record,
+      List<String> errors) {
     if (trimToNull(record.agentClientNumber()) == null) {
       errors.add(required("application agent number"));
     }
@@ -3256,7 +3270,12 @@ public class OracleApplicationDetailsRpcService implements ApplicationDetailsRpc
     if (trimToNull(record.agentContactName()) == null) {
       errors.add(required("application agent name"));
     }
-    validateOracleText(record.agentContactName(), "Agent contact name", CONTACT_NAME_MAX_BYTES, errors);
+    validateOracleText(
+        record.agentContactName(),
+        existing.agentContactName(),
+        "Agent contact name",
+        CONTACT_NAME_MAX_BYTES,
+        errors);
   }
 
   private void validateApplicantType(String applicantTypeCode, List<String> errors) {
@@ -3271,7 +3290,9 @@ public class OracleApplicationDetailsRpcService implements ApplicationDetailsRpc
   }
 
   private void validateItemFields(
-      ApplicationDetailsRpcRepository.ApplicationUpdateRecord record, List<String> errors) {
+      ApplicationDetailsRpcRepository.ApplicationUpdateRecord existing,
+      ApplicationDetailsRpcRepository.ApplicationUpdateRecord record,
+      List<String> errors) {
     if (record.applicationVolume() == null || record.applicationVolume() <= 0.0d) {
       errors.add("The application volume must be greater than 0.");
     } else {
@@ -3286,7 +3307,12 @@ public class OracleApplicationDetailsRpcService implements ApplicationDetailsRpc
         && trimToNull(record.productLocation()) == null) {
       errors.add(required("location of logs"));
     }
-    validateOracleText(record.productLocation(), "Location of logs", PRODUCT_LOCATION_MAX_BYTES, errors);
+    validateOracleText(
+        record.productLocation(),
+        existing.productLocation(),
+        "Location of logs",
+        PRODUCT_LOCATION_MAX_BYTES,
+        errors);
     if (trimToNull(record.growthTypeCode()) == null) {
       errors.add(required("growth type code"));
     }
@@ -3774,13 +3800,40 @@ public class OracleApplicationDetailsRpcService implements ApplicationDetailsRpc
   }
 
   private void validateApplicationStorageText(
-      ApplicationDetailsRpcRepository.ApplicationUpdateRecord record, List<String> errors) {
+      ApplicationDetailsRpcRepository.ApplicationUpdateRecord existing,
+      ApplicationDetailsRpcRepository.ApplicationUpdateRecord record,
+      List<String> errors) {
     validateOracleText(
-        record.productLocation(), "Location of logs", PRODUCT_LOCATION_MAX_BYTES, errors);
+        record.productLocation(),
+        existing.productLocation(),
+        "Location of logs",
+        PRODUCT_LOCATION_MAX_BYTES,
+        errors);
     validateOracleText(
-        record.ownerContactName(), "Owner contact name", CONTACT_NAME_MAX_BYTES, errors);
+        record.ownerContactName(),
+        existing.ownerContactName(),
+        "Owner contact name",
+        CONTACT_NAME_MAX_BYTES,
+        errors);
     validateOracleText(
-        record.agentContactName(), "Agent contact name", CONTACT_NAME_MAX_BYTES, errors);
+        record.agentContactName(),
+        existing.agentContactName(),
+        "Agent contact name",
+        CONTACT_NAME_MAX_BYTES,
+        errors);
+  }
+
+  /** Text equal to the stored value skips the character check, so stored text saves unchanged. */
+  private void validateOracleText(
+      String value, String storedValue, String description, int maxBytes, List<String> errors) {
+    String trimmed = trimToNull(value);
+    if (trimmed != null && trimmed.equals(trimToNull(storedValue))) {
+      if (value.length() > maxBytes) {
+        errors.add(description + " must not exceed " + maxBytes + " bytes.");
+      }
+      return;
+    }
+    validateOracleText(value, description, maxBytes, errors);
   }
 
   private void validateOracleText(

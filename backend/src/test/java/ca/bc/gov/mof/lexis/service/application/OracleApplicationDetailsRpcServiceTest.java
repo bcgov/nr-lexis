@@ -6082,6 +6082,91 @@ class OracleApplicationDetailsRpcServiceTest {
   }
 
   @Test
+  void savesShouldKeepStoredAccentedTextTheyDoNotChange() {
+    when(repository.findApplicationUpdateRecord(1000456L))
+        .thenReturn(
+            Optional.of(
+                applicationUpdateRecordWithStoredText(
+                    "Caf\u00e9 camp", "Agent Ren\u00e9", "Ren\u00e9 Owner")));
+    stubPersistedApplicationEndUse(11L, true);
+    when(repository.updateApplication(any())).thenReturn(true);
+
+    ApplicationDetailsRpcService.CreateApplicationResult fullSave =
+        service.updateApplicationSummary(
+            applicationSummaryUpdateRequest(
+                1000456L, null, null, null, null, null, null, null, null, null, null, null,
+                null, null, null, null, null, null, null, null, null, null, true),
+            "idir\\jsmith");
+    ApplicationDetailsRpcService.CreateApplicationResult itemsSave =
+        service.updateApplicationSummary(
+            withSaveSource(
+                applicationSummaryUpdateRequest(
+                    1000456L, null, null, null, 100.0d, 1.5d, null, " Caf\u00e9 camp ", null,
+                    null, null, null, null, null, null, null, "H", null, "O", null, null, null,
+                    true),
+                ApplicationDetailsRpcService.ApplicationSummarySaveSource.ITEMS),
+            "idir\\jsmith");
+
+    assertThat(fullSave.valid()).isTrue();
+    assertThat(itemsSave.valid()).isTrue();
+    ArgumentCaptor<ApplicationDetailsRpcRepository.ApplicationUpdateRecord> recordCaptor =
+        ArgumentCaptor.forClass(ApplicationDetailsRpcRepository.ApplicationUpdateRecord.class);
+    verify(repository, org.mockito.Mockito.times(2)).updateApplication(recordCaptor.capture());
+    assertThat(recordCaptor.getAllValues())
+        .extracting(
+            ApplicationDetailsRpcRepository.ApplicationUpdateRecord::agentContactName,
+            ApplicationDetailsRpcRepository.ApplicationUpdateRecord::ownerContactName)
+        .containsOnly(org.assertj.core.groups.Tuple.tuple("Agent Ren\u00e9", "Ren\u00e9 Owner"));
+    assertThat(recordCaptor.getAllValues())
+        .extracting(ApplicationDetailsRpcRepository.ApplicationUpdateRecord::productLocation)
+        .containsOnly("Caf\u00e9 camp");
+  }
+
+  @Test
+  void ownerAgentSaveShouldRefuseNewlyTypedAccentedTextButKeepStoredText() {
+    when(repository.findApplicationUpdateRecord(1000456L))
+        .thenReturn(
+            Optional.of(
+                applicationUpdateRecordWithStoredText(
+                    "Camp 1", "Agent Ren\u00e9", "Owner Contact")));
+
+    ApplicationDetailsRpcService.CreateApplicationResult response =
+        service.updateApplicationSummary(
+            applicationSummaryUpdateRequest(
+                1000456L,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                "00033333",
+                "01",
+                "00011111",
+                "00",
+                null,
+                "A",
+                null,
+                null,
+                null,
+                null,
+                "Agent Ren\u00e9",
+                "Zo\u00eb Owner",
+                null,
+                true,
+                ApplicationDetailsRpcService.ApplicationSummarySaveSource.OWNER_AGENT),
+            "idir\\jsmith");
+
+    assertThat(response.valid()).isFalse();
+    assertThat(response.errors())
+        .containsExactly(
+            "Owner contact name contains characters the current LEXIS database cannot store.");
+    verify(repository, never()).updateApplication(any());
+  }
+
+  @Test
   void ownerAgentSaveShouldRejectAgentDetailsWhenMergedApplicantIsNotAnAgent() {
     ApplicationDetailsRpcService.ApplicationSummaryUpdateRequest request =
         applicationSummaryUpdateRequest(
@@ -8076,6 +8161,41 @@ class OracleApplicationDetailsRpcServiceTest {
         record.growthTypeCode(),
         "Agent Contact",
         record.ownerContactName(),
+        record.oicIndicator());
+  }
+
+  private ApplicationDetailsRpcRepository.ApplicationUpdateRecord applicationUpdateRecordWithStoredText(
+      String productLocation, String agentContactName, String ownerContactName) {
+    ApplicationDetailsRpcRepository.ApplicationUpdateRecord record =
+        applicationUpdateRecordWithAgent();
+    return new ApplicationDetailsRpcRepository.ApplicationUpdateRecord(
+        record.applicationNumber(),
+        record.federalApplicationNumber(),
+        record.applicationDate(),
+        record.termDays(),
+        record.receivedDate(),
+        record.applicationVolume(),
+        record.averageLogVolume(),
+        productLocation,
+        record.entryUserId(),
+        record.entryTimestamp(),
+        record.updateUserId(),
+        record.updateTimestamp(),
+        record.exportScheduleId(),
+        record.agentClientNumber(),
+        record.agentClientLocationCode(),
+        record.ownerClientNumber(),
+        record.ownerClientLocationCode(),
+        record.exemptionNumber(),
+        record.exemptionReasonCode(),
+        record.applicationStatusCode(),
+        record.applicantTypeCode(),
+        record.orgUnitNumber(),
+        record.productTypeCode(),
+        record.jurisdictionCode(),
+        record.growthTypeCode(),
+        agentContactName,
+        ownerContactName,
         record.oicIndicator());
   }
 
