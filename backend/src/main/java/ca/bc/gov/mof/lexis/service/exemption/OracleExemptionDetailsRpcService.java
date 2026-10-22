@@ -533,7 +533,14 @@ public class OracleExemptionDetailsRpcService implements ExemptionDetailsRpcServ
             current.exemptionStatusCode(),
             updateRecord.exemptionStatusCode(),
             EXEMPTION_STATUS_ACTIVE);
-    // Legacy saves only the status of a cancelled exemption, without activation checks.
+    // Reopening a cancelled exemption saves only its status, but an active target still needs
+    // stored approval and expiry dates that satisfy the active date checks.
+    if (reopeningCancelled
+        && EXEMPTION_STATUS_ACTIVE.equalsIgnoreCase(updateRecord.exemptionStatusCode())) {
+      errors.addAll(
+          activationEligibilityValidator.validateActiveDates(
+              updateRecord.approvalDate(), updateRecord.expiryDate()));
+    }
     if (EXEMPTION_STATUS_ACTIVE.equalsIgnoreCase(updateRecord.exemptionStatusCode())
         && !reopeningCancelled) {
       errors.addAll(

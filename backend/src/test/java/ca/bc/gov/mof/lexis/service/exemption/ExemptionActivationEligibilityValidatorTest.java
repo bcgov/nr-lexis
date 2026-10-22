@@ -338,6 +338,42 @@ class ExemptionActivationEligibilityValidatorTest {
   }
 
   @Test
+  void activeDatesShouldAcceptAnApprovalDateBeforeAFutureExpiry() {
+    LocalDate today = LexisBusinessTime.today();
+
+    assertThat(validator.validateActiveDates(today.minusDays(30), today.plusDays(30))).isEmpty();
+    assertThat(validator.validateActiveDates(today.minusDays(30), today)).isEmpty();
+  }
+
+  @Test
+  void activeDatesShouldRequireAnApprovalDate() {
+    assertThat(validator.validateActiveDates(null, LexisBusinessTime.today().plusDays(30)))
+        .containsExactly("A valid approval date is required for an active exemption.");
+  }
+
+  @Test
+  void activeDatesShouldRequireAnExpiryDate() {
+    assertThat(validator.validateActiveDates(LexisBusinessTime.today().minusDays(30), null))
+        .containsExactly("A valid expiry date is required for an active exemption.");
+  }
+
+  @Test
+  void activeDatesShouldRejectAnExpiryBeforeToday() {
+    LocalDate today = LexisBusinessTime.today();
+
+    assertThat(validator.validateActiveDates(today.minusDays(30), today.minusDays(1)))
+        .containsExactly("An active exemption cannot have an expiry date before today.");
+  }
+
+  @Test
+  void activeDatesShouldRequireExpiryAfterApproval() {
+    LocalDate date = LexisBusinessTime.today().plusDays(5);
+
+    assertThat(validator.validateActiveDates(date, date))
+        .containsExactly("The expiry date must be after the approval date.");
+  }
+
+  @Test
   void approvalShouldCompareTheSumOfEachApplicationsOneDecimalVolume() {
     when(repository.findApplicationSummariesByExemptionNumber("EX-205"))
         .thenReturn(List.of(summary(1000456L, 100.25d), summary(1000457L, 200.25d)));
