@@ -1,12 +1,42 @@
 import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { describe, expect, it, vi } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 import ForestClientSelectionPage from '.'
 import { AuthContext } from '@/context/auth/AuthContext'
 import ThemeProvider from '@/context/theme/ThemeProvider'
 import { createTestAuthContext, createTestCapabilities } from '@/test-utils/auth'
 
 describe('ForestClientSelectionPage', () => {
+  beforeEach(() => {
+    document.title = ''
+  })
+
+  it('names the browser tab after the heading and restores the previous name on leave', () => {
+    document.title = 'Provincial applications'
+
+    const { unmount } = render(
+      <AuthContext
+        value={createTestAuthContext({
+          capabilities: createTestCapabilities({
+            forestClientNumber: null,
+            availableForestClientNumbers: ['00012345', '00067890'],
+            forestClientSelectionRequired: true,
+          }),
+        })}
+      >
+        <ThemeProvider>
+          <ForestClientSelectionPage />
+        </ThemeProvider>
+      </AuthContext>,
+    )
+
+    expect(document.title).toBe('Select organization')
+
+    unmount()
+
+    expect(document.title).toBe('Provincial applications')
+  })
+
   it('requires the user to choose one of the assigned organizations', async () => {
     const selectForestClient = vi.fn().mockResolvedValue(undefined)
     const onSelected = vi.fn()

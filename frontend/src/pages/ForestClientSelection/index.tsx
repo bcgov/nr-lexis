@@ -1,4 +1,4 @@
-import { useState, type FormEvent } from 'react'
+import { useEffect, useState, type FormEvent } from 'react'
 import { Logout } from '@carbon/icons-react'
 import {
   Button,
@@ -14,6 +14,8 @@ import logo from '@/assets/BCID_H_rgb_pos.png'
 import landingImage from '@/assets/landing.jpg'
 import reverseLogo from '@/assets/gov-bc-logo-horiz.png'
 
+const SELECT_ORGANIZATION_TITLE = 'Select organization'
+
 type ForestClientSelectionPageProps = {
   onSelected?: () => void
 }
@@ -27,6 +29,16 @@ const ForestClientSelectionPage = ({ onSelected }: ForestClientSelectionPageProp
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [errorMessage, setErrorMessage] = useState('')
   const logoSource = theme === 'g100' ? reverseLogo : logo
+
+  // The heading isn't a PageHeader, so the page names the browser tab itself and gives the
+  // previous name back when it goes away.
+  useEffect(() => {
+    const previousTitle = document.title
+    document.title = SELECT_ORGANIZATION_TITLE
+    return () => {
+      document.title = previousTitle
+    }
+  }, [])
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
@@ -74,7 +86,7 @@ const ForestClientSelectionPage = ({ onSelected }: ForestClientSelectionPageProp
             />
 
             <div className="forest-client-selection__heading">
-              <h1 id="organization-heading">Select organization</h1>
+              <h1 id="organization-heading">{SELECT_ORGANIZATION_TITLE}</h1>
               <p>
                 Your Business BCeID account is registered with more than one forest-client
                 organization. Pick which one you want to work under for this session. You can switch

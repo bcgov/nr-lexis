@@ -1,3 +1,4 @@
+import { useEffect } from 'react'
 import { ArrowRight, Logout } from '@carbon/icons-react'
 import { Button, Column, Grid } from '@carbon/react'
 import { useNavigate } from 'react-router-dom'
@@ -7,6 +8,8 @@ import landingImage from '@/assets/landing.jpg'
 import { useAuth } from '@/context/auth/useAuth'
 import { useTheme } from '@/context/theme/useTheme'
 
+const FORBIDDEN_TITLE = "You don't have access to view this page"
+
 const ForbiddenPage = () => {
   const navigate = useNavigate()
   const { capabilities, defaultRoute, logout } = useAuth()
@@ -15,6 +18,16 @@ const ForbiddenPage = () => {
   const description = capabilities.principal
     ? `${capabilities.principal}, your account does not have permission to use this part of LEXIS.`
     : 'Your account does not have permission to use this part of LEXIS.'
+
+  // The heading isn't a PageHeader, so the page names the browser tab itself and gives the
+  // previous name back when it goes away.
+  useEffect(() => {
+    const previousTitle = document.title
+    document.title = FORBIDDEN_TITLE
+    return () => {
+      document.title = previousTitle
+    }
+  }, [])
 
   return (
     <div className="landing-grid-container forbidden-landing" data-testid="forbidden-page">
@@ -26,7 +39,7 @@ const ForbiddenPage = () => {
             </div>
 
             <div className="landing-title-group">
-              <h1 className="landing-title">You don't have access to view this page</h1>
+              <h1 className="landing-title">{FORBIDDEN_TITLE}</h1>
               <p className="landing-subtitle">{description}</p>
             </div>
 
