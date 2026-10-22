@@ -440,6 +440,7 @@ describe('Upload applications', () => {
 
     const title = await screen.findByRole('heading', { level: 1, name: '2 applications created' })
     expect(title).toHaveFocus()
+    expect(document.title).toBe('2 applications created')
     expect(window.scrollTo).toHaveBeenCalledWith({ top: 0 })
     expect(mockedSubmitAdminUpload).toHaveBeenCalledTimes(2)
     expect(screen.queryByRole('list', { name: 'Upload applications progress' })).toBeNull()
@@ -465,6 +466,7 @@ describe('Upload applications', () => {
     await userEvent.click(uploadMore)
 
     expect(await screen.findByRole('heading', { level: 2, name: 'Upload' })).toBeVisible()
+    expect(document.title).toBe('Upload applications')
     expect(screen.queryByText('test-2026-10-20-01.xml')).not.toBeInTheDocument()
   })
 
@@ -489,6 +491,7 @@ describe('Upload applications', () => {
     expect(
       await screen.findByRole('heading', { level: 1, name: '1 of 2 applications created' }),
     ).toHaveFocus()
+    expect(document.title).toBe('1 of 2 applications created')
     expect(
       screen.getByText('1 file was not created. Check the reason before you upload it again.'),
     ).toBeVisible()
