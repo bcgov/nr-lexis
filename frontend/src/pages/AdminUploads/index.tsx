@@ -3,7 +3,9 @@ import { Button, Column, ComboBox, Grid, TextArea } from '@carbon/react'
 import { ArrowRight } from '@carbon/icons-react'
 import { useSearchParams } from 'react-router-dom'
 import { ActionResultNotifications } from '../../components/ActionResultNotification'
+import { useDiscardPrompt } from '@/components/DiscardChangesModal'
 import PageHeader from '@/components/PageHeader'
+import UnsavedChangesGuard from '@/components/UnsavedChangesGuard'
 import ApplicationNumberSelect from '../../components/ApplicationNumberSelect'
 import { shouldFilterSearchableDropdownItem } from '../../components/dropdown-filtering'
 import SearchableSelect from '../../components/SearchableSelect'
@@ -341,6 +343,10 @@ function AdminUploadsPage() {
   const [touchedFields, setTouchedFields] = useState<TouchedFields<UploadField>>({})
   const [showValidationErrors, setShowValidationErrors] = useState(false)
   const [documentUploadStep, setDocumentUploadStep] = useState<UploadWizardStep>('upload')
+  const isDirty = uploadQueue.some((item) => !item.submitted && item.status !== 'complete')
+  const { confirmDiscard, discardModal } = useDiscardPrompt(isDirty, undefined, () =>
+    document.getElementById('uploadWorkflowType'),
+  )
 
   const selectedWorkflow = useMemo(() => {
     return (
@@ -754,7 +760,9 @@ function AdminUploadsPage() {
             value: workflow.type,
             label: workflow.label,
           }))}
-          onChange={(value) => setWorkflowType(getWorkflowFromQuery(value, 'application'))}
+          onChange={(value) =>
+            confirmDiscard(() => setWorkflowType(getWorkflowFromQuery(value, 'application')))
+          }
         />
 
         {selectedWorkflowType === 'application' && (
@@ -938,6 +946,14 @@ function AdminUploadsPage() {
           )}
         </div>
       </Column>
+
+      <UnsavedChangesGuard
+        isDirty={isDirty}
+        isBusy={isSubmitting}
+        onDiscard={clearQueuedFiles}
+        subject="the upload"
+      />
+      {discardModal}
     </Grid>
   )
 }
