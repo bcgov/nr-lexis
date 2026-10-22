@@ -22,6 +22,7 @@ import java.math.RoundingMode;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -1329,24 +1330,34 @@ public class OracleApplicationDetailsRpcService implements ApplicationDetailsRpc
   @Override
   @Transactional
   public ScalePersistenceResult addScaleToPackage(ScaleMutationRequest request, String userId) {
-    return addScale(request, userId, true, false);
+    return addScale(request, userId, true, false, new ScaleReferenceLookups());
   }
 
   @Override
   @Transactional
-  public ScalePersistenceResult addImportedScaleToPackage(
-      ScaleMutationRequest request, String userId, boolean validateTimberMarkRegion) {
-    return addScale(request, userId, validateTimberMarkRegion, true);
+  public ScalePersistenceResult addImportedScalesToPackage(
+      List<ScaleMutationRequest> requests, String userId) {
+    ScaleReferenceLookups lookups = new ScaleReferenceLookups();
+    ScalePersistenceResult result = new ScalePersistenceResult(true, null, List.of(), List.of());
+    for (int index = 0; index < requests.size(); index++) {
+      // Only the first scale row has to belong to the application's region.
+      result = addScale(requests.get(index), userId, index == 0, true, lookups);
+      if (!result.valid()) {
+        return result;
+      }
+    }
+    return result;
   }
 
   private ScalePersistenceResult addScale(
       ScaleMutationRequest request,
       String userId,
       boolean validateTimberMarkRegion,
-      boolean exactVolumeSums) {
+      boolean exactVolumeSums,
+      ScaleReferenceLookups lookups) {
     ScaleMutationRequest normalized = normalizeScaleMutationRequest(request);
     List<String> errors =
-        validateScaleMutation(normalized, validateTimberMarkRegion, exactVolumeSums);
+        validateScaleMutation(normalized, validateTimberMarkRegion, exactVolumeSums, lookups);
     if (!errors.isEmpty()) {
       return new ScalePersistenceResult(false, null, errors, List.of());
     }
@@ -1803,10 +1814,11 @@ public class OracleApplicationDetailsRpcService implements ApplicationDetailsRpc
       CreateApplicationRequest applicationRequest) {
     List<String> errors = new ArrayList<>();
     List<ScaleValues> validatedScales = new ArrayList<>();
+    ScaleReferenceLookups lookups = new ScaleReferenceLookups();
     BigDecimal scaleVolume = BigDecimal.ZERO.setScale(2, RoundingMode.HALF_EVEN);
     for (int index = 0; index < scaleRequests.size(); index++) {
       ScaleMutationRequest scaleRequest = scaleRequests.get(index);
-      validateScaleImportPreflight(scaleRequest, applicationRequest, index == 0, errors);
+      validateScaleImportPreflight(scaleRequest, applicationRequest, index == 0, lookups, errors);
       ScaleValues scaleValues = toScaleValues(scaleRequest);
       if (ScaleDomainValidator.containsCombination(validatedScales, scaleValues)) {
         errors.add("A scale with this timber mark, species, and grade already exists.");
@@ -1831,6 +1843,7 @@ public class OracleApplicationDetailsRpcService implements ApplicationDetailsRpc
       ScaleMutationRequest request,
       CreateApplicationRequest applicationRequest,
       boolean validateTimberMarkRegion,
+      ScaleReferenceLookups lookups,
       List<String> errors) {
     if (trimToNull(request.packageNumber()) == null) {
       errors.add(required("scale package number"));
@@ -1845,6 +1858,7 @@ public class OracleApplicationDetailsRpcService implements ApplicationDetailsRpc
           applicationRequest.productTypeCode(),
           applicationRequest.jurisdictionCode(),
           validateTimberMarkRegion,
+          lookups,
           errors);
     }
     if (trimToNull(request.gradeCode()) == null) {
@@ -1853,14 +1867,17 @@ public class OracleApplicationDetailsRpcService implements ApplicationDetailsRpc
     if (trimToNull(request.speciesCode()) == null) {
       errors.add(required("species code"));
     }
-    validateScaleCodes(request, errors);
-    validateScaleCodesForRegion(request, applicationRequest.orgUnitNumber(), errors);
+    validateScaleCodes(request, lookups, errors);
+    validateScaleCodesForRegion(request, applicationRequest.orgUnitNumber(), lookups, errors);
     errors.addAll(
         ScaleDomainValidator.validateNumericValues(request.pieces(), request.volume(), false));
   }
 
   private void validateScaleCodesForRegion(
-      ScaleMutationRequest request, Long orgUnitNumber, List<String> errors) {
+      ScaleMutationRequest request,
+      Long orgUnitNumber,
+      ScaleReferenceLookups lookups,
+      List<String> errors) {
     String speciesCode = trimToNull(request.speciesCode());
     String gradeCode = trimToNull(request.gradeCode());
     if (orgUnitNumber == null || orgUnitNumber <= 0 || speciesCode == null) {
@@ -1869,7 +1886,9 @@ public class OracleApplicationDetailsRpcService implements ApplicationDetailsRpc
 
     String region = orgUnitNumber.toString();
     boolean speciesValid =
-        repository.findSpeciesEndUsesByRegionRequired(region).stream()
+        lookups.speciesGradeEndUsesByRegion
+            .computeIfAbsent(region, repository::findSpeciesEndUsesByRegionRequired)
+            .stream()
             .map(ApplicationDetailsRpcRepository.SpeciesGradeEndUseRow::speciesCode)
             .map(TextUtils::trimToNull)
             .anyMatch(speciesCode::equalsIgnoreCase);
@@ -1879,7 +1898,13 @@ public class OracleApplicationDetailsRpcService implements ApplicationDetailsRpc
     }
 
     if (gradeCode != null
-        && repository.findSpeciesEndUsesByRegionSpeciesRequired(region, speciesCode).stream()
+        && lookups.speciesGradeEndUsesByRegionSpecies
+            .computeIfAbsent(
+                new RegionSpecies(region, speciesCode),
+                key ->
+                    repository.findSpeciesEndUsesByRegionSpeciesRequired(
+                        key.region(), key.speciesCode()))
+            .stream()
             .map(ApplicationDetailsRpcRepository.SpeciesGradeEndUseRow::gradeCode)
             .map(TextUtils::trimToNull)
             .noneMatch(gradeCode::equalsIgnoreCase)) {
@@ -2086,7 +2111,10 @@ public class OracleApplicationDetailsRpcService implements ApplicationDetailsRpc
   }
 
   private List<String> validateScaleMutation(
-      ScaleMutationRequest request, boolean validateTimberMarkRegion, boolean exactVolumeSums) {
+      ScaleMutationRequest request,
+      boolean validateTimberMarkRegion,
+      boolean exactVolumeSums,
+      ScaleReferenceLookups lookups) {
     List<String> errors = new ArrayList<>();
     String packageNumber = preservePackageNumber(request.packageNumber());
     Optional<ApplicationDetailsRpcRepository.ApplicationUpdateRecord> application =
@@ -2117,7 +2145,7 @@ public class OracleApplicationDetailsRpcService implements ApplicationDetailsRpc
     if (trimToNull(request.timberMark()) == null) {
       errors.add(required("timber mark"));
     } else {
-      validateTimberMark(request, application, validateTimberMarkRegion, errors);
+      validateTimberMark(request, application, validateTimberMarkRegion, lookups, errors);
     }
     if (trimToNull(request.gradeCode()) == null) {
       errors.add(required("grade code"));
@@ -2125,9 +2153,9 @@ public class OracleApplicationDetailsRpcService implements ApplicationDetailsRpc
     if (trimToNull(request.speciesCode()) == null) {
       errors.add(required("species code"));
     }
-    validateScaleCodes(request, errors);
+    validateScaleCodes(request, lookups, errors);
     if (federalApplication) {
-      validateScaleCodesForRegion(request, application.get().orgUnitNumber(), errors);
+      validateScaleCodesForRegion(request, application.get().orgUnitNumber(), lookups, errors);
     }
     errors.addAll(
         ScaleDomainValidator.validateNumericValues(request.pieces(), request.volume(), false));
@@ -2170,11 +2198,12 @@ public class OracleApplicationDetailsRpcService implements ApplicationDetailsRpc
     return errors;
   }
 
-  private void validateScaleCodes(ScaleMutationRequest request, List<String> errors) {
+  private void validateScaleCodes(
+      ScaleMutationRequest request, ScaleReferenceLookups lookups, List<String> errors) {
     String speciesCode = trimToNull(request.speciesCode());
     if (speciesCode != null
-        && repository
-            .findSpeciesCodeRequired(speciesCode)
+        && lookups.speciesCodes
+            .computeIfAbsent(speciesCode, repository::findSpeciesCodeRequired)
             .filter(row -> speciesCode.equalsIgnoreCase(trimToNull(row.code())))
             .isEmpty()) {
       errors.add("Species code " + speciesCode + " does not exist.");
@@ -2182,8 +2211,8 @@ public class OracleApplicationDetailsRpcService implements ApplicationDetailsRpc
 
     String gradeCode = trimToNull(request.gradeCode());
     if (gradeCode != null
-        && repository
-            .findGradeCodeRequired(gradeCode)
+        && lookups.gradeCodes
+            .computeIfAbsent(gradeCode, repository::findGradeCodeRequired)
             .filter(row -> gradeCode.equalsIgnoreCase(trimToNull(row.code())))
             .isEmpty()) {
       errors.add("Grade code " + gradeCode + " does not exist.");
@@ -2213,6 +2242,7 @@ public class OracleApplicationDetailsRpcService implements ApplicationDetailsRpc
       ScaleMutationRequest request,
       Optional<ApplicationDetailsRpcRepository.ApplicationUpdateRecord> application,
       boolean validateRegion,
+      ScaleReferenceLookups lookups,
       List<String> errors) {
     String timberMark = trimToNull(request.timberMark());
     if (timberMark == null) {
@@ -2225,6 +2255,7 @@ public class OracleApplicationDetailsRpcService implements ApplicationDetailsRpc
         application.map(ApplicationDetailsRpcRepository.ApplicationUpdateRecord::productTypeCode).orElse(null),
         application.map(ApplicationDetailsRpcRepository.ApplicationUpdateRecord::jurisdictionCode).orElse(null),
         validateRegion,
+        lookups,
         errors);
   }
 
@@ -2282,9 +2313,10 @@ public class OracleApplicationDetailsRpcService implements ApplicationDetailsRpc
       String productTypeCode,
       String jurisdictionCode,
       boolean validateRegion,
+      ScaleReferenceLookups lookups,
       List<String> errors) {
     Optional<ApplicationDetailsRpcRepository.TimberMarkRow> baseMark =
-        repository.findTimberMark(timberMark);
+        lookups.timberMarks.computeIfAbsent(timberMark, repository::findTimberMark);
 
     if (EXPORT_PRODUCT_TYPE_UNMANUFACTURED.equals(trimToNull(productTypeCode))
         && UNMANUFACTURED_TIMBER_MARK.equalsIgnoreCase(timberMark)) {
@@ -2326,6 +2358,23 @@ public class OracleApplicationDetailsRpcService implements ApplicationDetailsRpc
               + (status == null ? "." : " due to a status of " + status + "."));
     }
   }
+
+  // Reference rows read while checking a set of scale rows, so each key is read once per set
+  // rather than once per row. Application, package and scale rows are still read per row.
+  private static final class ScaleReferenceLookups {
+    private final Map<String, Optional<ApplicationDetailsRpcRepository.TimberMarkRow>> timberMarks =
+        new HashMap<>();
+    private final Map<String, Optional<ApplicationDetailsRpcRepository.CodeRow>> speciesCodes =
+        new HashMap<>();
+    private final Map<String, Optional<ApplicationDetailsRpcRepository.CodeRow>> gradeCodes =
+        new HashMap<>();
+    private final Map<String, List<ApplicationDetailsRpcRepository.SpeciesGradeEndUseRow>>
+        speciesGradeEndUsesByRegion = new HashMap<>();
+    private final Map<RegionSpecies, List<ApplicationDetailsRpcRepository.SpeciesGradeEndUseRow>>
+        speciesGradeEndUsesByRegionSpecies = new HashMap<>();
+  }
+
+  private record RegionSpecies(String region, String speciesCode) {}
 
   private boolean hasMutationLockedScale(
       List<ApplicationDetailsRpcRepository.ApplicationScaleDetailRow> scaleRows) {

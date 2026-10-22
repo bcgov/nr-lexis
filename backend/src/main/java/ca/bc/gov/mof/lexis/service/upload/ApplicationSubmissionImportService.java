@@ -742,13 +742,10 @@ public class ApplicationSubmissionImportService {
       }
     }
 
-    int importedScales = 0;
     List<ScaleMutationRequest> scaleRequests = toScaleMutationRequests(submission, applicationNumber);
-    for (int index = 0; index < scaleRequests.size(); index++) {
-      // Only the first scale row has to belong to the application's region.
+    if (!scaleRequests.isEmpty()) {
       ScalePersistenceResult scaleResult =
-          applicationDetailsService.addImportedScaleToPackage(
-              scaleRequests.get(index), userId, index == 0);
+          applicationDetailsService.addImportedScalesToPackage(scaleRequests, userId);
       if (!scaleResult.valid()) {
         markRollbackOnly();
         return rejected(
@@ -759,8 +756,8 @@ public class ApplicationSubmissionImportService {
             submissionSummary,
             normalizedUserReference);
       }
-      importedScales++;
     }
+    int importedScales = scaleRequests.size();
 
     return new ApplicationSubmissionImportResultDto(
         UPLOAD_TYPE,
