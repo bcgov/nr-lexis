@@ -151,12 +151,17 @@
   display: none;
 }
 
-// Each application row and its details row share one stripe.
-.application-upload-review-table.cds--data-table--zebra
+// Each application row and its details row share one stripe; the app-shell prefix keeps the
+// stripes ahead of the dark theme's table rows.
+.app-shell
+  .application-upload-page
+  .application-upload-review-table.cds--data-table--zebra
   tbody
   tr[data-parent-row]:nth-child(4n + 1)
   td,
-.application-upload-review-table.cds--data-table--zebra
+.app-shell
+  .application-upload-page
+  .application-upload-review-table.cds--data-table--zebra
   tbody
   tr[data-child-row]:nth-child(4n + 2)
   td {
@@ -164,11 +169,15 @@
   border-block-color: var(--application-upload-row-bg);
 }
 
-.application-upload-review-table.cds--data-table--zebra
+.app-shell
+  .application-upload-page
+  .application-upload-review-table.cds--data-table--zebra
   tbody
   tr[data-parent-row]:nth-child(4n + 3)
   td,
-.application-upload-review-table.cds--data-table--zebra
+.app-shell
+  .application-upload-page
+  .application-upload-review-table.cds--data-table--zebra
   tbody
   tr[data-child-row]:nth-child(4n + 4)
   td {
@@ -176,13 +185,25 @@
   border-block-color: var(--application-upload-row-alt-bg);
 }
 
-.application-upload-review-table.cds--data-table--zebra tbody tr[data-parent-row]:hover td,
-.application-upload-review-table.cds--data-table--zebra
+.app-shell
+  .application-upload-page
+  .application-upload-review-table.cds--data-table--zebra
+  tbody
+  tr[data-parent-row]:hover
+  td,
+.app-shell
+  .application-upload-page
+  .application-upload-review-table.cds--data-table--zebra
   tbody
   tr[data-parent-row]:hover
   + tr[data-child-row]
   td,
-.application-upload-review-table.cds--data-table--zebra tbody tr[data-child-row]:hover td {
+.app-shell
+  .application-upload-page
+  .application-upload-review-table.cds--data-table--zebra
+  tbody
+  tr[data-child-row]:hover
+  td {
   background-color: var(--cds-layer-hover);
   border-block-color: var(--cds-layer-hover);
 }
