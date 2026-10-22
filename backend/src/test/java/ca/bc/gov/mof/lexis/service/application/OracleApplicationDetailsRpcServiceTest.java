@@ -2188,9 +2188,6 @@ class OracleApplicationDetailsRpcServiceTest {
   @Test
   void addPackageShouldInsertPackageWithLegacyEndUseRows() {
     when(repository.packageExists("PKG-903")).thenReturn(false);
-    when(repository.findCandidateExcolCodesRequired(2, "FI", "LU", 11L))
-        .thenReturn(
-            List.of(new ApplicationDetailsRpcRepository.ExcolValidationRow("FI/HE/LU")));
     when(repository.insertPackage(any()))
         .thenReturn(
             Optional.of(
@@ -2541,11 +2538,18 @@ class OracleApplicationDetailsRpcServiceTest {
   }
 
   @Test
-  void addPackageShouldRejectSpeciesEndUseCombinationOutsideApplicationRegion() {
+  void addPackageShouldSaveSpeciesEndUseCombinationOutsideApplicationRegion() {
     when(repository.packageExists("PKG-903")).thenReturn(false);
     when(repository.findPackagesByApplicationNumber(1000456L)).thenReturn(List.of());
-    when(repository.findCandidateExcolCodesRequired(1, "FI", "LU", 11L))
+    org.mockito.Mockito.lenient()
+        .when(repository.findCandidateExcolCodesRequired(1, "FI", "LU", 11L))
         .thenReturn(List.of());
+    when(repository.insertPackage(any()))
+        .thenReturn(
+            Optional.of(
+                new ApplicationDetailsRpcRepository.PackageMutationRow(
+                    "PKG-903", 1000456L, "N", 25.0d, 12.0d, 24.0d, "Test", null,
+                    null, null, "A", "O", "H", "idir\\jsmith", Instant.now())));
 
     ApplicationDetailsRpcService.PackagePersistenceResult response =
         service.addPackage(
@@ -2565,10 +2569,19 @@ class OracleApplicationDetailsRpcServiceTest {
                 List.of("FI")),
             "idir\\jsmith");
 
-    assertThat(response.valid()).isFalse();
-    assertThat(response.errors())
-        .containsExactly("The package species/enduse sort is not valid for the selected region.");
-    verify(repository, never()).insertPackage(any());
+    assertThat(response.errors()).isEmpty();
+    assertThat(response.valid()).isTrue();
+    ArgumentCaptor<ApplicationDetailsRpcRepository.PackageMutationRecord> recordCaptor =
+        ArgumentCaptor.forClass(ApplicationDetailsRpcRepository.PackageMutationRecord.class);
+    verify(repository).insertPackage(recordCaptor.capture());
+    assertThat(recordCaptor.getValue().endUses())
+        .containsExactly(new ApplicationDetailsRpcRepository.EndUseMutationRecord("FI", "LU"));
+    verify(repository, never())
+        .findCandidateExcolCodesRequired(
+            org.mockito.ArgumentMatchers.anyInt(),
+            org.mockito.ArgumentMatchers.anyString(),
+            org.mockito.ArgumentMatchers.anyString(),
+            org.mockito.ArgumentMatchers.anyLong());
   }
 
   @Test
@@ -2651,6 +2664,38 @@ class OracleApplicationDetailsRpcServiceTest {
     verify(repository).insertPackage(recordCaptor.capture());
     assertThat(recordCaptor.getValue().packageStatusCode()).isEqualTo("ACT");
     assertThat(recordCaptor.getValue().reprocessedIndicator()).isEqualTo("N");
+  }
+
+  @Test
+  void hiddenBlanketOicPackageAddShouldRejectSpeciesEndUseCombinationOutsideApplicationRegion() {
+    when(repository.findApplicationUpdateRecord(1000456L))
+        .thenReturn(Optional.of(applicationUpdateRecordWithOicIndicator("Y")));
+    when(repository.packageExists("PKG-903")).thenReturn(false);
+    when(repository.findPackagesByApplicationNumber(1000456L)).thenReturn(List.of());
+    when(repository.findCandidateExcolCodesRequired(1, "FI", "LU", 11L)).thenReturn(List.of());
+
+    ApplicationDetailsRpcService.PackagePersistenceResult response =
+        service.addHiddenBlanketOicPackage(
+            new ApplicationDetailsRpcService.PackageMutationRequest(
+                "PKG-903",
+                null,
+                1000456L,
+                100.0d,
+                10.0d,
+                20.0d,
+                "SHT",
+                "Test",
+                "Y",
+                "O",
+                "H",
+                "LU",
+                List.of("FI")),
+            "idir\\jsmith");
+
+    assertThat(response.valid()).isFalse();
+    assertThat(response.errors())
+        .containsExactly("The package species/enduse sort is not valid for the selected region.");
+    verify(repository, never()).insertPackage(any());
   }
 
   @Test
@@ -3894,6 +3939,21 @@ class OracleApplicationDetailsRpcServiceTest {
     verify(repository, never()).insertApplication(any());
     verify(repository, never()).insertPackage(any());
     verify(repository, never()).insertScaleDetail(any());
+  }
+
+  @Test
+  void validateApplicationSubmissionImportShouldRejectPackageSpeciesEndUseOutsideRegion() {
+    when(repository.findCandidateExcolCodesRequired(1, "HE", "PL", 11L)).thenReturn(List.of());
+
+    ApplicationDetailsRpcService.SubmissionImportValidationResult response =
+        service.validateApplicationSubmissionImport(
+            importApplicationRequest("F"), importPackageRequest(), List.of());
+
+    assertThat(response.valid()).isFalse();
+    assertThat(response.errors())
+        .contains("The package species/enduse sort is not valid for the selected region.");
+    verify(repository, never()).insertApplication(any());
+    verify(repository, never()).insertPackage(any());
   }
 
   @Test
