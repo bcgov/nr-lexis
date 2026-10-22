@@ -2313,6 +2313,8 @@ public class LexisUploadController {
         || text.contains("xml root")
         || text.contains("schema location")
         || text.contains("xsi:")
+        || text.contains("schema version")
+        || text.contains("isn't valid xml")
         || text.contains("xml file must include")) {
       return "invalid_xml";
     }
