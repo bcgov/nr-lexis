@@ -1244,7 +1244,6 @@ describe('provincial permit detail services', () => {
     expect(body.get('permitIssueDate')).toBe('')
     expect(body.get('permitExpiryDate')).toBe('')
     expect(body.get('permitReceiptNo')).toBe('')
-    expect(body.toString()).toContain('permitReceiptNo=')
     expect(body.get('permitRemarks')).toBe('')
     expect(body.get('agentClientNumber')).toBe('')
     expect(body.get('agentClientLocation')).toBeNull()

@@ -11473,7 +11473,7 @@ describe('Provincial Permit Detail Action Smoke', () => {
     },
   )
 
-  it('sends the shipping of a completed Interior permit without a receipt to the shipping save for a Provincial Submitter', async () => {
+  it('shows the refusal and keeps the shipping edit open when a Provincial Submitter saves the shipping of a completed Interior permit without a receipt', async () => {
     mockedUseAuth.mockReturnValue(
       createTestAuthContext({
         capabilities: createTestCapabilities({ roles: ['LEXIS_PROVINCIAL_SUBMITTER'] }),
@@ -11482,15 +11482,13 @@ describe('Provincial Permit Detail Action Smoke', () => {
     )
     mockedFetchProvincialPermitDetail.mockResolvedValue(completedPermitWithoutReceipt)
     mockedUpdatePermitShipping.mockResolvedValue({
-      success: true,
-      message: 'The permit was saved successfully.',
-      errors: [],
-      warnings: [
+      success: false,
+      message: 'The permit was not saved.',
+      errors: [
         'Receipt number should not be empty for a complete permit so it will be saved as Payment pending.',
       ],
+      warnings: [],
       source: 'api',
-      permitStatus: 'PPD',
-      permitReceiptNo: '',
     })
     renderPermitDetails()
 
@@ -11504,9 +11502,15 @@ describe('Provincial Permit Detail Action Smoke', () => {
     )
     expect(screen.queryByRole('dialog', { name: 'Save as Payment pending?' })).toBeNull()
     expect(mockedUpdatePermitDetail).not.toHaveBeenCalled()
+    expect(await screen.findByText('Shipping details not saved.')).toBeInTheDocument()
     expect(
-      await screen.findByText(/Receipt number should not be empty for a complete permit/),
+      screen.getByText(
+        'Receipt number should not be empty for a complete permit so it will be saved as Payment pending.',
+      ),
     ).toBeInTheDocument()
+    expect(screen.queryByText('Shipping details saved.')).not.toBeInTheDocument()
+    expect(screen.getByLabelText('Purchaser')).toHaveValue('test-2026-10-19')
+    expect(screen.getByRole('button', { name: 'Save shipping' })).toBeEnabled()
   })
 
   it.each([
