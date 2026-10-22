@@ -2396,6 +2396,39 @@ class OraclePermitDetailsRpcServiceTest {
   }
 
   @Test
+  void createPermitFromExemptionShouldTakeTheAgentFromTheLowestApplicationWhenTheExemptionShowsAnother() {
+    stubMinisterialPermitCreationContext(
+        "00077881",
+        "00162572",
+        permitCreationApplication(
+            1000456L, "EX-700", 1835L, "00077881", "01", null, null, "T", "S"));
+    when(repository.findApplicationNumbersByExemptionNumberRequired("EX-700"))
+        .thenReturn(List.of(1000457L, 1000456L));
+    when(repository.findApplicationInfoByNumber(1000457L))
+        .thenReturn(
+            Optional.of(
+                permitCreationApplication(
+                    1000457L, "EX-700", 1835L, "00077881", "01", "00162572", "00", "T", "S")));
+    when(repository.insertPermitDetail(any(PermitMutationRow.class), eq("idir\\jsmith")))
+        .thenAnswer(
+            invocation ->
+                Optional.of(withPermitNumber(invocation.getArgument(0), 7000123L)));
+
+    PermitMutationRpcResponseDto response =
+        service.createPermitFromExemption("EX-700", "idir\\jsmith");
+
+    assertThat(response.success()).isTrue();
+    assertThat(response.errors()).isEmpty();
+    ArgumentCaptor<PermitMutationRow> insertCaptor =
+        ArgumentCaptor.forClass(PermitMutationRow.class);
+    verify(repository).insertPermitDetail(insertCaptor.capture(), eq("idir\\jsmith"));
+    PermitMutationRow inserted = insertCaptor.getValue();
+    assertThat(inserted.clientNumber()).isEqualTo("00077881");
+    assertThat(inserted.agentNumber()).isNull();
+    assertThat(inserted.agentLocationCode()).isNull();
+  }
+
+  @Test
   void createPermitFromExemptionShouldAllowApplicationsThatDifferInOwnerRegionAndClassification() {
     stubValidOrderInCouncilPermitCreationContext();
     when(repository.findApplicationNumbersByExemptionNumberRequired("EX-700"))
@@ -2805,7 +2838,7 @@ class OraclePermitDetailsRpcServiceTest {
   }
 
   @Test
-  void createPermitFromExemptionShouldFailClosedForMissingOwnerAndAgentBindings() {
+  void createPermitFromExemptionShouldFailClosedForAMissingOwnerBinding() {
     stubMinisterialPermitCreationContext(
         "00077881",
         "00077880",
@@ -2825,15 +2858,14 @@ class OraclePermitDetailsRpcServiceTest {
 
     assertThat(response.success()).isFalse();
     assertThat(response.errors())
-        .contains(
+        .containsExactly(
             "The permit owner does not match the selected exemption.",
-            "The permit agent does not match the selected exemption.",
             "The application owner and location could not be verified.");
     verify(repository, never()).insertPermitDetail(any(), any());
   }
 
   @Test
-  void createPermitFromExemptionShouldFailClosedForUnexpectedOwnerAndAgentBindings() {
+  void createPermitFromExemptionShouldFailClosedForAnUnexpectedOwnerBinding() {
     stubMinisterialPermitCreationContext(
         null, null, permitCreationApplication());
 
@@ -2842,9 +2874,7 @@ class OraclePermitDetailsRpcServiceTest {
 
     assertThat(response.success()).isFalse();
     assertThat(response.errors())
-        .containsExactly(
-            "The permit owner does not match the selected exemption.",
-            "The permit agent does not match the selected exemption.");
+        .containsExactly("The permit owner does not match the selected exemption.");
     verify(repository, never()).insertPermitDetail(any(), any());
   }
 
@@ -2878,7 +2908,7 @@ class OraclePermitDetailsRpcServiceTest {
   }
 
   @Test
-  void createPermitFromExemptionShouldFailClosedForMismatchedClientBindings() {
+  void createPermitFromExemptionShouldFailClosedForAMismatchedOwnerBinding() {
     stubValidMinisterialPermitCreationContext();
     when(repository.findApplicationInfoByNumber(1000456L))
         .thenReturn(
@@ -2899,9 +2929,7 @@ class OraclePermitDetailsRpcServiceTest {
 
     assertThat(response.success()).isFalse();
     assertThat(response.errors())
-        .contains(
-            "The permit owner does not match the selected exemption.",
-            "The permit agent does not match the selected exemption.");
+        .containsExactly("The permit owner does not match the selected exemption.");
     verify(repository, never()).insertPermitDetail(any(), any());
   }
 
@@ -3544,6 +3572,50 @@ class OraclePermitDetailsRpcServiceTest {
     assertThat(permitCaptor.getValue().agentNumber()).isEqualTo("00070002");
     assertThat(permitCaptor.getValue().agentLocationCode()).isEqualTo("04");
     assertThat(permitCaptor.getValue().overrideComment()).isNull();
+  }
+
+  @Test
+  void updatePermitShouldSaveTheFirstPackageApplicationAgentWhenTheMinisterialExemptionShowsAnother() {
+    when(repository.findPermitMutationByPermitNumber(7000123L))
+        .thenReturn(Optional.of(permitMutationRow()));
+    when(repository.findExemptionTypeCode("EX-700")).thenReturn(Optional.of("M"));
+    when(exemptionService.findByExemptionNumber("EX-700"))
+        .thenReturn(
+            Optional.of(
+                exemptionDetailWithClients(
+                    "EX-700", "M", "00077881", "00162572")));
+    when(repository.findFirstPackageApplicationByPermitNumberRequired(7000123L))
+        .thenReturn(Optional.of(new PermitPackageApplicationRow("PKG-902", 1000457L)));
+    when(repository.findApplicationInfoByNumber(1000457L))
+        .thenReturn(
+            Optional.of(
+                permitCreationApplication(
+                    1000457L,
+                    "EX-700",
+                    1835L,
+                    "00077881",
+                    "01",
+                    "00077880",
+                    "01",
+                    "T",
+                    "S")));
+    when(repository.updatePermitDetail(
+            any(PermitMutationRow.class), eq("idir\\jsmith"), eq(FEE_MASK_EFFECTIVE_DATE)))
+        .thenReturn(true);
+
+    PermitMutationRpcResponseDto response =
+        service.updatePermit(updatePermitRequest(null, null, null, null), "idir\\jsmith");
+
+    assertThat(response.success()).isTrue();
+    assertThat(response.errors()).isEmpty();
+    ArgumentCaptor<PermitMutationRow> permitCaptor =
+        ArgumentCaptor.forClass(PermitMutationRow.class);
+    verify(repository)
+        .updatePermitDetail(
+            permitCaptor.capture(), eq("idir\\jsmith"), eq(FEE_MASK_EFFECTIVE_DATE));
+    assertThat(permitCaptor.getValue().clientNumber()).isEqualTo("00077881");
+    assertThat(permitCaptor.getValue().agentNumber()).isEqualTo("00077880");
+    assertThat(permitCaptor.getValue().agentLocationCode()).isEqualTo("01");
   }
 
   @Test
