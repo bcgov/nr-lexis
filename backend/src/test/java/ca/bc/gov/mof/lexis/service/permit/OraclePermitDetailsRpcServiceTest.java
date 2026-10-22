@@ -7170,12 +7170,35 @@ class OraclePermitDetailsRpcServiceTest {
   }
 
   @Test
-  void updateShippingShouldSaveASubmitterChangeToAnInteriorCompletePermitAsPaymentPending() {
+  void updateShippingShouldRefuseASubmitterWhenAnInteriorCompletePermitWouldBecomePaymentPending() {
     when(repository.findPermitMutationByPermitNumber(7000123L))
         .thenReturn(
             Optional.of(
                 withOrgUnit(
                     permitMutationRowWithIssueAndReceipt("COM", LocalDate.of(2026, 3, 16), null),
+                    1903L)));
+    stubTargetMinisterialExemption("EX-700");
+
+    PermitMutationRpcResponseDto response =
+        service.updateShipping(
+            updateShippingRequest("2026-06-10", "Updated destination"), "bceid\\submitter", false);
+
+    assertThat(response.success()).isFalse();
+    assertThat(response.errors())
+        .containsExactly(
+            "Receipt number should not be empty for a complete permit so it will be saved as Payment pending.");
+    assertThat(response.warnings()).isEmpty();
+    verify(repository, never()).updatePermitDetail(any(), any(), any());
+  }
+
+  @Test
+  void updateShippingShouldSaveASubmitterChangeToAnInteriorCompletePermitWithAReceipt() {
+    when(repository.findPermitMutationByPermitNumber(7000123L))
+        .thenReturn(
+            Optional.of(
+                withOrgUnit(
+                    permitMutationRowWithIssueAndReceipt(
+                        "COM", LocalDate.of(2026, 3, 16), "RCPT-1"),
                     1903L)));
     stubTargetMinisterialExemption("EX-700");
     when(repository.updatePermitDetail(
@@ -7187,13 +7210,11 @@ class OraclePermitDetailsRpcServiceTest {
             updateShippingRequest("2026-06-10", "Updated destination"), "bceid\\submitter", false);
 
     assertThat(response.success()).isTrue();
-    assertThat(response.permitStatus()).isEqualTo("PPD");
-    assertThat(response.warnings())
-        .containsExactly(
-            "Receipt number should not be empty for a complete permit so it will be saved as Payment pending.");
+    assertThat(response.permitStatus()).isEqualTo("COM");
+    assertThat(response.warnings()).isEmpty();
     ArgumentCaptor<PermitMutationRow> captor = ArgumentCaptor.forClass(PermitMutationRow.class);
     verify(repository).updatePermitDetail(captor.capture(), eq("bceid\\submitter"), isNull());
-    assertThat(captor.getValue().permitStatusCode()).isEqualTo("PPD");
+    assertThat(captor.getValue().permitStatusCode()).isEqualTo("COM");
     assertThat(captor.getValue().destinationCompanyName()).isEqualTo("Updated destination");
   }
 

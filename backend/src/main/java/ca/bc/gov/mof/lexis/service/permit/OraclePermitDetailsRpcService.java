@@ -2233,11 +2233,10 @@ public class OraclePermitDetailsRpcService implements PermitDetailsRpcService {
       return validationFailureResponse(validation, permitNumber);
     }
     updated = validation.permit();
-    // Validation moves an Interior Complete permit with a blank receipt to Payment pending.
-    // Ministry staff save that change through the permit details once they confirm Payment
-    // pending, so their shipping save is refused. A Provincial Submitter can't save the details of
-    // a Completed permit, so their shipping save stores Payment pending and returns the warning.
-    if (ministryUser && !sameIgnoreCase(current.permitStatusCode(), updated.permitStatusCode())) {
+    // Validation moves an Interior Complete permit with a blank receipt to Payment pending. That
+    // change is saved through the permit details once Payment pending is confirmed, so a shipping
+    // save that would make it is refused.
+    if (!sameIgnoreCase(current.permitStatusCode(), updated.permitStatusCode())) {
       return failureMutationResponse(
           List.of(ProvincialPermitMutationValidator.PAYMENT_PENDING_SHIPPING_MESSAGE),
           permitNumber);

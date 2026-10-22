@@ -25,8 +25,7 @@ final class ProvincialPermitMutationValidator {
       "Receipt number should not be empty for a complete permit so it will be saved as Payment pending.";
 
   /**
-   * Refusal for a ministry staff shipping save that would move an Interior Complete permit to
-   * Payment pending.
+   * Refusal for a shipping save that would move an Interior Complete permit to Payment pending.
    */
   static final String PAYMENT_PENDING_SHIPPING_MESSAGE =
       "Receipt number should not be empty for a complete permit so it will be saved as Payment pending.";
