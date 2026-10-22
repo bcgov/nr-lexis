@@ -7052,7 +7052,8 @@ const ProvincialPermitDetailsPage = () => {
         hidden={
           blanketOicPackageCreationRequired ||
           ministerialScaleEmpty ||
-          (ministerialPermit && isPermitTablesLoading)
+          (ministerialPermit && isPermitTablesLoading) ||
+          tabsData === null
         }
       >
         <div className="permit-scale-summary__header">

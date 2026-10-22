@@ -5809,6 +5809,27 @@ describe('Provincial Permit Detail Action Smoke', () => {
     expect(screen.getByText('Required permit options not configured')).toBeInTheDocument()
   })
 
+  it('keeps the Blanket OIC Scale summary hidden until the permit tables load', async () => {
+    configureEditableBlanketOicPackage()
+    let resolveTabs: ((tabs: ProvincialPermitDetailTabsData) => void) | undefined
+    mockedFetchProvincialPermitDetailTabs.mockImplementation(
+      () =>
+        new Promise<ProvincialPermitDetailTabsData>((resolve) => {
+          resolveTabs = resolve
+        }),
+    )
+    renderPermitDetails()
+    await selectPermitDetailTab('Scale')
+
+    expect(screen.getByText('No scales yet.')).not.toBeVisible()
+
+    await act(async () => {
+      resolveTabs?.({ ...tabsResult, packages: [editableBlanketOicPackage] })
+    })
+
+    expect(await screen.findByText('No scales yet.')).toBeVisible()
+  })
+
   it('keeps a saved Blanket OIC package volume when no scale rows are attached', async () => {
     configureEditableBlanketOicPackage()
     mockedFetchProvincialPermitDetailTabs.mockResolvedValue({
