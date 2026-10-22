@@ -7637,7 +7637,7 @@ const ProvincialPermitDetailsPage = () => {
               />
             </Column>
           )}
-          {!!blanketOicRegionError && (
+          {canMutatePermit && !!blanketOicRegionError && (
             <Column sm={4} md={8} lg={16} className="detail-page-error">
               <InlineNotification
                 className="detail-context-notification"
@@ -7649,7 +7649,7 @@ const ProvincialPermitDetailsPage = () => {
               />
             </Column>
           )}
-          {requiredPermitOptionsMissing && (
+          {canMutatePermit && requiredPermitOptionsMissing && (
             <Column sm={4} md={8} lg={16} className="detail-page-error">
               <InlineNotification
                 className="detail-context-notification"

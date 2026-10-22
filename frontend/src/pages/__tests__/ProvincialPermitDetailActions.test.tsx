@@ -5777,6 +5777,38 @@ describe('Provincial Permit Detail Action Smoke', () => {
     },
   )
 
+  it('hides the Blanket OIC option warnings from a Read Only user without a save region', async () => {
+    configureEditableBlanketOicPackage()
+    mockedUseAuth.mockReturnValue(
+      createTestAuthContext({
+        capabilities: createTestCapabilities({
+          roles: ['LEXIS_READ_ONLY'],
+          grantedActions: ['/permitDetails'],
+          actionRegions: { permitdetails: ['1903'] },
+        }),
+        canPerform: (action: string) => action === '/permitDetails',
+      }),
+    )
+    renderPermitDetails()
+    await selectPermitDetailTab('Scale')
+
+    await findBlanketOicPackageCard()
+    expect(screen.queryByText('Blanket OIC region options unavailable')).not.toBeInTheDocument()
+    expect(screen.queryByText('Required permit options not configured')).not.toBeInTheDocument()
+  })
+
+  it('shows the Blanket OIC option warnings to a writer whose region list is empty', async () => {
+    configureEditableBlanketOicPackage()
+    mockedFetchProvincialPermitOptions.mockResolvedValue({
+      permitStatuses: [{ value: 'ACT', label: 'Active' }],
+      regions: [],
+    })
+    renderPermitDetails()
+
+    expect(await screen.findByText('Blanket OIC region options unavailable')).toBeInTheDocument()
+    expect(screen.getByText('Required permit options not configured')).toBeInTheDocument()
+  })
+
   it('keeps a saved Blanket OIC package volume when no scale rows are attached', async () => {
     configureEditableBlanketOicPackage()
     mockedFetchProvincialPermitDetailTabs.mockResolvedValue({
