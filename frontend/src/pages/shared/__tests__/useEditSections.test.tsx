@@ -149,6 +149,47 @@ const ReusedEditButtonHarness = () => {
   )
 }
 
+// The location select stays disabled while its options load.
+const PendingFocusHarness = ({
+  pending = false,
+  busy = false,
+}: {
+  pending?: boolean
+  busy?: boolean
+}) => {
+  const sections = useEditSections<Section>({ isDirty: false, onDiscard: vi.fn() })
+  return (
+    <section ref={sections.sectionRef('permit')}>
+      {sections.isEditing('permit') ? (
+        <div
+          data-edit-focus-pending={pending ? 'true' : undefined}
+          aria-busy={busy ? 'true' : undefined}
+        >
+          <label htmlFor="pending-location">Client location</label>
+          <select id="pending-location" disabled={pending}>
+            <option value="03">03 - Owner office</option>
+          </select>
+          <label htmlFor="pending-agent">I&apos;m an agent</label>
+          <input id="pending-agent" type="checkbox" />
+        </div>
+      ) : (
+        <button
+          type="button"
+          ref={sections.editButtonRef('permit')}
+          onClick={() => sections.startEditing('permit')}
+        >
+          Edit permit
+        </button>
+      )}
+    </section>
+  )
+}
+
+const nextFrame = () =>
+  act(async () => {
+    await new Promise((resolve) => requestAnimationFrame(() => resolve(undefined)))
+  })
+
 const OpenedInEditHarness = () => {
   const [editingSection, setEditingSection] = useState<'permit' | 'newPermit' | null>('newPermit')
   const sections = useEditSections<'permit' | 'newPermit'>({
@@ -644,6 +685,56 @@ describe('useEditSections', () => {
     })
 
     expect(screen.getByRole('button', { name: 'Edit permit' })).toHaveFocus()
+  })
+
+  it('waits while the section is marked focus-pending, then focuses its first editable field', async () => {
+    const user = userEvent.setup()
+    const { rerender } = render(<PendingFocusHarness pending />)
+
+    await user.click(screen.getByRole('button', { name: 'Edit permit' }))
+    await nextFrame()
+    await nextFrame()
+    expect(screen.getByLabelText("I'm an agent")).not.toHaveFocus()
+    expect(screen.getByLabelText('Client location')).not.toHaveFocus()
+
+    rerender(<PendingFocusHarness />)
+
+    await waitFor(() => expect(screen.getByLabelText('Client location')).toHaveFocus())
+  })
+
+  it('stops waiting without moving focus when the section stays focus-pending past the wait', async () => {
+    vi.useFakeTimers({
+      toFake: [
+        'setTimeout',
+        'clearTimeout',
+        'Date',
+        'requestAnimationFrame',
+        'cancelAnimationFrame',
+      ],
+    })
+    const { rerender } = render(<PendingFocusHarness pending />)
+
+    fireEvent.click(screen.getByRole('button', { name: 'Edit permit' }))
+    await act(async () => {
+      vi.advanceTimersByTime(16_000)
+    })
+    expect(document.activeElement).toBe(document.body)
+
+    rerender(<PendingFocusHarness />)
+    await act(async () => {
+      vi.advanceTimersByTime(100)
+    })
+
+    expect(document.activeElement).toBe(document.body)
+  })
+
+  it('focuses a section marked only aria-busy at once', async () => {
+    const user = userEvent.setup()
+    render(<PendingFocusHarness busy />)
+
+    await user.click(screen.getByRole('button', { name: 'Edit permit' }))
+
+    await waitFor(() => expect(screen.getByLabelText('Client location')).toHaveFocus())
   })
 
   it('returns focus to an Edit button shared by a record that opened in edit mode', async () => {

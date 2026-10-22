@@ -6,6 +6,10 @@ import { focusFirstEditableField } from '@/utils/focus'
 // record before its Edit button returns. Any user input first cancels the wait.
 const FOCUS_WAIT_MS = 15_000
 
+// A section holds back its first-field focus while it contains this marker, for example while the
+// options of the field that should take focus are still loading.
+const FOCUS_PENDING_SELECTOR = '[data-edit-focus-pending="true"]'
+
 type FocusIntent<S> = {
   target: 'field' | 'edit-button'
   section: S
@@ -153,6 +157,15 @@ export const useEditSections = <S extends string>({
         return true
       }
       const containers = Array.from(sectionElementsRef.current.get(intent.section) ?? [])
+      if (
+        containers.some(
+          (container) =>
+            container.matches(FOCUS_PENDING_SELECTOR) ||
+            !!container.querySelector(FOCUS_PENDING_SELECTOR),
+        )
+      ) {
+        return false
+      }
       if (!containers.some((container) => focusFirstEditableField(container))) return false
     } else {
       const editButton =

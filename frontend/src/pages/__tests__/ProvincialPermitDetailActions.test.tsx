@@ -14360,6 +14360,73 @@ describe('Provincial Permit Detail Action Smoke', () => {
       )
     })
 
+    it('focuses the Blanket OIC owner Client location once its locations load', async () => {
+      configureEditableBlanketOicPackage()
+      let resolveOwnerLocations: (
+        locations: Array<{ locationCode: string; locationName: string; selected: boolean }>,
+      ) => void = () => undefined
+      mockedFetchApplicationClientLocations.mockImplementation((clientNumber) =>
+        clientNumber === '00067890'
+          ? new Promise((resolve) => {
+              resolveOwnerLocations = resolve
+            })
+          : Promise.resolve([{ locationCode: '01', locationName: 'Agent office', selected: true }]),
+      )
+      renderPermitDetails()
+
+      await selectPermitDetailTab('Owner')
+      await userEvent.click(await screen.findByRole('button', { name: 'Edit applicant details' }))
+      const agentUsed = screen.getByRole('checkbox', { name: "I'm an agent" })
+      expect(agentUsed).toBeEnabled()
+      await act(async () => {
+        await new Promise((resolve) => requestAnimationFrame(() => resolve(undefined)))
+      })
+      expect(agentUsed).not.toHaveFocus()
+
+      await act(async () =>
+        resolveOwnerLocations([
+          { locationCode: '03', locationName: 'Owner office', selected: true },
+        ]),
+      )
+      await waitFor(() => expect(document.activeElement?.id).toBe('permit-ownerClientLocation'))
+
+      const applicantCard = screen
+        .getByRole('heading', { name: 'Applicant details' })
+        .closest('.cds--tile') as HTMLElement
+      await userEvent.click(within(applicantCard).getByRole('button', { name: 'Cancel' }))
+      await waitFor(() =>
+        expect(screen.getByRole('button', { name: 'Edit applicant details' })).toHaveFocus(),
+      )
+    })
+
+    it("focuses I'm an agent when the Blanket OIC owner locations cannot load", async () => {
+      const consoleError = vi.spyOn(console, 'error').mockImplementation(() => undefined)
+      configureEditableBlanketOicPackage()
+      let rejectOwnerLocations: (error: Error) => void = () => undefined
+      mockedFetchApplicationClientLocations.mockImplementation((clientNumber) =>
+        clientNumber === '00067890'
+          ? new Promise((_, reject) => {
+              rejectOwnerLocations = reject
+            })
+          : Promise.resolve([{ locationCode: '01', locationName: 'Agent office', selected: true }]),
+      )
+      renderPermitDetails()
+
+      await selectPermitDetailTab('Owner')
+      await userEvent.click(await screen.findByRole('button', { name: 'Edit applicant details' }))
+      await act(async () => {
+        await new Promise((resolve) => requestAnimationFrame(() => resolve(undefined)))
+      })
+      expect(screen.getByRole('checkbox', { name: "I'm an agent" })).not.toHaveFocus()
+
+      await act(async () => rejectOwnerLocations(new Error('client lookup unavailable')))
+      await waitFor(() => expect(document.activeElement?.id).toBe('permit-agent-used'))
+      expect(
+        screen.getByLabelText('Client location', { selector: '#permit-ownerClientLocation' }),
+      ).toBeDisabled()
+      consoleError.mockRestore()
+    })
+
     it('focuses the Override fees? choice when editing the fee override', async () => {
       configureActivePermit()
       renderPermitDetails()
