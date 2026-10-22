@@ -7,9 +7,12 @@ import {
 import { recordOrEmpty } from '@/utils/record'
 
 export class AdminPolicyMutationError extends Error {
+  readonly errors: string[]
+
   constructor(errors: string[]) {
     super(errors.join(' ') || 'The policy change could not be completed.')
     this.name = 'AdminPolicyMutationError'
+    this.errors = errors
   }
 }
 

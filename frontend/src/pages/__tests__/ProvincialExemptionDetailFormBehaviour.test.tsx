@@ -77,6 +77,12 @@ const ministerialExemption: ProvincialExemptionDetail = {
   blanketOic: false,
 }
 
+const activeBlanketOicExemption: ProvincialExemptionDetail = {
+  ...blanketOicExemption,
+  exemptionStatusCode: 'ACT',
+  exemptionStatusDescription: 'Active',
+}
+
 const renderPage = (exemptionNumber = 'BOIC-205') => {
   const router = createMemoryRouter(
     [
@@ -242,6 +248,97 @@ describe('Provincial exemption detail form behaviour', () => {
     expect(expiry).toHaveAttribute('aria-invalid', 'true')
     fireEvent.change(expiry, { target: { value: '2026-08-20' } })
     expect(expiry).not.toHaveAttribute('aria-invalid', 'true')
+  })
+
+  it('shows a refused expiry on its field and a refusal for a field it cannot edit in the notice', async () => {
+    vi.mocked(fetchProvincialExemptionDetail).mockResolvedValue(activeBlanketOicExemption)
+    vi.mocked(updateExemption).mockResolvedValue({
+      success: false,
+      message: 'Unable to update exemption.',
+      exemptionNumber: 'BOIC-205',
+      errors: [
+        'A valid approval date is required for an active exemption.',
+        'An active exemption cannot have an expiry date before today.',
+      ],
+      warnings: [],
+    })
+    renderPage()
+
+    await userEvent.click(await screen.findByRole('button', { name: 'Edit exemption details' }))
+    await userEvent.type(screen.getByLabelText('Conditions'), ' Updated')
+    await userEvent.click(screen.getByRole('button', { name: 'Save changes' }))
+
+    const expiry = screen.getByLabelText('Expiry date')
+    await waitFor(() => expect(expiry).toHaveAttribute('aria-invalid', 'true'))
+    expect(
+      screen.getByText('An active exemption cannot have an expiry date before today'),
+    ).toBeVisible()
+    await waitFor(() => expect(expiry).toHaveFocus())
+    expect(screen.getByText('Exemption details not saved.')).toBeInTheDocument()
+    expect(
+      screen.getByText('A valid approval date is required for an active exemption.'),
+    ).toBeInTheDocument()
+
+    fireEvent.change(expiry, { target: { value: '2027-12-31' } })
+    expect(expiry).not.toHaveAttribute('aria-invalid', 'true')
+  })
+
+  it('keeps a refused expiry in the notice on a Fees save', async () => {
+    vi.mocked(fetchProvincialExemptionDetail).mockResolvedValue(activeBlanketOicExemption)
+    vi.mocked(updateExemption).mockResolvedValue({
+      success: false,
+      message: 'Unable to update exemption.',
+      exemptionNumber: 'BOIC-205',
+      errors: ['An active exemption cannot have an expiry date before today.'],
+      warnings: [],
+    })
+    renderPage()
+
+    await userEvent.click(await screen.findByRole('tab', { name: 'Fees' }))
+    await userEvent.click(await screen.findByRole('button', { name: 'Edit fee override' }))
+    await userEvent.click(screen.getByRole('radio', { name: 'Yes' }))
+    await userEvent.type(screen.getByLabelText('Fee rate ($/m³)'), '12.50')
+    await userEvent.click(screen.getByRole('button', { name: 'Save changes' }))
+
+    expect(
+      await screen.findByText('An active exemption cannot have an expiry date before today.'),
+    ).toBeInTheDocument()
+    expect(screen.getByText('Fees not saved.')).toBeInTheDocument()
+    expect(screen.getByLabelText('Fee rate ($/m³)')).not.toHaveAttribute('aria-invalid', 'true')
+  })
+
+  it('shows a taken OIC exemption number on the Exemption number field', async () => {
+    vi.mocked(fetchProvincialExemptionDetail).mockResolvedValue({
+      ...activeBlanketOicExemption,
+      exemptionNumber: 'OIC-205',
+      exemptionTypeCode: 'O',
+      exemptionTypeDescription: 'Order in Council',
+      blanketOic: false,
+    })
+    vi.mocked(fetchProvincialExemptionOptions).mockResolvedValue({
+      exemptionTypes: [{ value: 'O', label: 'Order in Council' }],
+      exemptionStatuses: [{ value: 'ACT', label: 'Active' }],
+      regions: [],
+    })
+    vi.mocked(updateExemption).mockResolvedValue({
+      success: false,
+      message: 'Unable to update exemption.',
+      exemptionNumber: 'OIC-206',
+      errors: ['* - this exemption number has already been assigned'],
+      warnings: [],
+    })
+    renderPage('OIC-205')
+
+    await userEvent.click(await screen.findByRole('button', { name: 'Edit exemption details' }))
+    const number = screen.getByRole('textbox', { name: /Exemption number/ })
+    await userEvent.clear(number)
+    await userEvent.type(number, 'OIC-206')
+    await userEvent.click(screen.getByRole('button', { name: 'Save changes' }))
+
+    await waitFor(() => expect(number).toHaveAttribute('aria-invalid', 'true'))
+    expect(screen.getByText('This exemption number has already been assigned')).toBeVisible()
+    await waitFor(() => expect(number).toHaveFocus())
+    expect(screen.queryByText('Exemption details not saved.')).not.toBeInTheDocument()
   })
 
   it('asks before Cancel drops changes', async () => {

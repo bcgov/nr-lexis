@@ -404,23 +404,70 @@ describe('Admin policy action states', () => {
     ).not.toBeInTheDocument()
   })
 
-  it('surfaces backend policy mutation errors', async () => {
+  it('shows a refused effective date on its field and other refusals in the notice', async () => {
     mockedUpsertFeePolicy.mockRejectedValue(
-      new AdminPolicyMutationError(['Effective date must be greater than the current date.']),
+      new AdminPolicyMutationError([
+        'Effective date must be greater than the current date.',
+        'Fee policy changes are locked.',
+      ]),
     )
     renderPage('fee')
 
     const dialog = await openAddPolicyDialog('fee')
-    fireEvent.change(within(dialog).getByLabelText('Policy effective date'), {
-      target: { value: '2099-02-01' },
-    })
+    const effectiveDate = within(dialog).getByLabelText('Policy effective date')
+    fireEvent.change(effectiveDate, { target: { value: '2099-02-01' } })
     await userEvent.selectOptions(within(dialog).getByLabelText('Region'), '1904')
     await userEvent.type(within(dialog).getByLabelText('Fee increase percentage'), '5')
     await userEvent.click(within(dialog).getByRole('button', { name: 'Add fee policy' }))
 
     expect(
-      await within(dialog).findByText('Effective date must be greater than the current date.'),
+      await within(dialog).findByText('Effective date must be greater than the current date'),
     ).toBeInTheDocument()
+    expect(effectiveDate).toHaveAttribute('aria-invalid', 'true')
+    await waitFor(() => expect(effectiveDate).toHaveFocus())
+    expect(within(dialog).getByText('Fee policy changes are locked.')).toBeInTheDocument()
+
+    fireEvent.change(effectiveDate, { target: { value: '2099-03-01' } })
+    expect(
+      within(dialog).queryByText('Effective date must be greater than the current date'),
+    ).not.toBeInTheDocument()
+  })
+
+  it('shows a taken fee in lieu effective date on its field and clears it on Cancel', async () => {
+    mockedUpsertFilPolicy.mockRejectedValue(
+      new AdminPolicyMutationError(['Effective date already exists.']),
+    )
+    renderPage('fil')
+
+    const dialog = await openAddPolicyDialog('fil')
+    const effectiveDate = within(dialog).getByLabelText('Policy effective date')
+    fireEvent.change(effectiveDate, { target: { value: '2099-01-01' } })
+    await userEvent.type(within(dialog).getByLabelText('Fee in lieu percentage'), '3')
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Add fee in lieu policy' }))
+
+    expect(await within(dialog).findByText('Effective date already exists')).toBeInTheDocument()
+    expect(effectiveDate).toHaveAttribute('aria-invalid', 'true')
+    await waitFor(() => expect(effectiveDate).toHaveFocus())
+    expect(screen.queryByText('Policy error')).not.toBeInTheDocument()
+
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Cancel' }))
+    await userEvent.click(
+      within(await screen.findByRole('dialog', { name: 'Discard changes?' })).getByRole('button', {
+        name: 'Discard changes',
+      }),
+    )
+    await waitFor(() =>
+      expect(
+        screen.queryByRole('complementary', { name: 'Add fee in lieu policy' }),
+      ).not.toBeInTheDocument(),
+    )
+    expect(screen.queryByText('Policy error')).not.toBeInTheDocument()
+
+    const reopened = await openAddPolicyDialog('fil')
+    fireEvent.change(within(reopened).getByLabelText('Policy effective date'), {
+      target: { value: '2099-01-01' },
+    })
+    expect(within(reopened).queryByText('Effective date already exists')).not.toBeInTheDocument()
   })
 
   it('surfaces backend delete guard errors after confirmation', async () => {

@@ -526,6 +526,8 @@ const summarySaveFields = (source: SummarySaveSource): ApplicationSummaryField[]
     : source === 'summary-items'
       ? [...SUMMARY_SAVE_FIELDS.summary, ...SUMMARY_SAVE_FIELDS.items]
       : SUMMARY_SAVE_FIELDS[source]
+const FIRST_SCALE_REGION_ERROR =
+  'The first scale timber mark is not valid for the application region.'
 // These cards save the field without showing it, so its error stays in the page notification.
 const SUMMARY_FIELDS_WITHOUT_ERROR_DISPLAY: Partial<
   Record<ApplicationEditSection, ApplicationSummaryField[]>
@@ -3158,13 +3160,32 @@ const ProvincialApplicationDetailsPage = () => {
           }),
         })
         if (!result.valid) {
-          setActionResult({
-            kind: 'error',
-            message:
-              result.errors.length > 0
-                ? result.errors.join(' ')
-                : result.message || 'Unable to save application summary.',
-          })
+          // A save that sends Region shows the region message on it; other saves keep the notice.
+          const section = editingSection ?? 'summary'
+          const regionError =
+            (source === 'summary' || source === 'summary-items') &&
+            !SUMMARY_FIELDS_WITHOUT_ERROR_DISPLAY[section]?.includes('orgUnitNumber')
+              ? result.errors.find((error) => error.trim() === FIRST_SCALE_REGION_ERROR)
+              : undefined
+          const otherErrors = result.errors.filter((error) => error !== regionError)
+          if (regionError) {
+            setSummarySaveErrors({
+              errors: { orgUnitNumber: regionError },
+              values: summaryRequestForm,
+            })
+            focusFirstInvalidFieldAfterRender(() =>
+              document.getElementById(APPLICATION_EDIT_SECTION_CARD_IDS[section]),
+            )
+          }
+          if (!regionError || otherErrors.length > 0) {
+            setActionResult({
+              kind: 'error',
+              message:
+                otherErrors.length > 0
+                  ? otherErrors.join(' ')
+                  : result.message || 'Unable to save application summary.',
+            })
+          }
           return false
         }
 
@@ -3202,6 +3223,7 @@ const ProvincialApplicationDetailsPage = () => {
       canChangeApplicantType,
       detail,
       editingRemarkId,
+      editingSection,
       isApplicationExpired,
       isSavingSummary,
       loadApplicationDetail,

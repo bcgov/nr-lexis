@@ -93,7 +93,7 @@ import {
   withDetailReturnTo,
 } from '@/pages/shared/detail-navigation'
 import { useEditSections } from '@/pages/shared/useEditSections'
-import { useFieldErrors, type FieldErrors } from '@/pages/shared/useFieldErrors'
+import { hasFieldErrors, useFieldErrors, type FieldErrors } from '@/pages/shared/useFieldErrors'
 import { useLatestRequestGuard } from '@/pages/shared/useLatestRequestGuard'
 import { useReloadPreservedTab } from '@/pages/shared/useReloadPreservedTab'
 import {
@@ -285,6 +285,28 @@ const feeRateFieldError = (value: string): string => {
     !/^\d{1,7}(\.\d{1,2})?$/.test(normalized)
     ? 'Fee rate must be greater than 0, at most 999.99, and have at most two decimal places.'
     : ''
+}
+
+const DUPLICATE_EXEMPTION_NUMBER_ERROR = '* - this exemption number has already been assigned'
+const DUPLICATE_EXEMPTION_NUMBER_FIELD_ERROR = 'This exemption number has already been assigned.'
+
+// The field a server message from an Exemption details save names, and the text shown on it.
+const summaryServerFieldError = (
+  message: string,
+): { field: ExemptionEditField; message: string } | undefined => {
+  if (message === DUPLICATE_EXEMPTION_NUMBER_ERROR) {
+    return { field: 'exemptionNumber', message: DUPLICATE_EXEMPTION_NUMBER_FIELD_ERROR }
+  }
+  if (message === 'A valid approval date is required for an active exemption.') {
+    return { field: 'approvalDate', message }
+  }
+  if (
+    message === 'A valid expiry date is required for an active exemption.' ||
+    message === 'An active exemption cannot have an expiry date before today.'
+  ) {
+    return { field: 'expiryDate', message }
+  }
+  return undefined
 }
 
 const normalizeServerMessage = (message: string): string =>
@@ -1621,13 +1643,39 @@ const ProvincialExemptionDetailsPage = () => {
         regionNumbers: submittedForm.regionNumbers,
       })
       if (!result.success) {
-        setActionResult({
-          source: resultSource,
-          kind: 'error',
-          title: saveErrorTitle,
-          message: result.errors.join(' ') || result.message,
-          focusOnReveal: true,
-        })
+        // A message shows on its field when this save could change that field, otherwise in the
+        // notice.
+        const editableFields: ExemptionEditField[] = [
+          ...(currentTypeCode === 'O' && canEditSummaryFields
+            ? (['exemptionNumber'] as const)
+            : []),
+          ...(canEditApprovalDate ? (['approvalDate'] as const) : []),
+          ...(canEditExpiryDate ? (['expiryDate'] as const) : []),
+        ]
+        const serverFieldErrors: FieldErrors<ExemptionEditField> = {}
+        const unmappedErrors: string[] = []
+        for (const error of result.errors) {
+          const fieldError = summaryServerFieldError(error.trim())
+          if (!fieldError || !editableFields.includes(fieldError.field)) {
+            unmappedErrors.push(error)
+            continue
+          }
+          const existing = serverFieldErrors[fieldError.field]
+          serverFieldErrors[fieldError.field] = existing
+            ? `${existing} ${fieldError.message}`
+            : fieldError.message
+        }
+        const mapped = hasFieldErrors(serverFieldErrors)
+        if (mapped) showFieldErrors(serverFieldErrors, () => tabsColumnRef.current)
+        if (!mapped || unmappedErrors.length > 0) {
+          setActionResult({
+            source: resultSource,
+            kind: 'error',
+            title: saveErrorTitle,
+            message: unmappedErrors.join(' ') || result.message,
+            focusOnReveal: !mapped,
+          })
+        }
         return false
       }
       const committedDetail: ProvincialExemptionDetail = {
@@ -1711,6 +1759,8 @@ const ProvincialExemptionDetailsPage = () => {
     saving,
     canManageFeeRate,
     editContext,
+    canEditApprovalDate,
+    canEditExpiryDate,
     canEditSummaryFields,
     currentTypeCode,
     editingSection,

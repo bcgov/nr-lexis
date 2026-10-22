@@ -28,7 +28,9 @@ import {
   mockedUpdateApplicationSummary,
   runFramesBeforeNextRender,
   selectApplicationDetailTab,
+  selectApplicationItemDetailsTile,
   selectApplicationReviewTile,
+  selectApplicationSummaryTile,
 } from './ProvincialApplicationDetailActions.support'
 import ProvincialApplicationDetailsPage from '@/pages/ProvincialApplicationDetails'
 
@@ -217,6 +219,60 @@ describe.sequential('Provincial Application Detail - form behaviour', () => {
       expect(mockedUpdateApplicationSummary).toHaveBeenCalledWith(
         expect.objectContaining({ ownerContactName: 'René Owner', agentContactName: 'New Agent' }),
       ),
+    )
+  })
+
+  it('shows a refused region on the Region field and focuses it', async () => {
+    mockedUpdateApplicationSummary.mockResolvedValueOnce({
+      valid: false,
+      message: '',
+      applicationNumber: '321',
+      errors: ['The first scale timber mark is not valid for the application region.'],
+      warnings: [],
+    })
+    renderApplicationDetail()
+    const application = within(await selectApplicationSummaryTile())
+    const region = getSummaryComboBox(application, 'Region')
+    await waitFor(() => expect(region).toHaveValue('Coast'))
+    await chooseComboBoxOption(region, 'Interior')
+
+    await userEvent.click(application.getByRole('button', { name: 'Save changes' }))
+
+    expect(
+      await application.findByText(
+        'The first scale timber mark is not valid for the application region',
+      ),
+    ).toBeInTheDocument()
+    expect(region).toHaveAttribute('aria-invalid', 'true')
+    await waitFor(() => expect(region).toHaveFocus())
+    expect(
+      screen.queryByText('The first scale timber mark is not valid for the application region.'),
+    ).not.toBeInTheDocument()
+  })
+
+  it('keeps a refused region in the notice on a Scale save', async () => {
+    mockedUpdateApplicationSummary.mockResolvedValueOnce({
+      valid: false,
+      message: '',
+      applicationNumber: '321',
+      errors: ['The first scale timber mark is not valid for the application region.'],
+      warnings: [],
+    })
+    renderApplicationDetail()
+    const scale = within(await selectApplicationItemDetailsTile())
+    fireEvent.change(await scale.findByLabelText('Application volume (m³)'), {
+      target: { value: '99.9' },
+    })
+
+    await userEvent.click(scale.getByRole('button', { name: 'Save changes' }))
+
+    expect(
+      await screen.findByText(
+        'The first scale timber mark is not valid for the application region.',
+      ),
+    ).toBeInTheDocument()
+    expect(mockedUpdateApplicationSummary).toHaveBeenCalledWith(
+      expect.objectContaining({ saveSource: 'items' }),
     )
   })
 

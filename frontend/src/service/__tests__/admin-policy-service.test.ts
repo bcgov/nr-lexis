@@ -400,6 +400,7 @@ describe('admin-policy-service', () => {
       expect.objectContaining<Partial<AdminPolicyMutationError>>({
         name: 'AdminPolicyMutationError',
         message: 'Only future-dated policies can be changed. Refresh the table.',
+        errors: ['Only future-dated policies can be changed.', 'Refresh the table.'],
       }),
     )
     await expect(
