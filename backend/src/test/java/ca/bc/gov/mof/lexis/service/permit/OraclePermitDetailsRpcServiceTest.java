@@ -6208,6 +6208,129 @@ class OraclePermitDetailsRpcServiceTest {
   }
 
   @Test
+  void updatePermitShouldSaveAMinisterialPermitWhoseSavedOwnerIsNotTheExemptionOwner() {
+    when(repository.findPermitMutationByPermitNumber(7000123L))
+        .thenReturn(Optional.of(permitMutationRow("COM")));
+    stubMinisterialExemptionOwnedBy("00099999");
+    when(repository.updatePermitDetail(
+            any(PermitMutationRow.class), eq("idir\\jsmith"), eq(FEE_MASK_EFFECTIVE_DATE)))
+        .thenReturn(true);
+
+    PermitMutationRpcResponseDto response =
+        service.updatePermit(
+            formCheckRequest("COM", "42", "test-2026-10-22"), "idir\\jsmith");
+
+    assertThat(response.errors()).isEmpty();
+    assertThat(response.success()).isTrue();
+    ArgumentCaptor<PermitMutationRow> permitCaptor =
+        ArgumentCaptor.forClass(PermitMutationRow.class);
+    verify(repository)
+        .updatePermitDetail(
+            permitCaptor.capture(), eq("idir\\jsmith"), eq(FEE_MASK_EFFECTIVE_DATE));
+    assertThat(permitCaptor.getValue().clientNumber()).isEqualTo("00077881");
+    assertThat(permitCaptor.getValue().remarks()).isEqualTo("test-2026-10-22");
+  }
+
+  @ParameterizedTest
+  @ValueSource(strings = {"CAN", "ACT"})
+  void updatePermitShouldCancelOrReactivateAMinisterialPermitWhoseSavedOwnerIsNotTheExemptionOwner(
+      String targetStatus) {
+    stubInvoiceOrchestration();
+    when(repository.findPermitMutationByPermitNumber(7000123L))
+        .thenReturn(Optional.of(permitMutationRow("COM")));
+    stubMinisterialExemptionOwnedBy("00099999");
+    when(repository.updatePermitDetail(
+            any(PermitMutationRow.class), eq("idir\\jsmith"), eq(FEE_MASK_EFFECTIVE_DATE)))
+        .thenReturn(true);
+
+    PermitMutationRpcResponseDto response =
+        service.updatePermit(
+            formCheckRequest(targetStatus, "42", "Legacy notes"), "idir\\jsmith");
+
+    assertThat(response.errors()).isEmpty();
+    assertThat(response.success()).isTrue();
+    ArgumentCaptor<PermitMutationRow> permitCaptor =
+        ArgumentCaptor.forClass(PermitMutationRow.class);
+    verify(repository)
+        .updatePermitDetail(
+            permitCaptor.capture(), eq("idir\\jsmith"), eq(FEE_MASK_EFFECTIVE_DATE));
+    assertThat(permitCaptor.getValue().permitStatusCode()).isEqualTo(targetStatus);
+    assertThat(permitCaptor.getValue().clientNumber()).isEqualTo("00077881");
+  }
+
+  @Test
+  void updatePermitShouldCompleteAMinisterialPermitWhosePackageOwnerIsNotTheExemptionOwner() {
+    when(repository.findPermitMutationByPermitNumber(7000123L))
+        .thenReturn(Optional.of(withOrgUnit(permitMutationRow("ACT"), 1903L)));
+    stubMinisterialExemptionOwnedBy("00099999");
+    when(repository.findFirstPackageApplicationByPermitNumberRequired(7000123L))
+        .thenReturn(Optional.of(new PermitPackageApplicationRow("PKG-902", 1000457L)));
+    when(repository.findApplicationInfoByNumber(1000457L))
+        .thenReturn(
+            Optional.of(
+                permitCreationApplication(
+                    1000457L,
+                    "EX-700",
+                    1903L,
+                    "00077881",
+                    "01",
+                    "00077880",
+                    "01",
+                    "T",
+                    "S")));
+    stubInvoiceOrchestration();
+    stubNonCanadianInvoiceSnapshot(1903L);
+    when(repository.updatePermitDetail(
+            any(PermitMutationRow.class), eq("idir\\jsmith"), eq(FEE_MASK_EFFECTIVE_DATE)))
+        .thenReturn(true);
+
+    PermitMutationRpcResponseDto response =
+        service.updatePermit(
+            formCheckRequest("COM", "42", "Legacy notes", "RCPT-100", "1903"), "idir\\jsmith");
+
+    assertThat(response.errors()).isEmpty();
+    assertThat(response.success()).isTrue();
+    assertThat(response.permitStatus()).isEqualTo("COM");
+    ArgumentCaptor<PermitMutationRow> permitCaptor =
+        ArgumentCaptor.forClass(PermitMutationRow.class);
+    verify(repository)
+        .updatePermitDetail(
+            permitCaptor.capture(), eq("idir\\jsmith"), eq(FEE_MASK_EFFECTIVE_DATE));
+    assertThat(permitCaptor.getValue().clientNumber()).isEqualTo("00077881");
+    verify(permitInvoiceOrchestrationService).orchestrate(any(), eq("idir\\jsmith"));
+  }
+
+  @Test
+  void updatePermitShouldRefuseAMinisterialOwnerChangeToAClientThatIsNotTheExemptionOwner() {
+    when(repository.findPermitMutationByPermitNumber(7000123L))
+        .thenReturn(Optional.of(permitMutationRow("ACT")));
+    stubMinisterialExemptionOwnedBy("00077881");
+    when(repository.findFirstPackageApplicationByPermitNumberRequired(7000123L))
+        .thenReturn(Optional.of(new PermitPackageApplicationRow("PKG-902", 1000457L)));
+    when(repository.findApplicationInfoByNumber(1000457L))
+        .thenReturn(
+            Optional.of(
+                permitCreationApplication(
+                    1000457L,
+                    "EX-700",
+                    1835L,
+                    "00099991",
+                    "01",
+                    "00077880",
+                    "01",
+                    "T",
+                    "S")));
+
+    PermitMutationRpcResponseDto response =
+        service.updatePermit(formCheckRequest("ACT", "42", "Legacy notes"), "idir\\jsmith");
+
+    assertThat(response.success()).isFalse();
+    assertThat(response.errors())
+        .containsExactly("The permit owner does not match the selected exemption.");
+    verify(repository, never()).updatePermitDetail(any(), any(), any());
+  }
+
+  @Test
   void updatePermitShouldStillCheckTheDateRelationshipsWhileThePermitStaysActive() {
     when(repository.findPermitMutationByPermitNumber(7000123L))
         .thenReturn(Optional.of(permitMutationRow("ACT")));
@@ -7085,6 +7208,27 @@ class OraclePermitDetailsRpcServiceTest {
     assertThat(permitCaptor.getValue().permitStatusCode()).isEqualTo("CAN");
     assertThat(permitCaptor.getValue().destinationCompanyName())
         .isEqualTo("Updated destination");
+  }
+
+  @Test
+  void updateShippingShouldSaveAMinisterialPermitWhoseSavedOwnerIsNotTheExemptionOwner() {
+    when(repository.findPermitMutationByPermitNumber(7000123L))
+        .thenReturn(Optional.of(permitMutationRow("COM")));
+    stubMinisterialExemptionOwnedBy("00099999");
+    when(repository.updatePermitDetail(any(PermitMutationRow.class), eq("idir\\jsmith"), isNull()))
+        .thenReturn(true);
+
+    PermitMutationRpcResponseDto response =
+        service.updateShipping(
+            updateShippingRequest("2026-06-10", "test-2026-10-22"), "idir\\jsmith");
+
+    assertThat(response.errors()).isEmpty();
+    assertThat(response.success()).isTrue();
+    ArgumentCaptor<PermitMutationRow> permitCaptor =
+        ArgumentCaptor.forClass(PermitMutationRow.class);
+    verify(repository).updatePermitDetail(permitCaptor.capture(), eq("idir\\jsmith"), isNull());
+    assertThat(permitCaptor.getValue().clientNumber()).isEqualTo("00077881");
+    assertThat(permitCaptor.getValue().destinationCompanyName()).isEqualTo("test-2026-10-22");
   }
 
   @ParameterizedTest
@@ -11126,6 +11270,14 @@ class OraclePermitDetailsRpcServiceTest {
             Optional.of(
                 exemptionDetailWithClients(
                     exemptionNumber, "M", "00077881", "00077880")));
+  }
+
+  private void stubMinisterialExemptionOwnedBy(String ownerClientNumber) {
+    when(repository.findExemptionTypeCode("EX-700")).thenReturn(Optional.of("M"));
+    when(exemptionService.findByExemptionNumber("EX-700"))
+        .thenReturn(
+            Optional.of(
+                exemptionDetailWithClients("EX-700", "M", ownerClientNumber, "00077880")));
   }
 
   private PermitDetailsRpcService transactionalService(

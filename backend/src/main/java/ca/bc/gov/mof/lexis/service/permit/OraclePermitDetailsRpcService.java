@@ -1865,7 +1865,10 @@ public class OraclePermitDetailsRpcService implements PermitDetailsRpcService {
     String targetOwnerClientLocation = targetClients.ownerClientLocation();
     String targetAgentClientNumber = targetClients.agentClientNumber();
     String targetAgentClientLocation = targetClients.agentClientLocation();
-    validateClientBinding(targetExemption, targetOwnerClientNumber, exemptionErrors);
+    // Only a changed owner must be the exemption's owner, so a permit can keep its saved owner.
+    if (!sameText(targetOwnerClientNumber, current.clientNumber())) {
+      validateClientBinding(targetExemption, targetOwnerClientNumber, exemptionErrors);
+    }
     if (!exemptionErrors.isEmpty()) {
       return failureMutationResponse(exemptionErrors, permitNumber);
     }
@@ -2171,11 +2174,9 @@ public class OraclePermitDetailsRpcService implements PermitDetailsRpcService {
           List.of("Expired permits are read-only."), permitNumber);
     }
     List<String> exemptionErrors = new ArrayList<>();
+    // A shipping save keeps the saved owner, so the owner is not checked against the exemption.
     ValidatedExemptionBinding exemption =
         validateExemptionBinding(current.exemptionNumber(), exemptionErrors);
-    if (exemption != null) {
-      validateClientBinding(exemption, current.clientNumber(), exemptionErrors);
-    }
     if (!exemptionErrors.isEmpty()) {
       return failureMutationResponse(exemptionErrors, permitNumber);
     }
