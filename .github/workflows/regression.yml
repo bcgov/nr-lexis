@@ -1,8 +1,8 @@
 name: Regression
 
 on:
-  # Disabled in GitHub until a TEST IDIR regression account signs in through modern FAM (Keycloak).
-  # Keep the regression specs current meanwhile. To resume, enable this workflow, complete a
+  # Manual dispatch only until a TEST IDIR regression account signs in through modern FAM
+  # (Keycloak). Keep the regression specs current meanwhile. To resume the weekly run, complete a
   # successful manual run, then restore the schedule; see frontend/e2e/README.md.
   workflow_dispatch:
 
