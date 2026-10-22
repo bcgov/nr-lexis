@@ -251,13 +251,14 @@ public interface ApplicationDetailsRpcService {
   ScalePersistenceResult addScaleToPackage(ScaleMutationRequest request, String userId);
 
   /**
-   * Adds a scale from an imported submission to its package. The package room check adds the scale
-   * volumes at their stored two decimals, as the import preflight does. When {@code
-   * validateTimberMarkRegion} is false the timber mark must still be valid, but it is not required
-   * to belong to the application's region.
+   * Adds the scales from an imported submission to their package in order, and stops at the first
+   * invalid scale, returning its result. The scales before it stay inserted, so the caller rolls
+   * back an invalid result. Only the first scale's timber mark has to belong to the
+   * application's region; the others must still be valid. The package room check adds the scale
+   * volumes at their stored two decimals, as the import preflight does.
    */
-  ScalePersistenceResult addImportedScaleToPackage(
-      ScaleMutationRequest request, String userId, boolean validateTimberMarkRegion);
+  ScalePersistenceResult addImportedScalesToPackage(
+      List<ScaleMutationRequest> requests, String userId);
 
   boolean deleteScaleById(String scaleDetailId, String userId);
 

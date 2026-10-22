@@ -3490,7 +3490,7 @@ class OracleApplicationDetailsRpcServiceTest {
   }
 
   @Test
-  void addImportedScaleToPackageShouldKeepTwoDecimalScalesWhenTheyFillThePackageExactly() {
+  void addImportedScalesToPackageShouldKeepTwoDecimalScalesWhenTheyFillThePackageExactly() {
     when(repository.packageExists("PKG-903")).thenReturn(true);
     when(repository.findTimberMark("TM001")).thenReturn(Optional.of(validTimberMarkRow()));
     when(repository.findTimberMarkByOrgUnit("TM001", 11L))
@@ -3528,22 +3528,24 @@ class OracleApplicationDetailsRpcServiceTest {
                       ""));
             });
 
-    for (double volume : new double[] {47.75d, 12.25d, 0.5d}) {
-      ApplicationDetailsRpcService.ScalePersistenceResult response =
-          service.addImportedScaleToPackage(
-              new ApplicationDetailsRpcService.ScaleMutationRequest(
-                  "TM001", "PKG-903", "1", "FI", 1000456L, 1L, volume),
-              "idir\\jsmith",
-              true);
+    ApplicationDetailsRpcService.ScalePersistenceResult response =
+        service.addImportedScalesToPackage(
+            List.of(
+                new ApplicationDetailsRpcService.ScaleMutationRequest(
+                    "TM001", "PKG-903", "1", "FI", 1000456L, 1L, 47.75d),
+                new ApplicationDetailsRpcService.ScaleMutationRequest(
+                    "TM001", "PKG-903", "1", "FI", 1000456L, 1L, 12.25d),
+                new ApplicationDetailsRpcService.ScaleMutationRequest(
+                    "TM001", "PKG-903", "1", "FI", 1000456L, 1L, 0.5d)),
+            "idir\\jsmith");
 
-      assertThat(response.errors()).isEmpty();
-      assertThat(response.valid()).isTrue();
-    }
+    assertThat(response.errors()).isEmpty();
+    assertThat(response.valid()).isTrue();
     verify(repository, times(3)).insertScaleDetail(any());
   }
 
   @Test
-  void addImportedScaleToPackageShouldReportTheRemainingRoomAtTwoDecimalsWhenTheScalesHaveThem() {
+  void addImportedScalesToPackageShouldReportTheRemainingRoomAtTwoDecimalsWhenTheScalesHaveThem() {
     when(repository.packageExists("PKG-903")).thenReturn(true);
     when(repository.findTimberMark("TM001")).thenReturn(Optional.of(validTimberMarkRow()));
     when(repository.findTimberMarkByOrgUnit("TM001", 11L))
@@ -3562,11 +3564,11 @@ class OracleApplicationDetailsRpcServiceTest {
                     "54", "TM002", "FI", "1", 47.75d, 1L, 1000456L, null, "PKG-903", "")));
 
     ApplicationDetailsRpcService.ScalePersistenceResult response =
-        service.addImportedScaleToPackage(
-            new ApplicationDetailsRpcService.ScaleMutationRequest(
-                "TM001", "PKG-903", "1", "FI", 1000456L, 1L, 12.76d),
-            "idir\\jsmith",
-            true);
+        service.addImportedScalesToPackage(
+            List.of(
+                new ApplicationDetailsRpcService.ScaleMutationRequest(
+                    "TM001", "PKG-903", "1", "FI", 1000456L, 1L, 12.76d)),
+            "idir\\jsmith");
 
     assertThat(response.valid()).isFalse();
     assertThat(response.errors())
@@ -4033,6 +4035,92 @@ class OracleApplicationDetailsRpcServiceTest {
   }
 
   @Test
+  void validateApplicationSubmissionImportShouldReadEachScaleReferenceOncePerSubmission() {
+    stubFederalImportScaleReferences();
+
+    ApplicationDetailsRpcService.SubmissionImportValidationResult response =
+        service.validateApplicationSubmissionImport(
+            importApplicationRequest("F"), importPackageRequest(), federalImportScales(null));
+
+    assertThat(response.errors()).isEmpty();
+    assertThat(response.valid()).isTrue();
+    verify(repository).findTimberMark("TM001");
+    verify(repository).findTimberMark("TM002");
+    verify(repository).findTimberMarkByOrgUnit("TM001", 11L);
+    // The package checks read the package's species once more.
+    verify(repository, times(2)).findSpeciesCodeRequired("HE");
+    verify(repository).findGradeCodeRequired("1");
+    verify(repository).findGradeCodeRequired("2");
+    verify(repository).findSpeciesEndUsesByRegionRequired("11");
+    verify(repository).findSpeciesEndUsesByRegionSpeciesRequired("11", "HE");
+  }
+
+  @Test
+  void validateApplicationSubmissionImportShouldReportAnUnknownTimberMarkOnEveryScaleThatUsesIt() {
+    stubHemlockGradesOneAndTwoInTheRegion();
+    when(repository.findTimberMark("TM404")).thenReturn(Optional.empty());
+
+    ApplicationDetailsRpcService.SubmissionImportValidationResult response =
+        service.validateApplicationSubmissionImport(
+            importApplicationRequest("F"),
+            importPackageRequest(),
+            List.of(
+                new ApplicationDetailsRpcService.ScaleMutationRequest(
+                    "TM404", "PKG-903", "1", "HE", null, 1L, 5.0d),
+                new ApplicationDetailsRpcService.ScaleMutationRequest(
+                    "TM404", "PKG-903", "2", "HE", null, 1L, 5.0d)));
+
+    assertThat(response.valid()).isFalse();
+    assertThat(response.errors())
+        .containsExactly("Timber mark TM404 does not exist.", "Timber mark TM404 does not exist.");
+    verify(repository).findTimberMark("TM404");
+    verify(repository, never()).findTimberMarkByOrgUnit(any(), any());
+  }
+
+  private List<ApplicationDetailsRpcService.ScaleMutationRequest> federalImportScales(
+      Long applicationNumber) {
+    return List.of(
+        new ApplicationDetailsRpcService.ScaleMutationRequest(
+            "TM001", "PKG-903", "1", "HE", applicationNumber, 1L, 2.5d),
+        new ApplicationDetailsRpcService.ScaleMutationRequest(
+            "TM001", "PKG-903", "2", "HE", applicationNumber, 1L, 2.5d),
+        new ApplicationDetailsRpcService.ScaleMutationRequest(
+            "TM002", "PKG-903", "1", "HE", applicationNumber, 1L, 2.5d),
+        new ApplicationDetailsRpcService.ScaleMutationRequest(
+            "TM002", "PKG-903", "2", "HE", applicationNumber, 1L, 2.5d));
+  }
+
+  private void stubFederalImportScaleReferences() {
+    ApplicationDetailsRpcRepository.TimberMarkRow firstMark =
+        new ApplicationDetailsRpcRepository.TimberMarkRow("TM001", "ACT", "FF-1", "B08");
+    when(repository.findTimberMark("TM001")).thenReturn(Optional.of(firstMark));
+    when(repository.findTimberMark("TM002"))
+        .thenReturn(
+            Optional.of(
+                new ApplicationDetailsRpcRepository.TimberMarkRow("TM002", "ACT", "FF-2", "B08")));
+    when(repository.findTimberMarkByOrgUnit("TM001", 11L)).thenReturn(Optional.of(firstMark));
+    stubHemlockGradesOneAndTwoInTheRegion();
+  }
+
+  private void stubHemlockGradesOneAndTwoInTheRegion() {
+    List<ApplicationDetailsRpcRepository.SpeciesGradeEndUseRow> hemlockGrades =
+        List.of(
+            new ApplicationDetailsRpcRepository.SpeciesGradeEndUseRow(
+                "HE", "1", "PL", "HE/PL", 11L),
+            new ApplicationDetailsRpcRepository.SpeciesGradeEndUseRow(
+                "HE", "2", "PL", "HE/PL", 11L));
+    when(repository.findSpeciesEndUsesByRegionRequired("11")).thenReturn(hemlockGrades);
+    when(repository.findSpeciesEndUsesByRegionSpeciesRequired("11", "HE"))
+        .thenReturn(hemlockGrades);
+    when(repository.findGradeCodeRequired("1"))
+        .thenReturn(
+            Optional.of(new ApplicationDetailsRpcRepository.CodeRow("1", "Sawlog", 1L, 1L)));
+    when(repository.findGradeCodeRequired("2"))
+        .thenReturn(
+            Optional.of(new ApplicationDetailsRpcRepository.CodeRow("2", "Gang", 1L, 1L)));
+  }
+
+  @Test
   void validateApplicationSubmissionImportShouldRejectPiecesAboveLegacyExecutableLimit() {
     ApplicationDetailsRpcRepository.TimberMarkRow federalTimberMark =
         new ApplicationDetailsRpcRepository.TimberMarkRow("TM001", "ACT", "FF-1", "B08");
@@ -4267,37 +4355,82 @@ class OracleApplicationDetailsRpcServiceTest {
   }
 
   @Test
-  void addImportedScaleToPackageShouldSkipTheTimberMarkRegionCheckWhenAskedTo() {
+  void addImportedScalesToPackageShouldCheckTheTimberMarkRegionOfTheFirstScaleOnly() {
     stubScaleInsertWithoutRegionMark();
+    when(repository.findTimberMarkByOrgUnit("TM001", 11L))
+        .thenReturn(Optional.of(validTimberMarkRow()));
+    when(repository.findTimberMark("TM002")).thenReturn(Optional.of(validTimberMarkRow()));
+    stubScaleInsertReturnsTheInsertedRow();
 
     ApplicationDetailsRpcService.ScalePersistenceResult response =
-        service.addImportedScaleToPackage(
-            new ApplicationDetailsRpcService.ScaleMutationRequest(
-                "TM001", "PKG-903", "1", "FI", 1000456L, 10L, 12.5d),
-            "idir\\jsmith",
-            false);
+        service.addImportedScalesToPackage(
+            List.of(
+                new ApplicationDetailsRpcService.ScaleMutationRequest(
+                    "TM001", "PKG-903", "1", "FI", 1000456L, 10L, 12.5d),
+                new ApplicationDetailsRpcService.ScaleMutationRequest(
+                    "TM002", "PKG-903", "1", "FI", 1000456L, 10L, 12.5d)),
+            "idir\\jsmith");
 
     assertThat(response.errors()).isEmpty();
     assertThat(response.valid()).isTrue();
-    verify(repository, never()).findTimberMarkByOrgUnit(any(), any());
-    verify(repository).insertScaleDetail(any());
+    verify(repository).findTimberMarkByOrgUnit("TM001", 11L);
+    verify(repository, never()).findTimberMarkByOrgUnit("TM002", 11L);
+    verify(repository, times(2)).insertScaleDetail(any());
   }
 
   @Test
-  void addImportedScaleToPackageShouldStillRequireAnExistingTimberMarkWhenSkippingTheRegionCheck() {
+  void addImportedScalesToPackageShouldStopAtTheFirstScaleWithAnUnknownTimberMark() {
     stubScaleInsertWithoutRegionMark();
-    when(repository.findTimberMark("TM001")).thenReturn(Optional.empty());
+    when(repository.findTimberMarkByOrgUnit("TM001", 11L))
+        .thenReturn(Optional.of(validTimberMarkRow()));
+    when(repository.findTimberMark("TM404")).thenReturn(Optional.empty());
 
     ApplicationDetailsRpcService.ScalePersistenceResult response =
-        service.addImportedScaleToPackage(
-            new ApplicationDetailsRpcService.ScaleMutationRequest(
-                "TM001", "PKG-903", "1", "FI", 1000456L, 10L, 12.5d),
-            "idir\\jsmith",
-            false);
+        service.addImportedScalesToPackage(
+            List.of(
+                new ApplicationDetailsRpcService.ScaleMutationRequest(
+                    "TM001", "PKG-903", "1", "FI", 1000456L, 10L, 12.5d),
+                new ApplicationDetailsRpcService.ScaleMutationRequest(
+                    "TM404", "PKG-903", "1", "FI", 1000456L, 10L, 12.5d),
+                new ApplicationDetailsRpcService.ScaleMutationRequest(
+                    "TM001", "PKG-903", "2", "FI", 1000456L, 10L, 12.5d)),
+            "idir\\jsmith");
 
     assertThat(response.valid()).isFalse();
-    assertThat(response.errors()).contains("Timber mark TM001 does not exist.");
-    verify(repository, never()).insertScaleDetail(any());
+    assertThat(response.errors()).containsExactly("Timber mark TM404 does not exist.");
+    verify(repository).insertScaleDetail(any());
+    verify(repository, never()).findGradeCodeRequired("2");
+  }
+
+  @Test
+  void addImportedScalesToPackageShouldReadEachScaleReferenceOnceAndTheScaleStatePerScale() {
+    stubFederalImportScaleReferences();
+    when(repository.findApplicationUpdateRecord(1000456L))
+        .thenReturn(Optional.of(federalApplicationUpdateRecord()));
+    when(repository.packageExists("PKG-903")).thenReturn(true);
+    when(repository.findScaleDetailsByPackageNumber("PKG-903")).thenReturn(List.of());
+    when(repository.findPackageDetailsByPackageNumberRequired("PKG-903"))
+        .thenReturn(Optional.of(packageDetailsRow("PKG-903", 10.0d)));
+    stubScaleInsertReturnsTheInsertedRow();
+
+    ApplicationDetailsRpcService.ScalePersistenceResult response =
+        service.addImportedScalesToPackage(federalImportScales(1000456L), "idir\\jsmith");
+
+    assertThat(response.errors()).isEmpty();
+    assertThat(response.valid()).isTrue();
+    verify(repository).findTimberMark("TM001");
+    verify(repository).findTimberMark("TM002");
+    verify(repository).findTimberMarkByOrgUnit("TM001", 11L);
+    verify(repository).findSpeciesCodeRequired("HE");
+    verify(repository).findGradeCodeRequired("1");
+    verify(repository).findGradeCodeRequired("2");
+    verify(repository).findSpeciesEndUsesByRegionRequired("11");
+    verify(repository).findSpeciesEndUsesByRegionSpeciesRequired("11", "HE");
+    verify(repository, times(4)).findApplicationUpdateRecord(1000456L);
+    verify(repository, times(4)).packageExists("PKG-903");
+    verify(repository, times(4)).findScaleDetailsByPackageNumber("PKG-903");
+    verify(repository, times(4)).findPackageDetailsByPackageNumberRequired("PKG-903");
+    verify(repository, times(4)).insertScaleDetail(any());
   }
 
   @Test
@@ -4313,6 +4446,26 @@ class OracleApplicationDetailsRpcServiceTest {
     assertThat(response.valid()).isFalse();
     assertThat(response.errors()).contains("Timber mark TM001 is not valid for this region.");
     verify(repository, never()).insertScaleDetail(any());
+  }
+
+  private void stubScaleInsertReturnsTheInsertedRow() {
+    when(repository.insertScaleDetail(any()))
+        .thenAnswer(
+            invocation -> {
+              ApplicationDetailsRpcRepository.ScaleMutationRecord record = invocation.getArgument(0);
+              return Optional.of(
+                  new ApplicationDetailsRpcRepository.ApplicationScaleDetailRow(
+                      "56",
+                      record.timberMark(),
+                      record.speciesCode(),
+                      record.gradeCode(),
+                      record.speciesGradeVolume(),
+                      record.piecesCount(),
+                      record.applicationNumber(),
+                      null,
+                      record.packageNumber(),
+                      ""));
+            });
   }
 
   private void stubScaleInsertWithoutRegionMark() {
