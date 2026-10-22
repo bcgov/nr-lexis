@@ -58,7 +58,8 @@ both gets no LEXIS access and sees the no-access page until FAM removes one. Sco
 `LEXIS_PROVINCIAL_SUBMITTER_FOREST_CLIENT-00001018` retain their eight-digit client scope;
 `FAM:` metadata roles grant no application access. Audit usernames keep legacy LEXIS's WebADE
 form, `IDIR\USERNAME` or `BCEID\USERNAME` in upper case, so users keep one name across legacy and
-modern rows.
+modern rows. Federal gateway submissions are recorded as `SERVICE\<machine client id>`; legacy
+used one shared ESF account.
 When FAM assigns a Provincial Submitter to multiple forest clients, LEXIS requires a per-session
 active organization selection. The frontend sends that selection with each API request and the
 backend validates it against the client-scoped FAM authorities before enforcing it for every
