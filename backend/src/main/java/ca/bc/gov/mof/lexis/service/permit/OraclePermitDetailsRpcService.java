@@ -1865,13 +1865,6 @@ public class OraclePermitDetailsRpcService implements PermitDetailsRpcService {
     String targetOwnerClientLocation = targetClients.ownerClientLocation();
     String targetAgentClientNumber = targetClients.agentClientNumber();
     String targetAgentClientLocation = targetClients.agentClientLocation();
-    // Only a changed owner must be the exemption's owner, so a permit can keep its saved owner.
-    if (!sameText(targetOwnerClientNumber, current.clientNumber())) {
-      validateClientBinding(targetExemption, targetOwnerClientNumber, exemptionErrors);
-    }
-    if (!exemptionErrors.isEmpty()) {
-      return failureMutationResponse(exemptionErrors, permitNumber);
-    }
 
     Double submittedOicRequestVolume = parseDouble(request.oicPermitTotalVolume());
     List<String> numericErrors = new ArrayList<>();

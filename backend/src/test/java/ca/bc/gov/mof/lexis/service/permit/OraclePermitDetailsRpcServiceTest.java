@@ -6386,7 +6386,7 @@ class OraclePermitDetailsRpcServiceTest {
   }
 
   @Test
-  void updatePermitShouldRefuseAMinisterialOwnerChangeToAClientThatIsNotTheExemptionOwner() {
+  void updatePermitShouldTakeAFirstPackageOwnerThatIsNotTheExemptionOwner() {
     when(repository.findPermitMutationByPermitNumber(7000123L))
         .thenReturn(Optional.of(permitMutationRow("ACT")));
     stubMinisterialExemptionOwnedBy("00077881");
@@ -6405,14 +6405,21 @@ class OraclePermitDetailsRpcServiceTest {
                     "01",
                     "T",
                     "S")));
+    when(repository.updatePermitDetail(
+            any(PermitMutationRow.class), eq("idir\\jsmith"), eq(FEE_MASK_EFFECTIVE_DATE)))
+        .thenReturn(true);
 
     PermitMutationRpcResponseDto response =
         service.updatePermit(formCheckRequest("ACT", "42", "Legacy notes"), "idir\\jsmith");
 
-    assertThat(response.success()).isFalse();
-    assertThat(response.errors())
-        .containsExactly("The permit owner does not match the selected exemption.");
-    verify(repository, never()).updatePermitDetail(any(), any(), any());
+    assertThat(response.errors()).isEmpty();
+    assertThat(response.success()).isTrue();
+    ArgumentCaptor<PermitMutationRow> permitCaptor =
+        ArgumentCaptor.forClass(PermitMutationRow.class);
+    verify(repository)
+        .updatePermitDetail(
+            permitCaptor.capture(), eq("idir\\jsmith"), eq(FEE_MASK_EFFECTIVE_DATE));
+    assertThat(permitCaptor.getValue().clientNumber()).isEqualTo("00099991");
   }
 
   @Test
