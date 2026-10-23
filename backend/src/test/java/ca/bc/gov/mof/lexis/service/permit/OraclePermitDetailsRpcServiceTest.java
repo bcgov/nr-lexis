@@ -6461,6 +6461,27 @@ class OraclePermitDetailsRpcServiceTest {
     verify(permitInvoiceOrchestrationService).orchestrate(any(), eq("idir\\jsmith"));
   }
 
+  @ParameterizedTest
+  @CsvSource({"05,01", "01,05"})
+  void updatePermitShouldKeepALocationChangeLockedWhenAReactivatedPermitKeepsItsClients(
+      String ownerLocation, String agentLocation) {
+    when(repository.findPermitMutationByPermitNumber(7000123L))
+        .thenReturn(Optional.of(permitMutationRow("COM")));
+    stubTargetMinisterialExemption("EX-700");
+    stubFirstPackageApplicationClients(1835L, "00077881", "01", "00077880", "01");
+
+    PermitMutationRpcResponseDto response =
+        service.updatePermit(
+            withClientLocations(
+                formCheckRequest("ACT", "42", "Legacy notes"), ownerLocation, agentLocation),
+            "idir\\jsmith");
+
+    assertThat(response.success()).isFalse();
+    assertThat(response.errors()).containsExactly(INVOICE_DETAILS_LOCKED_MESSAGE);
+    verify(repository, never()).updatePermitDetail(any(), any(), any());
+    verifyNoInteractions(permitInvoiceOrchestrationService);
+  }
+
   @Test
   void updatePermitShouldTakeTheFirstApplicationOwnerAndAgentLocationsWhenAnActivePermitSwitchesClients() {
     when(repository.findPermitMutationByPermitNumber(7000123L))

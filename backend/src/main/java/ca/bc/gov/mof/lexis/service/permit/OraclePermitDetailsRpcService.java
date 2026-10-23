@@ -4735,7 +4735,8 @@ public class OraclePermitDetailsRpcService implements PermitDetailsRpcService {
   // the permit is Payment pending the receipt number can be saved with the status left at
   // Payment pending or completed, and the agent can be added, removed or replaced, but a kept
   // agent's location stays fixed. An application-backed permit saved as Active takes its owner
-  // and agent from its first application, so its clients are not compared.
+  // and agent from its first application, so a client replaced that way is not compared; a client
+  // that stays the same keeps its location fixed.
   private boolean hasInvoiceMaterialDelta(
       PermitMutationRow current, PermitMutationRow target, boolean applicationBackedPermit) {
     boolean paymentPending =
@@ -4757,8 +4758,12 @@ public class OraclePermitDetailsRpcService implements PermitDetailsRpcService {
         || (!receiptMayChange && hasStringChanged(current.receiptNumber(), target.receiptNumber()))
         || !java.util.Objects.equals(current.permitVolume(), target.permitVolume())
         || !java.util.Objects.equals(current.numberOfPieces(), target.numberOfPieces())
-        || (!clientsFromApplication
-            && (hasStringChanged(current.clientNumber(), target.clientNumber())
+        || (clientsFromApplication
+            ? (!hasStringChanged(current.clientNumber(), target.clientNumber())
+                    && hasStringChanged(current.clientLocationCode(), target.clientLocationCode()))
+                || (!agentChanged
+                    && hasStringChanged(current.agentLocationCode(), target.agentLocationCode()))
+            : (hasStringChanged(current.clientNumber(), target.clientNumber())
                 || hasStringChanged(current.clientLocationCode(), target.clientLocationCode())
                 || (agentChanged
                     ? !paymentPending
