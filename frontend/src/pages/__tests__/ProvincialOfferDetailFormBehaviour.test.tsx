@@ -89,7 +89,7 @@ const renderPage = () => {
 
 const fieldValue = (label: string) => screen.getByText(label, { selector: 'dt' }).nextElementSibling
 
-const editButton = () => screen.getByRole('button', { name: 'Edit' })
+const editButton = () => screen.getByRole('button', { name: 'Edit offer' })
 
 const startEditing = async () => {
   await screen.findByRole('heading', { name: 'Offer 81001', level: 1 })
@@ -107,9 +107,9 @@ describe('Provincial offer detail form behaviour', () => {
   it('closes an unchanged offer edit with no request or notification', async () => {
     renderPage()
     await startEditing()
-    await userEvent.click(screen.getByRole('button', { name: 'Save' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Save changes' }))
     await waitFor(() => expect(editButton()).toHaveFocus())
-    expect(screen.queryByRole('button', { name: 'Save' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Save changes' })).not.toBeInTheDocument()
     expect(mockedSubmitProvincialOfferUpdate).not.toHaveBeenCalled()
     expect(
       screen.queryByText('The purchase offer was updated successfully.'),
@@ -127,6 +127,8 @@ describe('Provincial offer detail form behaviour', () => {
       createdId: '81001',
       errors: [],
       warnings: [],
+      emailRequired: false,
+      applicantEmailFound: false,
     })
   })
 
@@ -136,7 +138,7 @@ describe('Provincial offer detail form behaviour', () => {
     await replaceValue('Offer amount ($/m³)', '100000')
     await replaceValue('Pickup location', '')
 
-    const save = screen.getByRole('button', { name: 'Save' })
+    const save = screen.getByRole('button', { name: 'Save changes' })
     expect(save).toBeEnabled()
     await userEvent.click(save)
 
@@ -145,7 +147,10 @@ describe('Provincial offer detail form behaviour', () => {
     expect(screen.getByText('Offer amount must be 99999.99 or less')).toBeInTheDocument()
     expect(screen.getByLabelText('Pickup location')).toHaveAttribute('aria-invalid', 'true')
     expect(screen.getByText('Pickup location is required')).toBeInTheDocument()
-    expect(screen.queryByText('Validation error')).not.toBeInTheDocument()
+    expect(screen.getByText('Offer not saved.')).toBeInTheDocument()
+    expect(
+      screen.getByText('Some fields have errors. Correct them and save again.'),
+    ).toBeInTheDocument()
     await waitFor(() => expect(amount).toHaveFocus())
     expect(mockedSubmitProvincialOfferUpdate).not.toHaveBeenCalled()
 
@@ -161,9 +166,14 @@ describe('Provincial offer detail form behaviour', () => {
     await startEditing()
     await replaceValue('Offer amount ($/m³)', '13000')
 
-    await userEvent.click(screen.getByRole('button', { name: 'Save' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Save changes' }))
 
-    expect(await screen.findByText('Validation error')).toBeInTheDocument()
+    expect(await screen.findByText('Offer not saved.')).toBeInTheDocument()
+    expect(
+      screen.getByText(
+        'Company contains unsupported characters. Use unaccented letters, numbers, spaces, or standard punctuation.',
+      ),
+    ).toBeInTheDocument()
     expect(screen.queryByLabelText('Company')).not.toBeInTheDocument()
     expect(document.querySelector('[aria-invalid="true"]')).not.toBeInTheDocument()
     expect(mockedSubmitProvincialOfferUpdate).not.toHaveBeenCalled()
@@ -175,19 +185,23 @@ describe('Provincial offer detail form behaviour', () => {
       message: '',
       errors: ['Offer volume cannot exceed the application/package volume.'],
       warnings: [],
+      emailRequired: false,
+      applicantEmailFound: false,
     })
     renderPage()
     await startEditing()
     await replaceValue('Offer remarks', 'Updated remark')
 
-    await userEvent.click(screen.getByRole('button', { name: 'Save' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Save changes' }))
 
     const volume = screen.getByLabelText('Offer volume (m³)')
     await waitFor(() => expect(volume).toHaveAttribute('aria-invalid', 'true'))
     expect(
       screen.getByText('Offer volume cannot exceed the application/package volume'),
     ).toBeInTheDocument()
-    expect(screen.queryByText('Save failed')).not.toBeInTheDocument()
+    expect(
+      screen.getByText('Some fields have errors. Correct them and save again.'),
+    ).toBeInTheDocument()
     await waitFor(() => expect(volume).toHaveFocus())
   })
 
@@ -197,14 +211,16 @@ describe('Provincial offer detail form behaviour', () => {
       message: '',
       errors: ['A purchase offer cannot be moved to a different application.'],
       warnings: [],
+      emailRequired: false,
+      applicantEmailFound: false,
     })
     renderPage()
     await startEditing()
     await replaceValue('Offer remarks', 'Updated remark')
 
-    await userEvent.click(screen.getByRole('button', { name: 'Save' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Save changes' }))
 
-    expect(await screen.findByText('Save failed')).toBeInTheDocument()
+    expect(await screen.findByText('Offer not saved.')).toBeInTheDocument()
     expect(
       screen.getByText('A purchase offer cannot be moved to a different application.'),
     ).toBeInTheDocument()
@@ -215,9 +231,9 @@ describe('Provincial offer detail form behaviour', () => {
     await startEditing()
     await replaceValue('Offer remarks', 'Updated remark')
 
-    await userEvent.click(screen.getByRole('button', { name: 'Save' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Save changes' }))
 
-    expect(await screen.findByText('Offer saved')).toBeInTheDocument()
+    expect(await screen.findByText('Offer saved.')).toBeInTheDocument()
     await waitFor(() => expect(editButton()).toHaveFocus())
   })
 
@@ -249,7 +265,7 @@ describe('Provincial offer detail form behaviour', () => {
     await waitFor(() => expect(editButton()).toHaveFocus())
     expect(screen.queryByLabelText('Offer remarks')).not.toBeInTheDocument()
     expect(fieldValue('Offer remarks')).toHaveTextContent('Original remark')
-    expect(screen.queryByRole('button', { name: 'Save' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Save changes' })).not.toBeInTheDocument()
   })
 
   it('asks before leaving the offer with changes', async () => {

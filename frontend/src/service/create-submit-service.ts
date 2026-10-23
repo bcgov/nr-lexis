@@ -36,6 +36,8 @@ type LegacyCreateResponse = {
   exportPurchaseOfferNumber?: unknown
   offerNumber?: unknown
   permitNumber?: unknown
+  sendEmail?: unknown
+  clientHasEmail?: unknown
 }
 
 type CreateSubmitRequestMode = 'form' | 'json'
@@ -443,6 +445,24 @@ export type ProvincialOfferUpdateSubmission = ProvincialOfferCreateSubmission & 
   withdrawReason: string
 }
 
+/** A saved offer also says whether it needed an email, and whether the applicant has an address. */
+export type OfferSubmissionResult = CreateSubmissionResult & {
+  emailRequired: boolean
+  applicantEmailFound: boolean
+}
+
+const parseOfferResponse = (payload: LegacyCreateResponse): OfferSubmissionResult => ({
+  ...parseCreateResponse(payload, ['exportPurchaseOfferNumber', 'offerNumber']),
+  emailRequired: payload.sendEmail === true,
+  applicantEmailFound: payload.clientHasEmail === true,
+})
+
+const offerFailureResult = (result: CreateSubmissionResult): OfferSubmissionResult => ({
+  ...result,
+  emailRequired: false,
+  applicantEmailFound: false,
+})
+
 const buildProvincialOfferPayload = (form: ProvincialOfferCreateSubmission): LegacyFormPayload => ({
   applicationNumber: form.applicationNumber,
   packageNumber: form.packageNumber,
@@ -473,24 +493,26 @@ const toProvincialOfferUpdateParams = (payload: LegacyFormPayload): URLSearchPar
 
 export const submitProvincialOfferCreate = async (
   form: ProvincialOfferCreateSubmission,
-): Promise<CreateSubmissionResult> => {
+): Promise<OfferSubmissionResult> => {
   try {
     const payload = await postLegacyForm(
       getProvincialOfferCreatePath(),
       withCreateActionMapping('addOffer', buildProvincialOfferPayload(form)),
     )
-    return parseCreateResponse(payload, ['exportPurchaseOfferNumber', 'offerNumber'])
+    return parseOfferResponse(payload)
   } catch (error) {
-    return buildFailureResult(
-      'Offer submission failed. Please review the form and try again. If the problem persists, contact support.',
-      error,
+    return offerFailureResult(
+      buildFailureResult(
+        'Offer submission failed. Please review the form and try again. If the problem persists, contact support.',
+        error,
+      ),
     )
   }
 }
 
 export const submitProvincialOfferUpdate = async (
   form: ProvincialOfferUpdateSubmission,
-): Promise<CreateSubmissionResult> => {
+): Promise<OfferSubmissionResult> => {
   try {
     const payload = await postLegacyForm(
       getProvincialOfferCreatePath(),
@@ -504,13 +526,15 @@ export const submitProvincialOfferUpdate = async (
       }),
       toProvincialOfferUpdateParams,
     )
-    return parseCreateResponse(payload, ['exportPurchaseOfferNumber', 'offerNumber'])
+    return parseOfferResponse(payload)
   } catch (error) {
-    return buildFailureResult(
-      'Offer update failed. Please review the form and try again. If the problem persists, contact support.',
-      error,
-      undefined,
-      'The offer edit lock has expired or is held by another user. Close and re-open the offer before saving again.',
+    return offerFailureResult(
+      buildFailureResult(
+        'Offer update failed. Please review the form and try again. If the problem persists, contact support.',
+        error,
+        undefined,
+        'The offer edit lock has expired or is held by another user. Close and re-open the offer before saving again.',
+      ),
     )
   }
 }

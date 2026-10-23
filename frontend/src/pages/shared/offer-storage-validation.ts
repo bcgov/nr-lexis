@@ -6,10 +6,11 @@ import {
 
 export const OFFER_COMPANY_NAME_MAX_LENGTH = 52
 export const OFFER_CONTACT_NAME_MAX_LENGTH = 120
-export const OFFER_REMARK_MAX_LENGTH = 254
-export const OFFER_WITHDRAW_REASON_MAX_LENGTH = 254
+// The offer screens take 250 characters in each text area, as legacy does; the server keeps 254.
+export const OFFER_REMARK_MAX_LENGTH = 250
+export const OFFER_WITHDRAW_REASON_MAX_LENGTH = 250
 export const OFFER_PICKUP_LOCATION_MAX_LENGTH = 250
-export const OFFER_CONDITION_MAX_LENGTH = 254
+export const OFFER_CONDITION_MAX_LENGTH = 250
 export const PURCHASE_OFFER_AMOUNT_MAX = 99_999.99
 export const OFFER_VOLUME_MAX = 9_999_999.99
 

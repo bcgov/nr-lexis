@@ -275,6 +275,24 @@ const installSyntheticLexisApi = async (page: Page) => {
       case '/api/lexis/purchase-offers/81001':
         body = offerDetail
         break
+      case '/api/lexis/rpc/offer-details/validate-application-number':
+        body = { isValid: true, errors: [] }
+        break
+      case '/api/lexis/rpc/offer-details/application-details':
+        body = {
+          success: true,
+          speciesGradeCode: 'HE/PL',
+          advertisingDate: '2026-10-21',
+          teacReviewDate: '2026-12-04',
+          region: 'Coast',
+        }
+        break
+      case '/api/lexis/rpc/offer-details/package-list':
+        body = { packageList: [] }
+        break
+      case '/api/lexis/rpc/offer-details/application-volume':
+        body = { volume: '525.0' }
+        break
       case '/api/lexis/federal/applications/888':
         body = federalApplicationDetail
         break
@@ -2394,7 +2412,7 @@ test.describe('FSPTS-aligned LEXIS shell', () => {
       'row-gap',
       '12px',
     )
-    const editOfferButton = page.getByRole('button', { name: 'Edit', exact: true })
+    const editOfferButton = page.getByRole('button', { name: 'Edit offer', exact: true })
     await expect(editOfferButton).toHaveClass(/cds--btn--tertiary/)
     await expect(editOfferButton).toHaveCSS('height', '40px')
 
@@ -2655,74 +2673,19 @@ test.describe('FSPTS-aligned LEXIS shell', () => {
     await expect(rowActions).toHaveCSS('justify-content', 'flex-start')
   })
 
-  test('keeps record summaries and footer actions within the form', async ({ page }, testInfo) => {
-    // Create new exemption shows its status in the form, with no record summary footer.
-    await gotoSyntheticRoute(page, '/provincial/exemption/create', {
-      ready: page.getByRole('heading', { level: 1, name: 'Create new exemption', exact: true }),
-    })
-    await expect(page.locator('.legacy-form-footer')).toHaveCount(0)
-
+  test('keeps record summaries out of create and offer forms', async ({ page }) => {
+    // Create pages and offer records show the record's number and author in the page header.
     const routes = [
+      ['/provincial/exemption/create', 'Create new exemption'],
       ['/provincial/offers/create', 'Create new offer'],
       ['/provincial/offers/81001', 'Offer 81001'],
     ]
-    const bounds: unknown[] = []
-    for (const width of [1440, 390]) {
-      await page.setViewportSize({ width, height: 900 })
-      for (const [path, title] of routes) {
-        await gotoSyntheticRoute(page, path, {
-          ready: page.getByRole('heading', { level: 1, name: title, exact: true }),
-        })
-        const footer = page.locator('.legacy-form-footer')
-        await expect(footer).toBeVisible()
-        const geometry = await footer.evaluate((element) => {
-          const grid = element.querySelector('.record-field-grid')
-          if (!(grid instanceof HTMLElement)) throw new Error('Record summary not found')
-          const bounds = element.getBoundingClientRect()
-          const style = getComputedStyle(element)
-          const insetLeft =
-            Number.parseFloat(style.paddingLeft) + Number.parseFloat(style.borderLeftWidth)
-          const insetRight =
-            Number.parseFloat(style.paddingRight) + Number.parseFloat(style.borderRightWidth)
-          const summary = grid.getBoundingClientRect()
-          const actions = element.querySelector('.legacy-search-actions')?.getBoundingClientRect()
-          return {
-            left: bounds.left + insetLeft,
-            right: bounds.right - insetRight,
-            width: bounds.width - insetLeft - insetRight,
-            gridLeft: summary.left,
-            gridRight: summary.right,
-            gridWidth: summary.width,
-            gridTop: summary.top,
-            gridBottom: summary.bottom,
-            actionsLeft: actions?.left,
-            actionsTop: actions?.top,
-            actionsBottom: actions?.bottom,
-            actionsWidth: actions?.width,
-            columnGap: Number.parseFloat(style.columnGap) || 0,
-          }
-        })
-        bounds.push({ path, viewportWidth: width, ...geometry })
-        expect.soft(geometry.gridLeft).toBeGreaterThanOrEqual(geometry.left - 1)
-        expect.soft(geometry.gridRight).toBeLessThanOrEqual(geometry.right + 1)
-        const actionsShareRow =
-          geometry.actionsLeft !== undefined &&
-          geometry.actionsTop !== undefined &&
-          geometry.actionsBottom !== undefined &&
-          geometry.actionsTop <= geometry.gridBottom &&
-          geometry.actionsBottom >= geometry.gridTop
-        const availableWidth =
-          geometry.width - (actionsShareRow ? (geometry.actionsWidth ?? 0) + geometry.columnGap : 0)
-        expect.soft(geometry.gridWidth).toBeGreaterThanOrEqual(availableWidth - 1)
-        if (actionsShareRow) {
-          expect.soft(geometry.actionsLeft).toBeGreaterThanOrEqual(geometry.gridRight)
-        }
-      }
+    for (const [path, title] of routes) {
+      await gotoSyntheticRoute(page, path, {
+        ready: page.getByRole('heading', { level: 1, name: title, exact: true }),
+      })
+      await expect(page.locator('.legacy-form-footer')).toHaveCount(0)
     }
-    await testInfo.attach('footer-bounds', {
-      body: JSON.stringify(bounds, null, 2),
-      contentType: 'application/json',
-    })
   })
 
   test('spans exemption create conditions across the form', async ({ page }) => {
@@ -2765,16 +2728,18 @@ test.describe('FSPTS-aligned LEXIS shell', () => {
     })
 
     await expect(page.getByRole('heading', { level: 1, name: 'Create new offer' })).toBeVisible()
-    const formCard = page.locator('.provincial-offer-create.create-form-tile')
-    const sections = formCard.locator('.create-form-section')
+    const formCard = page.locator('.offer-form-card.create-form-tile')
+    const sections = formCard.locator('.offer-form-section')
     await expect(formCard).toBeVisible()
-    await expect(sections).toHaveCount(5)
+    await expect(sections).toHaveCount(1)
+    await page.getByLabel('Application number', { exact: true }).fill('46989')
+    await expect(sections).toHaveCount(4)
     await expect(sections.nth(1)).toHaveCSS('border-top-width', '1px')
-    await expect(sections.first()).toHaveCSS('border-color', 'rgb(198, 198, 198)')
-    const firstSectionTitleInset = await sections.first().evaluate((section) => {
-      const title = section.querySelector('legend')
+    await expect(sections.nth(1)).toHaveCSS('padding-top', '32px')
+    const firstSectionTitleInset = await formCard.evaluate((card) => {
+      const title = card.querySelector('legend')
       if (!(title instanceof HTMLElement)) throw new Error('Offer section title not found')
-      return title.getBoundingClientRect().top - section.getBoundingClientRect().top
+      return title.getBoundingClientRect().top - card.getBoundingClientRect().top
     })
     expect(firstSectionTitleInset).toBeGreaterThanOrEqual(16)
     await expect(page.getByRole('group', { name: 'Offer form actions' })).toBeVisible()
@@ -2847,24 +2812,23 @@ test.describe('FSPTS-aligned LEXIS shell', () => {
     }
   })
 
-  test('reveals offer field errors after each save from the bottom of a long form', async ({
-    page,
-  }) => {
+  test('reveals the offer application number error after each save', async ({ page }) => {
     await page.setViewportSize({ width: 780, height: 999 })
     await gotoSyntheticRoute(page, '/provincial/offers/create', {
       ready: page.getByRole('heading', { level: 1, name: 'Create new offer', exact: true }),
     })
     const applicationNumber = page.getByLabel('Application number', { exact: true })
     for (let attempt = 0; attempt < 2; attempt += 1) {
-      await page.getByLabel('Offer remarks', { exact: true }).click()
-      await page.getByRole('button', { name: 'Save new offer', exact: true }).click()
+      await page.getByRole('button', { name: 'Save offer', exact: true }).click()
       const error = page.getByText('Application number is required', { exact: true })
       await expect(applicationNumber).toHaveAttribute('aria-invalid', 'true')
       await expect(applicationNumber).toBeFocused()
       await expect(applicationNumber).toBeInViewport({ ratio: 1 })
       await expect(error).toBeInViewport({ ratio: 1 })
       await expect(error).toHaveClass(/cds--form-requirement/)
-      await expect(page.locator('.create-form-validation-notification')).toHaveCount(0)
+      await expect(page.locator('.create-form-validation-notification')).toContainText(
+        'Offer not saved.',
+      )
       await expect(page.locator('.cds--toast-notification')).toHaveCount(0)
     }
   })
@@ -2875,8 +2839,10 @@ test.describe('FSPTS-aligned LEXIS shell', () => {
       ready: page.getByRole('heading', { level: 1, name: 'Create new offer', exact: true }),
     })
 
+    await page.getByLabel('Application number', { exact: true }).fill('46989')
     const dateInput = page.getByLabel('TEAC review date')
-    await dateInput.click()
+    await expect(dateInput).toHaveValue('2026-12-04')
+    await dateInput.fill('')
     await dateInput.pressSequentially('2026-02-31')
     await page.getByLabel('Offer remarks').click()
 

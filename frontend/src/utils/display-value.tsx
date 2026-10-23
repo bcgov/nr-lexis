@@ -21,5 +21,12 @@ export const displayValueText = (value: DisplayableValue): string =>
 export const displayValue = (value: DisplayableValue): ReactNode =>
   isBlankValue(value) ? <EmptyValue /> : formatIsoDateLabel(String(value))
 
+/**
+ * A read-only calendar date kept as YYYY-MM-DD, for forms whose date inputs use that form, so a
+ * screen shows one date format; blank shows "—".
+ */
+export const displayNumericDate = (value: DisplayableValue): ReactNode =>
+  isBlankValue(value) ? <EmptyValue /> : <>{String(value).trim()}</>
+
 /** Table cells use the same empty value as every other read-only value. */
 export const displayTableValue = displayValue

@@ -858,7 +858,7 @@ const retiredReportPages: Array<[path: string, heading: RegExp]> = [
 const createWorkflowPages: Array<[path: string, heading: RegExp, saveLabel: string]> = [
   ['/provincial/application/create', /create new application/i, 'Save application'],
   ['/provincial/exemption/create', /create new exemption/i, 'Save exemption'],
-  ['/provincial/offers/create', /create new offer/i, 'Save new offer'],
+  ['/provincial/offers/create', /create new offer/i, 'Save offer'],
 ]
 
 const regionFilterPages: Array<[path: string, heading: RegExp]> = [
