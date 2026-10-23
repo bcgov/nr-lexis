@@ -54,7 +54,7 @@ catch-up and the next nightly run.
 The legacy LEXIS web application runs its own expiry monitor against the same tables. The monitor is
 a timer that starts with the application and runs inside the Tomcat process that hosts legacy web.
 Stopping or restarting that Tomcat stops it. Undeploying or stopping only the application inside a
-running Tomcat does not, because the application never cancels the timer. WebADE plays no part: the
+running Tomcat does not, because the application never cancels the timer. WebADE is not the switch: the
 WebADE LEXIS application stays enabled for lexisvc and lexisws, which share it, and neither starts
 the monitor. PROD keeps `LEXIS_EXPIRY_ENABLED` false while legacy web's Tomcat runs, so one job owns
 expiry. Set it to true in the change that stops that Tomcat for good, so that no night passes with

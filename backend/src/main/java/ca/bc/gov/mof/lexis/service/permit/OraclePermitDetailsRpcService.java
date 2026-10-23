@@ -1854,8 +1854,11 @@ public class OraclePermitDetailsRpcService implements PermitDetailsRpcService {
       return failureMutationResponse(exemptionErrors, permitNumber);
     }
     boolean targetBlanketOic = targetExemption != null && targetExemption.blanketOic();
+    String targetPermitStatusCode =
+        normalizeCode(mergeSubmittedText(request.permitStatus(), current.permitStatusCode()));
     Optional<PermitClientBinding> targetClientsResult =
-        resolvePermitUpdateClientBinding(targetExemption, request, current, agentChangeAllowed);
+        resolvePermitUpdateClientBinding(
+            targetExemption, request, current, targetPermitStatusCode, agentChangeAllowed);
     if (targetClientsResult.isEmpty()) {
       return failureMutationResponse(
           List.of("The first linked package application could not be loaded."), permitNumber);
@@ -1887,8 +1890,6 @@ public class OraclePermitDetailsRpcService implements PermitDetailsRpcService {
       return failureMutationResponse(numericErrors, permitNumber);
     }
 
-    String targetPermitStatusCode =
-        normalizeCode(mergeSubmittedText(request.permitStatus(), current.permitStatusCode()));
     boolean allowActiveDraftDateClear =
         EXPORT_PERMIT_STATUS_ACTIVE.equalsIgnoreCase(current.permitStatusCode())
             && EXPORT_PERMIT_STATUS_ACTIVE.equals(targetPermitStatusCode);
@@ -2041,7 +2042,7 @@ public class OraclePermitDetailsRpcService implements PermitDetailsRpcService {
           List.of("Fee overrides cannot be changed after permit invoicing."), permitNumber);
     }
     if (isInvoicedPermitStatus(current.permitStatusCode())
-        && hasInvoiceMaterialDelta(current, updated)) {
+        && hasInvoiceMaterialDelta(current, updated, !targetBlanketOic)) {
       return failureMutationResponse(
           List.of(
               "Invoice-related permit details cannot be changed after permit invoicing. Restore their saved values, or save the permit as Active first."),
@@ -4124,6 +4125,7 @@ public class OraclePermitDetailsRpcService implements PermitDetailsRpcService {
       ValidatedExemptionBinding exemption,
       PermitMutationRequestDto request,
       PermitMutationRow current,
+      String targetStatus,
       boolean agentChangeAllowed) {
     if (exemption.blanketOic()) {
       String ownerLocation =
@@ -4145,12 +4147,15 @@ public class OraclePermitDetailsRpcService implements PermitDetailsRpcService {
               mergeSubmittedLocationUpdate(request.agentClientLocation(), current.agentLocationCode())));
     }
 
-    // A completed permit keeps the owner and agent it was completed with. A payment-pending
-    // permit keeps its owner and owner location, while its agent still follows its first
-    // application, which can change the agent until the permit is completed.
+    // A permit saved as Active, including one reactivated from Completed or Payment pending, takes
+    // the owner and agent of its first application. Otherwise a completed permit keeps the owner
+    // and agent it was completed with, and a payment-pending permit keeps its owner and owner
+    // location, while its agent still follows its first application, which can change the agent
+    // until the permit is completed.
     String currentStatus = normalizeCode(current.permitStatusCode());
+    boolean savedAsActive = EXPORT_PERMIT_STATUS_ACTIVE.equals(targetStatus);
     Optional<PermitPackageApplicationRow> firstPackage =
-        EXPORT_PERMIT_STATUS_COMPLETE.equals(currentStatus)
+        EXPORT_PERMIT_STATUS_COMPLETE.equals(currentStatus) && !savedAsActive
             ? Optional.empty()
             : repository.findFirstPackageApplicationByPermitNumberRequired(current.permitNumber());
     if (firstPackage.isEmpty()) {
@@ -4166,7 +4171,8 @@ public class OraclePermitDetailsRpcService implements PermitDetailsRpcService {
                   current.agentLocationCode())));
     }
 
-    boolean paymentPending = EXPORT_PERMIT_STATUS_PAYMENT_PENDING.equals(currentStatus);
+    boolean paymentPending =
+        EXPORT_PERMIT_STATUS_PAYMENT_PENDING.equals(currentStatus) && !savedAsActive;
     return repository
         .findApplicationInfoByNumber(firstPackage.get().applicationNumber())
         .map(
@@ -4205,12 +4211,13 @@ public class OraclePermitDetailsRpcService implements PermitDetailsRpcService {
     if (!EXEMPTION_TYPE_MINISTERIAL.equalsIgnoreCase(exemption.exemptionTypeCode())) {
       return authoritativeClients;
     }
+    // A submitted owner or agent location belongs to the saved client, so it is dropped once the
+    // application's client differs.
     String ownerLocation =
         sameText(authoritativeClients.ownerClientNumber(), current.clientNumber())
-            ? current.clientLocationCode()
+            ? mergeSubmittedLocationUpdate(
+                request.ownerClientLocation(), current.clientLocationCode())
             : authoritativeClients.ownerClientLocation();
-    // A submitted agent location belongs to the saved agent, so it is dropped once the
-    // application's agent differs.
     String agentLocation =
         sameText(authoritativeClients.agentClientNumber(), current.agentNumber())
             ? mergeSubmittedLocationUpdate(
@@ -4218,7 +4225,7 @@ public class OraclePermitDetailsRpcService implements PermitDetailsRpcService {
             : authoritativeClients.agentClientLocation();
     return new PermitClientBinding(
         authoritativeClients.ownerClientNumber(),
-        mergeSubmittedLocationUpdate(request.ownerClientLocation(), ownerLocation),
+        ownerLocation,
         authoritativeClients.agentClientNumber(),
         agentLocation);
   }
@@ -4727,9 +4734,11 @@ public class OraclePermitDetailsRpcService implements PermitDetailsRpcService {
   // The destination country and Blanket OIC request totals stay editable after invoicing. While
   // the permit is Payment pending the receipt number can be saved with the status left at
   // Payment pending or completed, and the agent can be added, removed or replaced, but a kept
-  // agent's location stays fixed.
+  // agent's location stays fixed. An application-backed permit saved as Active takes its owner
+  // and agent from its first application, so a client replaced that way is not compared; a client
+  // that stays the same keeps its location fixed.
   private boolean hasInvoiceMaterialDelta(
-      PermitMutationRow current, PermitMutationRow target) {
+      PermitMutationRow current, PermitMutationRow target, boolean applicationBackedPermit) {
     boolean paymentPending =
         EXPORT_PERMIT_STATUS_PAYMENT_PENDING.equals(normalizeCode(current.permitStatusCode()));
     boolean receiptMayChange =
@@ -4737,6 +4746,9 @@ public class OraclePermitDetailsRpcService implements PermitDetailsRpcService {
             || (paymentPending
                 && EXPORT_PERMIT_STATUS_PAYMENT_PENDING.equals(
                     normalizeCode(target.permitStatusCode())));
+    boolean clientsFromApplication =
+        applicationBackedPermit
+            && EXPORT_PERMIT_STATUS_ACTIVE.equals(normalizeCode(target.permitStatusCode()));
     boolean agentChanged = hasStringChanged(current.agentNumber(), target.agentNumber());
     return hasStringChanged(current.exemptionNumber(), target.exemptionNumber())
         || !java.util.Objects.equals(current.orgUnitNo(), target.orgUnitNo())
@@ -4746,11 +4758,16 @@ public class OraclePermitDetailsRpcService implements PermitDetailsRpcService {
         || (!receiptMayChange && hasStringChanged(current.receiptNumber(), target.receiptNumber()))
         || !java.util.Objects.equals(current.permitVolume(), target.permitVolume())
         || !java.util.Objects.equals(current.numberOfPieces(), target.numberOfPieces())
-        || hasStringChanged(current.clientNumber(), target.clientNumber())
-        || hasStringChanged(current.clientLocationCode(), target.clientLocationCode())
-        || (agentChanged
-            ? !paymentPending
-            : hasStringChanged(current.agentLocationCode(), target.agentLocationCode()))
+        || (clientsFromApplication
+            ? (!hasStringChanged(current.clientNumber(), target.clientNumber())
+                    && hasStringChanged(current.clientLocationCode(), target.clientLocationCode()))
+                || (!agentChanged
+                    && hasStringChanged(current.agentLocationCode(), target.agentLocationCode()))
+            : (hasStringChanged(current.clientNumber(), target.clientNumber())
+                || hasStringChanged(current.clientLocationCode(), target.clientLocationCode())
+                || (agentChanged
+                    ? !paymentPending
+                    : hasStringChanged(current.agentLocationCode(), target.agentLocationCode()))))
         || hasStringChanged(current.growthTypeCode(), target.growthTypeCode())
         || hasStringChanged(current.productTypeCode(), target.productTypeCode())
         || !java.util.Objects.equals(
