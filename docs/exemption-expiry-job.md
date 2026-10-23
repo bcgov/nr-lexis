@@ -51,12 +51,16 @@ If the variable is unset, the workflow uses its `expiry_enabled` input: PROD and
 disabled, TEST to enabled. Once expiry is enabled, missed exemptions are picked up by startup
 catch-up and the next nightly run.
 
-The legacy LEXIS web application runs its own expiry monitor against the same tables. It does this
-while it is deployed and its WebADE application is enabled; lexisvc and lexisws do not start it.
-PROD keeps `LEXIS_EXPIRY_ENABLED` false while legacy web runs there, so one job owns expiry. Set
-it to true in the change that retires legacy web, so that no night passes with neither job or
-both. Before enabling, confirm that `FSA_LEXIS_READ_WRITE_ROLE` holds SELECT, INSERT and UPDATE
-on `THE.LEXIS_SHEDLOCK`. Without them every run is skipped with only a log line.
+The legacy LEXIS web application runs its own expiry monitor against the same tables. The monitor is
+a timer that starts with the application and runs inside the Tomcat process that hosts legacy web.
+Stopping or restarting that Tomcat stops it. Undeploying or stopping only the application inside a
+running Tomcat does not, because the application never cancels the timer. WebADE plays no part: the
+WebADE LEXIS application stays enabled for lexisvc and lexisws, which share it, and neither starts
+the monitor. PROD keeps `LEXIS_EXPIRY_ENABLED` false while legacy web's Tomcat runs, so one job owns
+expiry. Set it to true in the change that stops that Tomcat for good, so that no night passes with
+neither job or both. Before enabling, confirm that
+`FSA_LEXIS_READ_WRITE_ROLE` holds SELECT, INSERT and UPDATE on `THE.LEXIS_SHEDLOCK`. Without them
+every run is skipped with only a log line.
 
 ## Operations
 

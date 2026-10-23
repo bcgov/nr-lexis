@@ -9768,6 +9768,54 @@ describe('Provincial Permit Detail Action Smoke', () => {
     expect(mockedUpdatePermitDetail).not.toHaveBeenCalled()
   })
 
+  it('saves stored accented remarks unchanged and refuses newly typed accented remarks', async () => {
+    mockedFetchProvincialPermitDetail.mockResolvedValue({
+      ...permitDetail,
+      permitStatusCode: 'ACT',
+      permitStatusDescription: 'Active',
+      remarks: 'Café test-2026-10-22',
+    })
+    mockedUpdatePermitDetail.mockResolvedValue({
+      success: true,
+      message: 'The permit was updated successfully.',
+      errors: [],
+      warnings: [],
+      source: 'api',
+    })
+    renderPermitDetails()
+
+    await selectPermitDetailTab('Fees')
+    await userEvent.click(await screen.findByRole('button', { name: /Edit permit(?: details)?/ }))
+    fireEvent.change(screen.getByLabelText('Receipt number'), { target: { value: 'R-2' } })
+    await selectPermitDetailTab('Permit')
+    const remarks = screen.getByLabelText('Remarks')
+    expect(remarks).toHaveValue('Café test-2026-10-22')
+
+    fireEvent.change(remarks, { target: { value: 'Café test-2026-10-22 Ltée' } })
+    await userEvent.click(getActiveSectionSaveButton())
+
+    expect(
+      (
+        await screen.findAllByText(
+          'Permit remarks contain unsupported characters. Use unaccented letters, numbers, spaces, or standard punctuation.',
+        )
+      ).length,
+    ).toBeGreaterThanOrEqual(1)
+    expect(mockedUpdatePermitDetail).not.toHaveBeenCalled()
+
+    fireEvent.change(remarks, { target: { value: 'Café test-2026-10-22' } })
+    await userEvent.click(getActiveSectionSaveButton())
+
+    await waitFor(() =>
+      expect(mockedUpdatePermitDetail).toHaveBeenCalledWith(
+        expect.objectContaining({
+          permitReceiptNo: 'R-2',
+          permitRemarks: 'Café test-2026-10-22',
+        }),
+      ),
+    )
+  })
+
   it('allows an approver to expire a permit like legacy', async () => {
     configureActivePermit()
     renderPermitDetails()
@@ -11423,7 +11471,7 @@ describe('Provincial Permit Detail Action Smoke', () => {
   it('shows a permit details error before asking to save the shipping of a completed Interior permit without a receipt', async () => {
     mockedFetchProvincialPermitDetail.mockResolvedValue({
       ...completedPermitWithoutReceipt,
-      remarks: 'Café test-2026-10-19',
+      remarks: `Café ${'R'.repeat(246)}`,
     })
     renderPermitDetails()
 
@@ -11431,10 +11479,8 @@ describe('Provincial Permit Detail Action Smoke', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Save shipping' }))
 
     expect(
-      await screen.findByText(
-        'Permit remarks contain unsupported characters. Use unaccented letters, numbers, spaces, or standard punctuation.',
-      ),
-    ).toBeInTheDocument()
+      (await screen.findAllByText(/^Permit remarks must be 250 characters or fewer\.?$/)).length,
+    ).toBeGreaterThanOrEqual(1)
     expect(screen.queryByRole('dialog', { name: 'Save as Payment pending?' })).toBeNull()
     expect(mockedUpdatePermitShipping).not.toHaveBeenCalled()
     expect(mockedUpdatePermitDetail).not.toHaveBeenCalled()
@@ -11473,7 +11519,7 @@ describe('Provincial Permit Detail Action Smoke', () => {
     },
   )
 
-  it('sends the shipping of a completed Interior permit without a receipt to the shipping save for a Provincial Submitter', async () => {
+  it('shows the refusal and keeps the shipping edit open when a Provincial Submitter saves the shipping of a completed Interior permit without a receipt', async () => {
     mockedUseAuth.mockReturnValue(
       createTestAuthContext({
         capabilities: createTestCapabilities({ roles: ['LEXIS_PROVINCIAL_SUBMITTER'] }),
@@ -11482,15 +11528,13 @@ describe('Provincial Permit Detail Action Smoke', () => {
     )
     mockedFetchProvincialPermitDetail.mockResolvedValue(completedPermitWithoutReceipt)
     mockedUpdatePermitShipping.mockResolvedValue({
-      success: true,
-      message: 'The permit was saved successfully.',
-      errors: [],
-      warnings: [
+      success: false,
+      message: 'The permit was not saved.',
+      errors: [
         'Receipt number should not be empty for a complete permit so it will be saved as Payment pending.',
       ],
+      warnings: [],
       source: 'api',
-      permitStatus: 'PPD',
-      permitReceiptNo: '',
     })
     renderPermitDetails()
 
@@ -11504,9 +11548,15 @@ describe('Provincial Permit Detail Action Smoke', () => {
     )
     expect(screen.queryByRole('dialog', { name: 'Save as Payment pending?' })).toBeNull()
     expect(mockedUpdatePermitDetail).not.toHaveBeenCalled()
+    expect(await screen.findByText('Shipping details not saved.')).toBeInTheDocument()
     expect(
-      await screen.findByText(/Receipt number should not be empty for a complete permit/),
+      screen.getByText(
+        'Receipt number should not be empty for a complete permit so it will be saved as Payment pending.',
+      ),
     ).toBeInTheDocument()
+    expect(screen.queryByText('Shipping details saved.')).not.toBeInTheDocument()
+    expect(screen.getByLabelText('Purchaser')).toHaveValue('test-2026-10-19')
+    expect(screen.getByRole('button', { name: 'Save shipping' })).toBeEnabled()
   })
 
   it.each([
@@ -11635,6 +11685,31 @@ describe('Provincial Permit Detail Action Smoke', () => {
       '.app-inline-notification',
     )
     await waitFor(() => expect(notice).toHaveFocus())
+  })
+
+  it('reads the GBMS invoice history again after a permit save', async () => {
+    mockedFetchProvincialPermitDetail.mockResolvedValue({
+      ...permitDetail,
+      permitStatusCode: 'PPD',
+      permitStatusDescription: 'Payment pending',
+      receiptNumber: null,
+    })
+    mockedFetchProvincialPermitDetailTabs.mockResolvedValue(tabsWithApplication)
+    renderPermitDetails()
+
+    await selectPermitDetailTab('Fees')
+    await waitFor(() => expect(mockedFetchProvincialPermitGbmsEvents).toHaveBeenCalled())
+    const readsBeforeSave = mockedFetchProvincialPermitGbmsEvents.mock.calls.length
+    await userEvent.click(await screen.findByRole('button', { name: /Edit permit(?: details)?/ }))
+    await userEvent.type(screen.getByLabelText('Receipt number'), 'R-2')
+    await userEvent.click(screen.getByRole('button', { name: 'Save permit' }))
+
+    await waitFor(() => expect(mockedUpdatePermitDetail).toHaveBeenCalled())
+    await waitFor(() =>
+      expect(mockedFetchProvincialPermitGbmsEvents.mock.calls.length).toBeGreaterThan(
+        readsBeforeSave,
+      ),
+    )
   })
 
   it('labels a current PPD permit and retains its current-only status option when options omit it', async () => {
@@ -12787,6 +12862,45 @@ describe('Provincial Permit Detail Action Smoke', () => {
           overrideInd: 'true',
           overrideFee: '45.25',
           overrideComment: 'Reviewed calculation',
+        }),
+      )
+    })
+  })
+
+  it('saves a stored accented override comment unchanged and refuses newly typed accented text', async () => {
+    configureActivePermit()
+    mockedFetchPermitFeeOverrideContext.mockResolvedValue({
+      overrideEnabled: true,
+      overrideFee: '25.00',
+      overrideComment: 'Révisé test-2026-10-22',
+      locked: false,
+      lockMessage: '',
+      interior: true,
+    })
+
+    renderPermitDetails()
+    await selectPermitDetailTab('Fees')
+    await userEvent.click(await screen.findByRole('button', { name: 'Edit fee override' }))
+
+    const overrideFee = screen.getByLabelText('Override fee (CAD)')
+    const overrideComment = screen.getByLabelText('Override comment')
+    const saveButton = screen.getByRole('button', { name: /^Save (?:fee override|changes)$/ })
+    fireEvent.change(overrideComment, { target: { value: 'Révisé again' } })
+    await userEvent.click(saveButton)
+
+    expect(overrideComment).toHaveAttribute('aria-invalid', 'true')
+    expect(mockedUpdatePermitDetail).not.toHaveBeenCalled()
+
+    fireEvent.change(overrideComment, { target: { value: 'Révisé test-2026-10-22' } })
+    await userEvent.clear(overrideFee)
+    await userEvent.type(overrideFee, '30.00')
+    await userEvent.click(saveButton)
+
+    await waitFor(() => {
+      expect(mockedUpdatePermitDetail).toHaveBeenCalledWith(
+        expect.objectContaining({
+          overrideFee: '30.00',
+          overrideComment: 'Révisé test-2026-10-22',
         }),
       )
     })

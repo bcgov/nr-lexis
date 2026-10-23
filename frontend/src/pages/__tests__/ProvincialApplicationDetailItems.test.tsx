@@ -1817,39 +1817,73 @@ describe.sequential('Provincial Application Detail Actions - items', () => {
     })
   })
 
-  it.each(['fail', 'come back empty'])(
-    "rejects package creation when the application's end uses %s",
-    async (lookupResult) => {
-      mockedFetchApplicationEndUsesForSpeciesRegion.mockImplementation(() =>
-        lookupResult === 'fail'
-          ? Promise.reject(new Error('End use lookup failure'))
-          : Promise.resolve([]),
-      )
+  it("rejects package creation when the application's end uses fail to load", async () => {
+    mockedFetchApplicationEndUsesForSpeciesRegion.mockRejectedValue(
+      new Error('End use lookup failure'),
+    )
 
-      render(
-        <MemoryRouter initialEntries={['/provincial/application/321']}>
-          <Routes>
-            <Route
-              path="/provincial/application/:applicationNumber"
-              element={<ProvincialApplicationDetailsPage />}
-            />
-          </Routes>
-        </MemoryRouter>,
-      )
+    render(
+      <MemoryRouter initialEntries={['/provincial/application/321']}>
+        <Routes>
+          <Route
+            path="/provincial/application/:applicationNumber"
+            element={<ProvincialApplicationDetailsPage />}
+          />
+        </Routes>
+      </MemoryRouter>,
+    )
 
-      const createPackageControls = await openCreatePackageControls()
-      const save = createPackageControls.getByRole('button', { name: 'Save package' })
-      expect(
-        await screen.findByText(
-          /package creation (is|are) disabled because end use options could not be loaded\./i,
-        ),
-      ).toBeInTheDocument()
-      expect(save).toBeEnabled()
-      fillNewPackage(createPackageControls, 'PKG-NEW')
-      await userEvent.click(save)
-      expect(mockedAddApplicationPackage).not.toHaveBeenCalled()
-    },
-  )
+    const createPackageControls = await openCreatePackageControls()
+    const save = createPackageControls.getByRole('button', { name: 'Save package' })
+    expect(
+      await screen.findByText(
+        /package creation (is|are) disabled because end use options could not be loaded\./i,
+      ),
+    ).toBeInTheDocument()
+    expect(save).toBeEnabled()
+    fillNewPackage(createPackageControls, 'PKG-NEW')
+    await userEvent.click(save)
+    expect(mockedAddApplicationPackage).not.toHaveBeenCalled()
+  })
+
+  it("creates the package with the application's end use when no end use options come back", async () => {
+    mockedFetchApplicationEndUsesForSpeciesRegion.mockResolvedValue([])
+
+    render(
+      <MemoryRouter initialEntries={['/provincial/application/321']}>
+        <Routes>
+          <Route
+            path="/provincial/application/:applicationNumber"
+            element={<ProvincialApplicationDetailsPage />}
+          />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    const createPackageControls = await openCreatePackageControls()
+    const save = createPackageControls.getByRole('button', { name: 'Save package' })
+    await waitFor(() => {
+      expect(mockedFetchApplicationEndUsesForSpeciesRegion).toHaveBeenCalledWith('12', ['FI'])
+    })
+    await waitFor(() => {
+      expect(screen.queryByText('Loading authoritative item options…')).not.toBeInTheDocument()
+    })
+    fillNewPackage(createPackageControls, 'PKG-NEW')
+    await userEvent.click(save)
+
+    await waitFor(() => {
+      expect(mockedAddApplicationPackage).toHaveBeenCalledWith(
+        expect.objectContaining({
+          packageNumber: 'PKG-NEW',
+          endUseCode: 'LU',
+          speciesCodes: ['FI'],
+        }),
+      )
+    })
+    expect(
+      screen.queryByText(/package creation (is|are) disabled because end use options/i),
+    ).not.toBeInTheDocument()
+  })
 
   it('displays legacy scale types for cascade split codes', async () => {
     mockedFetchApplicationPackageScales.mockResolvedValue([

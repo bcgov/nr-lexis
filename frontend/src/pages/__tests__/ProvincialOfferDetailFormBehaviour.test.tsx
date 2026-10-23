@@ -156,7 +156,10 @@ describe('Provincial offer detail form behaviour', () => {
   })
 
   it('keeps an error on a field the user cannot edit in the form notification', async () => {
-    mockedFetchProvincialOfferDetail.mockResolvedValue({ ...offerDetail, companyName: 'Société' })
+    mockedFetchProvincialOfferDetail.mockResolvedValue({
+      ...offerDetail,
+      companyName: 'A'.repeat(53),
+    })
     renderPage()
     await startEditing()
     await replaceValue('Offer amount ($/m³)', '13000')

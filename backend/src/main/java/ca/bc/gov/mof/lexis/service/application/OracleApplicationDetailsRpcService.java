@@ -1099,8 +1099,11 @@ public class OracleApplicationDetailsRpcService implements ApplicationDetailsRpc
               normalized, BLANKET_OIC_PACKAGE_STATUS_ACTIVE, BLANKET_OIC_PACKAGE_REPROCESSED_NO);
     }
     String newPackageNumber = trimToNull(normalized.packageNumber());
+    // Creating an application package doesn't check its species, end use or their regional sort;
+    // only the Blanket OIC workflow does.
     List<String> errors =
-        validatePackageMutation(normalized, false, null, hiddenBlanketOicWorkflow, null);
+        validatePackageMutation(
+            normalized, false, null, hiddenBlanketOicWorkflow, null, hiddenBlanketOicWorkflow);
     if (!errors.isEmpty()) {
       return invalidPackageResult(newPackageNumber, errors);
     }
@@ -1164,7 +1167,7 @@ public class OracleApplicationDetailsRpcService implements ApplicationDetailsRpc
             ? currentPackageNumber
             : normalizedRequestedPackageNumber;
     List<String> errors =
-        validatePackageMutation(normalized, true, existing, hiddenBlanketOicWorkflow, null);
+        validatePackageMutation(normalized, true, existing, hiddenBlanketOicWorkflow, null, true);
     if (existing == null) {
       errors.add("Package number " + nonNull(currentPackageNumber) + " does not exist.");
     }
@@ -1501,7 +1504,8 @@ public class OracleApplicationDetailsRpcService implements ApplicationDetailsRpc
       boolean update,
       ApplicationDetailsRpcRepository.PackageMutationRow existing,
       boolean hiddenBlanketOicWorkflow,
-      Long referenceOrgUnitNumber) {
+      Long referenceOrgUnitNumber,
+      boolean checkSpeciesEndUse) {
     List<String> errors = new ArrayList<>();
     String packageNumber =
         existing == null
@@ -1588,6 +1592,7 @@ public class OracleApplicationDetailsRpcService implements ApplicationDetailsRpc
         productTypeKept,
         ageClassKept,
         productTypeKept && keepsStoredSpeciesEndUse(request, existing),
+        checkSpeciesEndUse,
         errors);
 
     if (update && packageNumber != null && request.volume() != null) {
@@ -1623,6 +1628,7 @@ public class OracleApplicationDetailsRpcService implements ApplicationDetailsRpc
       boolean productTypeKept,
       boolean ageClassKept,
       boolean speciesEndUseKept,
+      boolean checkSpeciesEndUse,
       List<String> errors) {
     String packageStatus =
         firstNonBlank(request.status(), existing == null ? null : existing.packageStatusCode());
@@ -1647,7 +1653,7 @@ public class OracleApplicationDetailsRpcService implements ApplicationDetailsRpc
     }
 
     List<String> speciesCodes = normalizeCodes(request.speciesCodes());
-    if (speciesCodes.isEmpty() || speciesEndUseKept) {
+    if (speciesCodes.isEmpty() || speciesEndUseKept || !checkSpeciesEndUse) {
       return;
     }
 
@@ -1794,7 +1800,7 @@ public class OracleApplicationDetailsRpcService implements ApplicationDetailsRpc
       PackageMutationRequest packageRequest, CreateApplicationRequest applicationRequest) {
     List<String> errors =
         validatePackageMutation(
-            packageRequest, false, null, false, applicationRequest.orgUnitNumber());
+            packageRequest, false, null, false, applicationRequest.orgUnitNumber(), true);
     if (packageRequest.volume() != null && applicationRequest.applicationVolume() != null) {
       BigDecimal requestedPackageVolume = roundOneDecimal(packageRequest.volume());
       BigDecimal applicationVolume = roundOneDecimal(applicationRequest.applicationVolume());

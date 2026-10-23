@@ -1168,7 +1168,8 @@ function ProvincialApplicationItemsPanel({
     scalesSectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
   }, [focusScalesRequestId, focusedPackageNumber, packageDataLoaded, selectedPackageNumber])
 
-  // A new package saves the application's end use, or the first one valid for its species.
+  // A new package saves the application's end use, or the first one valid for its species. An
+  // empty list keeps the application's end use; only a failed lookup blocks the save.
   useEffect(() => {
     let cancelled = false
     const region = detail.orgUnitNumber ? String(detail.orgUnitNumber) : ''
@@ -1182,7 +1183,7 @@ function ProvincialApplicationItemsPanel({
       try {
         const options = await fetchApplicationEndUsesForSpeciesRegion(region, createSpeciesDraft)
         if (!cancelled) {
-          setCreateEndUseAvailability(options.length > 0 ? 'available' : 'unavailable')
+          setCreateEndUseAvailability('available')
           setCreatePackageForm((current) => ({
             ...current,
             endUseCode: (() => {
