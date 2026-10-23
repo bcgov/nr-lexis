@@ -6645,6 +6645,42 @@ class OraclePermitDetailsRpcServiceTest {
   }
 
   @Test
+  void updatePermitShouldSkipAPackageWhoseApplicationIsOnNoExemption() {
+    when(repository.findPermitMutationByPermitNumber(7000123L))
+        .thenReturn(Optional.of(permitMutationRow("COM")));
+    stubTargetMinisterialExemption("EX-700");
+    when(repository.updatePermitDetail(
+            any(PermitMutationRow.class), eq("idir\\jsmith"), eq(FEE_MASK_EFFECTIVE_DATE)))
+        .thenReturn(true);
+    when(repository.findPackageNumbersByPermitNumberRequired(7000123L))
+        .thenReturn(List.of("PKG-903"));
+    when(repository.findPackageInfoByPackageNumber("PKG-903"))
+        .thenReturn(
+            Optional.of(
+                new PackageInfoRow("PKG-903", 1000456L, 12.0d, 10.0d, 2.0d, null, null)));
+    when(repository.findApplicationInfoByNumber(1000456L))
+        .thenReturn(
+            Optional.of(
+                new ApplicationInfoRow(
+                    1000456L, null, 1835L, "South Coast", "T", "S", "HE/OT")));
+
+    PermitMutationRpcResponseDto response =
+        service.updatePermit(
+            formCheckRequest("COM", "42", "test-2026-10-22"), "idir\\jsmith");
+
+    assertThat(response.errors()).isEmpty();
+    assertThat(response.success()).isTrue();
+    ArgumentCaptor<PermitMutationRow> permitCaptor =
+        ArgumentCaptor.forClass(PermitMutationRow.class);
+    verify(repository)
+        .updatePermitDetail(
+            permitCaptor.capture(), eq("idir\\jsmith"), eq(FEE_MASK_EFFECTIVE_DATE));
+    assertThat(permitCaptor.getValue().remarks()).isEqualTo("test-2026-10-22");
+    verify(applicationDetailsRpcService, never())
+        .synchronizePackageForPermitTransition(any(), any(), any(), any(), any());
+  }
+
+  @Test
   void updatePermitShouldPersistBlanketOicLocationsBeforeFirstPackageCreatesHiddenApplication() {
     PermitMutationRow current =
         withAggregateRelationships(

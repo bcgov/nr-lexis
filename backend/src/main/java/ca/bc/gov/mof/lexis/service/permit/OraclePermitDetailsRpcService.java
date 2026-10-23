@@ -4637,8 +4637,12 @@ public class OraclePermitDetailsRpcService implements PermitDetailsRpcService {
       }
       ApplicationInfoRow application =
           repository.findApplicationInfoByNumber(packageInfo.applicationNumber()).orElse(null);
-      if (application == null || trimToNull(application.exemptionNumber()) == null) {
+      if (application == null) {
         return false;
+      }
+      // An application on no exemption has no package data to synchronize.
+      if (trimToNull(application.exemptionNumber()) == null) {
+        continue;
       }
       String exemptionType =
           repository.findExemptionTypeCode(application.exemptionNumber()).orElse(null);
