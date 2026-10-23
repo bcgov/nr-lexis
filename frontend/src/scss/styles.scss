@@ -2122,6 +2122,12 @@ $notification-types: 'error', 'info', 'success', 'warning';
   margin-block-start: 1.5rem;
 }
 
+// The page grid's row gap alone spaces a save result from the page header and the card.
+.provincial-offer-create-page .app-inline-notification.create-form-validation-notification,
+.provincial-offer-detail-page .detail-page-error .app-inline-notification {
+  margin-block-end: 0;
+}
+
 // See scale detail lines up with the Package number field, below its label.
 .offer-scale-detail-cell {
   display: flex;

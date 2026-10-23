@@ -199,6 +199,23 @@ describe('Create offer, application first', () => {
     expect(mockedSubmit).not.toHaveBeenCalled()
   })
 
+  it('shows the offer without errors once found after a save without an application', async () => {
+    const user = userEvent.setup()
+    renderCreatePage()
+
+    await user.click(screen.getByRole('button', { name: 'Save offer' }))
+    expect(await screen.findByText('Application number is required')).toBeInTheDocument()
+    await user.type(applicationNumberInput(), '46989')
+
+    expect(await screen.findByRole('group', { name: 'Offer details' })).toBeInTheDocument()
+    expect(screen.getByRole('textbox', { name: /Contact name/ })).not.toHaveAttribute(
+      'aria-invalid',
+      'true',
+    )
+    expect(screen.queryByText('Contact name is required')).toBeNull()
+    expect(screen.queryByText('Application number is required')).toBeNull()
+  })
+
   it('keeps the offer and its typed values when the application number becomes invalid', async () => {
     const user = userEvent.setup()
     renderCreatePage('applicationNumber=46989')

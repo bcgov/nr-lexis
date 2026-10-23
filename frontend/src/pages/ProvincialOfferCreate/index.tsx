@@ -831,7 +831,13 @@ const ProvincialOfferCreatePage = () => {
       return false
     }
     if (hasValidationError) {
-      setShowAllValidationErrors(true)
+      // Before an application is found only its number was checked, so the fields that show
+      // once it is found start without errors.
+      if (applicationLoaded) {
+        setShowAllValidationErrors(true)
+      } else {
+        markFieldTouched('applicationNumber')
+      }
       setStatus({ kind: 'error', title: OFFER_NOT_SAVED_TITLE, message: FIELD_ERRORS_MESSAGE })
       focusFirstInvalidFieldAfterRender(() => formRef.current)
       return false

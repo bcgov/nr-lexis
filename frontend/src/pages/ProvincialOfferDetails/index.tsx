@@ -585,7 +585,7 @@ const ProvincialOfferDetailsPage = () => {
   )
 
   return (
-    <Grid fullWidth className="default-grid detail-page-grid">
+    <Grid fullWidth className="default-grid detail-page-grid provincial-offer-detail-page">
       {!openedAfterCreate && (
         <Column sm={4} md={8} lg={16}>
           <DetailBreadcrumb
