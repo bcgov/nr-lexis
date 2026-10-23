@@ -6324,6 +6324,10 @@ class OraclePermitDetailsRpcServiceTest {
     when(repository.findPermitMutationByPermitNumber(7000123L))
         .thenReturn(Optional.of(permitMutationRow("COM")));
     stubMinisterialExemptionOwnedBy("00099999");
+    if ("ACT".equals(targetStatus)) {
+      // Only a reactivated permit reads the owner and agent of its first application.
+      stubFirstPackageApplicationClients(1835L, "00077881", "01", "00077880", "01");
+    }
     when(repository.updatePermitDetail(
             any(PermitMutationRow.class), eq("idir\\jsmith"), eq(FEE_MASK_EFFECTIVE_DATE)))
         .thenReturn(true);
@@ -6455,6 +6459,38 @@ class OraclePermitDetailsRpcServiceTest {
     assertThat(saved.agentNumber()).isEqualTo("00099992");
     assertThat(saved.agentLocationCode()).isEqualTo("03");
     verify(permitInvoiceOrchestrationService).orchestrate(any(), eq("idir\\jsmith"));
+  }
+
+  @Test
+  void updatePermitShouldTakeTheFirstApplicationOwnerAndAgentLocationsWhenAnActivePermitSwitchesClients() {
+    when(repository.findPermitMutationByPermitNumber(7000123L))
+        .thenReturn(Optional.of(permitMutationRow("ACT")));
+    stubTargetMinisterialExemption("EX-700");
+    stubFirstPackageApplicationClients(1835L, "00099991", "05", "00099992", "03");
+    when(repository.updatePermitDetail(
+            any(PermitMutationRow.class), eq("idir\\jsmith"), eq(FEE_MASK_EFFECTIVE_DATE)))
+        .thenReturn(true);
+
+    // The form submits the saved owner and agent locations.
+    PermitMutationRpcResponseDto response =
+        service.updatePermit(
+            withClientLocations(formCheckRequest("ACT", "42", "Legacy notes"), "01", "01"),
+            "idir\\jsmith");
+
+    assertThat(response.errors()).isEmpty();
+    assertThat(response.success()).isTrue();
+    ArgumentCaptor<PermitMutationRow> permitCaptor =
+        ArgumentCaptor.forClass(PermitMutationRow.class);
+    verify(repository)
+        .updatePermitDetail(
+            permitCaptor.capture(), eq("idir\\jsmith"), eq(FEE_MASK_EFFECTIVE_DATE));
+    PermitMutationRow saved = permitCaptor.getValue();
+    assertThat(saved.permitStatusCode()).isEqualTo("ACT");
+    assertThat(saved.clientNumber()).isEqualTo("00099991");
+    assertThat(saved.clientLocationCode()).isEqualTo("05");
+    assertThat(saved.agentNumber()).isEqualTo("00099992");
+    assertThat(saved.agentLocationCode()).isEqualTo("03");
+    verify(permitInvoiceOrchestrationService, never()).orchestrate(any(), any());
   }
 
   @Test
