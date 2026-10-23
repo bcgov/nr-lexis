@@ -11687,6 +11687,31 @@ describe('Provincial Permit Detail Action Smoke', () => {
     await waitFor(() => expect(notice).toHaveFocus())
   })
 
+  it('reads the GBMS invoice history again after a permit save', async () => {
+    mockedFetchProvincialPermitDetail.mockResolvedValue({
+      ...permitDetail,
+      permitStatusCode: 'PPD',
+      permitStatusDescription: 'Payment pending',
+      receiptNumber: null,
+    })
+    mockedFetchProvincialPermitDetailTabs.mockResolvedValue(tabsWithApplication)
+    renderPermitDetails()
+
+    await selectPermitDetailTab('Fees')
+    await waitFor(() => expect(mockedFetchProvincialPermitGbmsEvents).toHaveBeenCalled())
+    const readsBeforeSave = mockedFetchProvincialPermitGbmsEvents.mock.calls.length
+    await userEvent.click(await screen.findByRole('button', { name: /Edit permit(?: details)?/ }))
+    await userEvent.type(screen.getByLabelText('Receipt number'), 'R-2')
+    await userEvent.click(screen.getByRole('button', { name: 'Save permit' }))
+
+    await waitFor(() => expect(mockedUpdatePermitDetail).toHaveBeenCalled())
+    await waitFor(() =>
+      expect(mockedFetchProvincialPermitGbmsEvents.mock.calls.length).toBeGreaterThan(
+        readsBeforeSave,
+      ),
+    )
+  })
+
   it('labels a current PPD permit and retains its current-only status option when options omit it', async () => {
     mockedFetchProvincialPermitDetail.mockResolvedValue({
       ...permitDetail,

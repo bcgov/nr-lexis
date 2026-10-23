@@ -4084,6 +4084,12 @@ const ProvincialPermitDetailsPage = () => {
           (resultSource === 'fees' && (savedPermitStatus === 'PPD' || savedPermitStatus === 'COM'))
         setActionResult(editButtonRemoved ? { ...savedResult, focusOnReveal: true } : savedResult)
         refreshLoadedPermitFees()
+        // A status change can cancel or create GBMS invoices, so their history is read again.
+        loadPermitGbmsEvents({
+          permitNumber: String(confirmedRequest.permitNumber),
+          receiptNumber: persistedUpdatedDetail.receiptNumber,
+          blanketOic: persistedUpdatedDetail.blanketOic,
+        })
         if (canReviewPermits && !permitDetailRefreshFailed && savedPermitStatus === 'COM') {
           void onOpenPermitApprovalEmail(
             String(confirmedRequest.permitNumber),
@@ -4135,6 +4141,7 @@ const ProvincialPermitDetailsPage = () => {
       permitSaveSubject,
       provincialSubmitter,
       refreshLoadedPermitFees,
+      loadPermitGbmsEvents,
       activePermitTabId,
       tryBeginPermitMutation,
     ],
