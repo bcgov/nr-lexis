@@ -2128,11 +2128,17 @@ $notification-types: 'error', 'info', 'success', 'warning';
   margin-block-end: 0;
 }
 
-// See scale detail lines up with the Package number field, below its label.
+// See scale detail lines up with the Package number field, below its label, where they share a
+// row. On narrower screens it wraps below the field and takes only the row gap.
 .offer-scale-detail-cell {
   display: flex;
   align-items: flex-start;
-  padding-block-start: 1.375rem;
+}
+
+@media (min-width: 1056px) {
+  .offer-scale-detail-cell {
+    padding-block-start: 1.375rem;
+  }
 }
 
 // On the record it follows the package number, centred on the value's line.
