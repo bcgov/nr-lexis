@@ -26,7 +26,7 @@ public class ApplicationApprovalEligibilityService {
 
   private static final Set<String> REVIEWABLE_STATUS_CODES = Set.of("NEW", "PND");
   private static final Set<String> PRODUCT_TYPE_CODES = Set.of("H", "S", "T");
-  private static final Set<String> APPLICANT_TYPE_CODES = Set.of("O", "A");
+  private static final Set<String> APPLICANT_TYPE_CODES = Set.of("O", "A", "M");
   private static final Set<String> APPROVABLE_JURISDICTIONS = Set.of("P", "F");
   private static final String PRODUCT_HARVESTED = "H";
   private static final String PRODUCT_UNMANUFACTURED = "T";

@@ -161,7 +161,10 @@ describe('Provincial offer detail form behaviour', () => {
   })
 
   it('keeps an error on a field the user cannot edit in the form notification', async () => {
-    mockedFetchProvincialOfferDetail.mockResolvedValue({ ...offerDetail, companyName: 'Société' })
+    mockedFetchProvincialOfferDetail.mockResolvedValue({
+      ...offerDetail,
+      companyName: 'A'.repeat(53),
+    })
     renderPage()
     await startEditing()
     await replaceValue('Offer amount ($/m³)', '13000')
@@ -169,11 +172,7 @@ describe('Provincial offer detail form behaviour', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Save changes' }))
 
     expect(await screen.findByText('Offer not saved.')).toBeInTheDocument()
-    expect(
-      screen.getByText(
-        'Company contains unsupported characters. Use unaccented letters, numbers, spaces, or standard punctuation.',
-      ),
-    ).toBeInTheDocument()
+    expect(screen.getByText('Company must be 52 characters or fewer.')).toBeInTheDocument()
     expect(screen.queryByLabelText('Company')).not.toBeInTheDocument()
     expect(document.querySelector('[aria-invalid="true"]')).not.toBeInTheDocument()
     expect(mockedSubmitProvincialOfferUpdate).not.toHaveBeenCalled()

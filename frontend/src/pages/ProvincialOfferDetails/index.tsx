@@ -322,6 +322,7 @@ const ProvincialOfferDetailsPage = () => {
           OFFER_COMPANY_NAME_MAX_LENGTH,
           'Company',
           true,
+          textValue(detail?.companyName),
         ) ?? undefined,
       contactName:
         offerTextStorageFieldError(
@@ -329,6 +330,7 @@ const ProvincialOfferDetailsPage = () => {
           OFFER_CONTACT_NAME_MAX_LENGTH,
           'Contact name',
           true,
+          textValue(detail?.contactName),
         ) ?? undefined,
       offerVolume: firstValidationError(
         () =>
@@ -380,6 +382,8 @@ const ProvincialOfferDetailsPage = () => {
                 form?.withdrawReason ?? '',
                 OFFER_WITHDRAW_REASON_MAX_LENGTH,
                 'Offer withdrawal reason',
+                false,
+                textValue(detail?.withdrawReason),
               )
             : null,
       ),
@@ -392,6 +396,8 @@ const ProvincialOfferDetailsPage = () => {
                 form?.pickupLocation ?? '',
                 OFFER_PICKUP_LOCATION_MAX_LENGTH,
                 'Pickup location',
+                false,
+                textValue(detail?.pickupLocation),
               )
             : null,
       ),
@@ -400,6 +406,8 @@ const ProvincialOfferDetailsPage = () => {
             form?.offerCondition ?? '',
             OFFER_CONDITION_MAX_LENGTH,
             'Offer conditions/remarks',
+            false,
+            textValue(detail?.offerCondition),
           ) ?? undefined)
         : undefined,
       offerRemark: changedText('offerRemark')
@@ -407,6 +415,8 @@ const ProvincialOfferDetailsPage = () => {
             form?.offerRemark ?? '',
             OFFER_REMARK_MAX_LENGTH,
             'Offer remarks',
+            false,
+            textValue(detail?.offerRemark),
           ) ?? undefined)
         : undefined,
     }

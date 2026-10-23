@@ -153,6 +153,53 @@ class ApplicationApprovalEligibilityServiceTest {
     assertThat(result.errors()).isEmpty();
   }
 
+  @ParameterizedTest
+  @CsvSource({"P,NEW", "P,PND", "F,NEW", "F,PND"})
+  void shouldAllowAMinisterialApplicationWithoutAgentDetails(
+      String jurisdictionCode, String statusCode) {
+    stubValidApplication(validApplication(null, jurisdictionCode, statusCode, 1909L, "M"), "SA");
+
+    var result = service.evaluate(1000456L);
+
+    assertThat(result.errors()).isEmpty();
+    assertThat(result.eligible()).isTrue();
+  }
+
+  @Test
+  void shouldRejectAMinisterialApplicantTypeMissingFromTheCodeTable() {
+    stubValidApplication(validApplication(null, "P", "NEW", 1909L, "M"), "SA");
+    when(applicationRepository.isApplicantTypeCodeValidRequired("M")).thenReturn(false);
+
+    var result = service.evaluate(1000456L);
+
+    assertThat(result.eligible()).isFalse();
+    assertThat(result.errors()).containsExactly("Application applicant type code does not exist.");
+  }
+
+  @Test
+  void shouldRejectAnApplicantTypeOutsideOwnerAgentAndMinisterial() {
+    stubValidApplication(validApplication(null, "P", "NEW", 1909L, "X"), "SA");
+
+    var result = service.evaluate(1000456L);
+
+    assertThat(result.eligible()).isFalse();
+    assertThat(result.errors()).containsExactly("Application applicant type is invalid.");
+  }
+
+  @Test
+  void shouldRequireAgentDetailsForAnAgentApplication() {
+    stubValidApplication(validApplication(null, "P", "NEW", 1909L, "A"), "SA");
+
+    var result = service.evaluate(1000456L);
+
+    assertThat(result.eligible()).isFalse();
+    assertThat(result.errors())
+        .containsExactly(
+            "Application agent number is required.",
+            "Application agent location is required.",
+            "Application agent contact is required.");
+  }
+
   @Test
   void shouldRejectUnknownProductTypeCodeWithoutApproving() {
     stubValidApplication();
@@ -317,7 +364,8 @@ class ApplicationApprovalEligibilityServiceTest {
           .thenReturn(true);
     }
     when(applicationRepository.isExemptionReasonCodeValidRequired("S")).thenReturn(true);
-    when(applicationRepository.isApplicantTypeCodeValidRequired("O")).thenReturn(true);
+    when(applicationRepository.isApplicantTypeCodeValidRequired(application.applicantTypeCode()))
+        .thenReturn(true);
     when(applicationRepository.isJurisdictionCodeValidRequired(application.jurisdictionCode()))
         .thenReturn(true);
     when(applicationRepository.isOrgUnitValidRequired(application.orgUnitNumber()))
@@ -360,6 +408,15 @@ class ApplicationApprovalEligibilityServiceTest {
 
   private ApplicationUpdateRecord validApplication(
       String exemptionNumber, String jurisdictionCode, String statusCode, Long orgUnitNumber) {
+    return validApplication(exemptionNumber, jurisdictionCode, statusCode, orgUnitNumber, "O");
+  }
+
+  private ApplicationUpdateRecord validApplication(
+      String exemptionNumber,
+      String jurisdictionCode,
+      String statusCode,
+      Long orgUnitNumber,
+      String applicantTypeCode) {
     return new ApplicationUpdateRecord(
         1000456L,
         null,
@@ -381,7 +438,7 @@ class ApplicationApprovalEligibilityServiceTest {
         exemptionNumber,
         "S",
         statusCode,
-        "O",
+        applicantTypeCode,
         orgUnitNumber,
         "H",
         jurisdictionCode,

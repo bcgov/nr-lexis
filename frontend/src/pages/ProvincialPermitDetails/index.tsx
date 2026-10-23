@@ -361,6 +361,9 @@ const MAX_PERMIT_OVERRIDE_COMMENT_LENGTH = 254
 const MAX_PERMIT_REMARKS_LENGTH = 250
 const PACKAGE_COMMENTS_MAX_LENGTH = 180
 const ASCII_PATTERN = /^[\u0000-\u007f]*$/
+// Text equal to the stored value skips the character check, so stored text saves unchanged.
+const isStorableText = (value: string, storedValue: string | null | undefined): boolean =>
+  ASCII_PATTERN.test(value.trim()) || value.trim() === (storedValue ?? '').trim()
 // Legacy allows an approver to move a permit to EXP; once expired, the record is read-only.
 const EDITABLE_PERMIT_STATUS_CODES = new Set(['ACT', 'COM', 'CAN', 'EXP'])
 const SERVER_ASSIGNED_PAYMENT_PENDING_STATUS = 'PPD'
@@ -909,6 +912,7 @@ const optionalNumberValue = (value: string): number | null => {
 
 const validatePermitFeeOverride = (
   form: PermitFeeOverrideForm,
+  storedComment?: string,
 ): { fieldErrors: PermitFeeOverrideFieldErrors; roundedFee: string | null } => {
   const normalizedFee = form.overrideFee.trim()
   const normalizedComment = form.overrideComment.trim()
@@ -930,7 +934,7 @@ const validatePermitFeeOverride = (
   )
   const overrideCommentError = firstValidationError(
     () =>
-      form.overrideEnabled && !ASCII_PATTERN.test(normalizedComment)
+      form.overrideEnabled && !isStorableText(normalizedComment, storedComment)
         ? 'Override comment contains unsupported characters. Use unaccented letters, numbers, spaces, or standard punctuation.'
         : null,
     () =>
@@ -3049,7 +3053,7 @@ const ProvincialPermitDetailsPage = () => {
       permitReceiptNo:
         firstValidationError(
           () =>
-            ASCII_PATTERN.test(permitForm.permitReceiptNo.trim())
+            isStorableText(permitForm.permitReceiptNo, detail?.receiptNumber)
               ? null
               : 'Receipt number contains unsupported characters. Use unaccented letters, numbers, spaces, or standard punctuation.',
           () => maxLengthFieldError(permitForm.permitReceiptNo, 50, 'Receipt number'),
@@ -3057,7 +3061,7 @@ const ProvincialPermitDetailsPage = () => {
       permitRemarks:
         firstValidationError(
           () =>
-            ASCII_PATTERN.test(permitForm.permitRemarks.trim())
+            isStorableText(permitForm.permitRemarks, detail?.remarks)
               ? null
               : 'Permit remarks contain unsupported characters. Use unaccented letters, numbers, spaces, or standard punctuation.',
           () =>
@@ -3147,6 +3151,8 @@ const ProvincialPermitDetailsPage = () => {
     blanketOicPermit,
     blanketOicRegionError,
     blanketOicRegionOptionsLoading,
+    detail?.receiptNumber,
+    detail?.remarks,
     editablePermitRegionOptions,
     invoiceMaterialLocked,
     requiresPositiveOicRequestLimits,
@@ -4078,6 +4084,12 @@ const ProvincialPermitDetailsPage = () => {
           (resultSource === 'fees' && (savedPermitStatus === 'PPD' || savedPermitStatus === 'COM'))
         setActionResult(editButtonRemoved ? { ...savedResult, focusOnReveal: true } : savedResult)
         refreshLoadedPermitFees()
+        // A status change can cancel or create GBMS invoices, so their history is read again.
+        loadPermitGbmsEvents({
+          permitNumber: String(confirmedRequest.permitNumber),
+          receiptNumber: persistedUpdatedDetail.receiptNumber,
+          blanketOic: persistedUpdatedDetail.blanketOic,
+        })
         if (canReviewPermits && !permitDetailRefreshFailed && savedPermitStatus === 'COM') {
           void onOpenPermitApprovalEmail(
             String(confirmedRequest.permitNumber),
@@ -4129,6 +4141,7 @@ const ProvincialPermitDetailsPage = () => {
       permitSaveSubject,
       provincialSubmitter,
       refreshLoadedPermitFees,
+      loadPermitGbmsEvents,
       activePermitTabId,
       tryBeginPermitMutation,
     ],
@@ -4692,7 +4705,10 @@ const ProvincialPermitDetailsPage = () => {
     setActionResult(null)
     const normalizedFee = feeOverrideForm.overrideFee.trim()
     const normalizedComment = feeOverrideForm.overrideComment.trim()
-    const { fieldErrors, roundedFee } = validatePermitFeeOverride(feeOverrideForm)
+    const { fieldErrors, roundedFee } = validatePermitFeeOverride(
+      feeOverrideForm,
+      feeOverrideContext?.overrideComment,
+    )
     if (fieldErrors.overrideFee || fieldErrors.overrideComment) {
       setFeeOverrideFieldErrors(fieldErrors)
       setActionResult(null)

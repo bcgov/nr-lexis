@@ -24,22 +24,31 @@ final class OracleGbmsInvoiceHistoryService {
     this.repository = repository;
   }
 
-  List<GbmsInvoiceHistoryRow> findRequired(Transition transition) {
-    List<GbmsInvoiceHistoryRow> rows =
-        repository.findGbmsInvoiceHistoryRequired(
-            transition.receiptNumber(), transition.permitNumber());
-    if (rows == null) {
-      throw new DataRetrievalFailureException("Oracle returned no GBMS invoice history result.");
-    }
-    for (GbmsInvoiceHistoryRow row : rows) {
-      if (row == null
-          || trimToNull(row.invoiceNumber()) == null
-          || !transition.permitNumber().equals(row.permitNumber())
-          || !Double.isFinite(row.invoiceAmount())) {
-        throw new DataRetrievalFailureException("Oracle returned invalid GBMS invoice history.");
-      }
-    }
-    return List.copyOf(rows);
+  /**
+   * Reads the permit's history with no receipt, so the procedure never looks the receipt up as an
+   * invoice number.
+   */
+  List<GbmsInvoiceHistoryRow> findRequiredWithoutReceipt(Transition transition) {
+    return findRequired("", transition.permitNumber());
+  }
+
+  /**
+   * Returns the active invoices: not negative, not cancelled, not replaced and not themselves a
+   * cancellation.
+   */
+  List<GbmsInvoiceHistoryRow> activeRows(List<GbmsInvoiceHistoryRow> gbmsHistory) {
+    Set<String> cancellationInvoices =
+        gbmsHistory.stream()
+            .map(GbmsInvoiceHistoryRow::cancelledByInvoice)
+            .map(OracleGbmsInvoiceHistoryService::normalizedInvoiceNumber)
+            .filter(Objects::nonNull)
+            .collect(Collectors.toSet());
+    return gbmsHistory.stream()
+        .filter(row -> BigDecimal.valueOf(row.invoiceAmount()).compareTo(BigDecimal.ZERO) >= 0)
+        .filter(row -> trimToNull(row.cancelledByInvoice()) == null)
+        .filter(row -> trimToNull(row.replacedByInvoice()) == null)
+        .filter(row -> !cancellationInvoices.contains(normalizedInvoiceNumber(row.invoiceNumber())))
+        .toList();
   }
 
   void validateActiveAlignment(
@@ -54,25 +63,32 @@ final class OracleGbmsInvoiceHistoryService {
         activeLinkedInvoices.add(invoiceNumber.toUpperCase(Locale.ROOT));
       }
     }
-    Set<String> cancellationInvoices =
-        gbmsHistory.stream()
-            .map(GbmsInvoiceHistoryRow::cancelledByInvoice)
-            .map(OracleGbmsInvoiceHistoryService::normalizedInvoiceNumber)
-            .filter(Objects::nonNull)
-            .collect(Collectors.toSet());
     boolean hasMisalignedActiveInvoice =
-        gbmsHistory.stream()
-            .filter(row -> BigDecimal.valueOf(row.invoiceAmount()).compareTo(BigDecimal.ZERO) >= 0)
-            .filter(row -> trimToNull(row.cancelledByInvoice()) == null)
-            .filter(row -> trimToNull(row.replacedByInvoice()) == null)
+        activeRows(gbmsHistory).stream()
             .map(row -> normalizedInvoiceNumber(row.invoiceNumber()))
-            .filter(invoiceNumber -> !cancellationInvoices.contains(invoiceNumber))
             .anyMatch(invoiceNumber -> !activeLinkedInvoices.contains(invoiceNumber));
     if (hasMisalignedActiveInvoice) {
       throw new OracleInternalPermitInvoiceService.InvoiceBlockedException(
           "The GBMS invoices for this permit do not match its LEXIS invoices, so its status"
               + " cannot be changed. Contact the LEXIS administrator.");
     }
+  }
+
+  private List<GbmsInvoiceHistoryRow> findRequired(String receiptNumber, Long permitNumber) {
+    List<GbmsInvoiceHistoryRow> rows =
+        repository.findGbmsInvoiceHistoryRequired(receiptNumber, permitNumber);
+    if (rows == null) {
+      throw new DataRetrievalFailureException("Oracle returned no GBMS invoice history result.");
+    }
+    for (GbmsInvoiceHistoryRow row : rows) {
+      if (row == null
+          || trimToNull(row.invoiceNumber()) == null
+          || !permitNumber.equals(row.permitNumber())
+          || !Double.isFinite(row.invoiceAmount())) {
+        throw new DataRetrievalFailureException("Oracle returned invalid GBMS invoice history.");
+      }
+    }
+    return List.copyOf(rows);
   }
 
   private static String normalizedInvoiceNumber(String invoiceNumber) {

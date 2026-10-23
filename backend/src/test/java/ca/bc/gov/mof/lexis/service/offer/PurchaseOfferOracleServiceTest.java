@@ -1261,6 +1261,168 @@ class PurchaseOfferOracleServiceTest {
   }
 
   @Test
+  void updateOfferSnapshotShouldSaveStoredAccentedTextUnchanged() {
+    stubProvincialApplicationWithPackage(1000456L, "PKG-903");
+    when(repository.findUpdateSourceByOfferNumber(81001L))
+        .thenReturn(Optional.of(updateSourceWithAccentedText()));
+    when(repository.updateOffer(any(PurchaseOfferRepository.PurchaseOfferUpdateRecord.class)))
+        .thenReturn(true);
+
+    PurchaseOfferService.CreateOfferResult response =
+        service.updateOfferSnapshot(
+            accentedSnapshotUpdate(null, null, LocalDate.of(2026, 3, 19)), "idir\\jsmith");
+
+    assertThat(response.success()).isTrue();
+    assertThat(response.errors()).isEmpty();
+    ArgumentCaptor<PurchaseOfferRepository.PurchaseOfferUpdateRecord> captor =
+        ArgumentCaptor.forClass(PurchaseOfferRepository.PurchaseOfferUpdateRecord.class);
+    verify(repository).updateOffer(captor.capture());
+    PurchaseOfferRepository.PurchaseOfferUpdateRecord record = captor.getValue();
+    assertThat(record.companyName()).isEqualTo("Québec Lumber");
+    assertThat(record.contactName()).isEqualTo("José Tremblay");
+    assertThat(record.offerRemark()).isEqualTo("Résumé");
+    assertThat(record.pickupLocation()).isEqualTo("Montréal");
+    assertThat(record.offerCondition()).isEqualTo("Livraison à Port Moody");
+    assertThat(record.teacReviewDate()).isEqualTo(LocalDate.of(2026, 3, 19));
+  }
+
+  @Test
+  void updateOfferSnapshotShouldWithdrawAnOfferWithStoredAccentedText() {
+    stubProvincialApplicationWithPackage(1000456L, "PKG-903");
+    when(repository.findUpdateSourceByOfferNumber(81001L))
+        .thenReturn(Optional.of(updateSourceWithAccentedText()));
+    when(repository.updateOffer(any(PurchaseOfferRepository.PurchaseOfferUpdateRecord.class)))
+        .thenReturn(true);
+    when(repository.findApplicationRecipient(1000456L))
+        .thenReturn(
+            Optional.of(
+                new PurchaseOfferRepository.ApplicationRecipientRow(
+                    "O", "00077881", "00", null, null, 1835L)));
+    when(clientEmailResolver.resolveAgentOrOwner("O", "00077881", "00", null, null))
+        .thenReturn(Optional.of("client@example.com"));
+
+    PurchaseOfferService.CreateOfferResult response =
+        service.updateOfferSnapshot(
+            accentedSnapshotUpdate(LocalDate.of(2026, 3, 10), "Buyer withdrew", null),
+            "idir\\jsmith");
+
+    assertThat(response.success()).isTrue();
+    ArgumentCaptor<PurchaseOfferRepository.PurchaseOfferUpdateRecord> captor =
+        ArgumentCaptor.forClass(PurchaseOfferRepository.PurchaseOfferUpdateRecord.class);
+    verify(repository).updateOffer(captor.capture());
+    assertThat(captor.getValue().companyName()).isEqualTo("Québec Lumber");
+    assertThat(captor.getValue().offerWithdrawalDate()).isEqualTo(LocalDate.of(2026, 3, 10));
+    assertThat(captor.getValue().withdrawReason()).isEqualTo("Buyer withdrew");
+  }
+
+  @Test
+  void updateOfferShouldKeepStoredAccentedTextWhenTheRequestLeavesItOut() {
+    stubProvincialApplicationWithPackage(1000456L, "PKG-903");
+    when(repository.findUpdateSourceByOfferNumber(81001L))
+        .thenReturn(Optional.of(updateSourceWithAccentedText()));
+    when(repository.updateOffer(any(PurchaseOfferRepository.PurchaseOfferUpdateRecord.class)))
+        .thenReturn(true);
+
+    PurchaseOfferService.CreateOfferResult response =
+        service.updateOffer(
+            new PurchaseOfferService.CreateOfferRequest(
+                1000456L, 81001L, null, null, null, null, null, null,
+                LocalDate.of(2026, 3, 19), null, null, null, null, null, null, null, null, null,
+                null, null),
+            "idir\\jsmith");
+
+    assertThat(response.success()).isTrue();
+    ArgumentCaptor<PurchaseOfferRepository.PurchaseOfferUpdateRecord> captor =
+        ArgumentCaptor.forClass(PurchaseOfferRepository.PurchaseOfferUpdateRecord.class);
+    verify(repository).updateOffer(captor.capture());
+    assertThat(captor.getValue().companyName()).isEqualTo("Québec Lumber");
+    assertThat(captor.getValue().contactName()).isEqualTo("José Tremblay");
+    assertThat(captor.getValue().offerRemark()).isEqualTo("Résumé");
+  }
+
+  @Test
+  void updateOfferSnapshotShouldRefuseNewlyTypedNonAsciiTextBesideStoredAccentedText() {
+    when(repository.findUpdateSourceByOfferNumber(81001L))
+        .thenReturn(Optional.of(updateSourceWithAccentedText()));
+
+    PurchaseOfferService.CreateOfferResult response =
+        service.updateOfferSnapshot(
+            new PurchaseOfferService.UpdateOfferRequest(
+                1000456L,
+                81001L,
+                "PKG-903",
+                "Québec Lumber Ltée",
+                "José Tremblay",
+                12500.25d,
+                LocalDate.of(2026, 3, 2),
+                null,
+                LocalDate.of(2026, 3, 18),
+                "N",
+                "Y",
+                "Résumé",
+                "N",
+                "Retiré",
+                "P",
+                "Existing mill",
+                "00077881",
+                "Montréal",
+                "Livraison à Port Moody",
+                95.5d),
+            "idir\\jsmith");
+
+    assertThat(response.success()).isFalse();
+    assertThat(response.errors())
+        .containsExactlyInAnyOrder(
+            "Company name must contain ASCII characters only",
+            "Withdraw reason must contain ASCII characters only");
+    verify(repository, never()).updateOffer(any());
+  }
+
+  @Test
+  void updateOfferSnapshotShouldKeepTheLengthCheckForStoredAccentedText() {
+    String longCompanyName = "É" + "A".repeat(52);
+    when(repository.findUpdateSourceByOfferNumber(81001L))
+        .thenReturn(
+            Optional.of(
+                updateSourceWithText(
+                    longCompanyName,
+                    "José Tremblay",
+                    "Résumé",
+                    "Montréal",
+                    "Livraison à Port Moody")));
+
+    PurchaseOfferService.CreateOfferResult response =
+        service.updateOfferSnapshot(
+            new PurchaseOfferService.UpdateOfferRequest(
+                1000456L,
+                81001L,
+                "PKG-903",
+                longCompanyName,
+                "José Tremblay",
+                12500.25d,
+                LocalDate.of(2026, 3, 2),
+                null,
+                LocalDate.of(2026, 3, 18),
+                "N",
+                "Y",
+                "Résumé",
+                "N",
+                null,
+                "P",
+                "Existing mill",
+                "00077881",
+                "Montréal",
+                "Livraison à Port Moody",
+                95.5d),
+            "idir\\jsmith");
+
+    assertThat(response.success()).isFalse();
+    assertThat(response.errors())
+        .containsExactly("Company name must be 52 ASCII characters or fewer");
+    verify(repository, never()).updateOffer(any());
+  }
+
+  @Test
   void updateOfferShouldAllowReceivedDateExactlySevenDaysOld() {
     when(repository.findUpdateSourceByOfferNumber(81001L))
         .thenReturn(Optional.of(updateSourceWithReceivedDate(LocalDate.of(2026, 3, 4))));
@@ -2507,6 +2669,68 @@ class PurchaseOfferOracleServiceTest {
         "creator",
         Instant.parse("2026-03-01T18:00:00Z"),
         offerVolume);
+  }
+
+  private PurchaseOfferRepository.PurchaseOfferUpdateSourceRow updateSourceWithAccentedText() {
+    return updateSourceWithText(
+        "Québec Lumber", "José Tremblay", "Résumé", "Montréal", "Livraison à Port Moody");
+  }
+
+  private PurchaseOfferRepository.PurchaseOfferUpdateSourceRow updateSourceWithText(
+      String companyName,
+      String contactName,
+      String offerRemark,
+      String pickupLocation,
+      String offerCondition) {
+    PurchaseOfferRepository.PurchaseOfferUpdateSourceRow source =
+        updateSource(1000456L, "PKG-903", "P");
+    return new PurchaseOfferRepository.PurchaseOfferUpdateSourceRow(
+        source.exportPurchaseOfferNumber(),
+        source.applicationNumber(),
+        source.packageNumber(),
+        companyName,
+        contactName,
+        source.purchaseOfferAmount(),
+        source.purchaseOfferDate(),
+        source.offerWithdrawalDate(),
+        source.teacReviewDate(),
+        source.fairOfferIndicator(),
+        source.validOfferIndicator(),
+        offerRemark,
+        source.approvalIndicator(),
+        source.withdrawReason(),
+        source.exportJurisdictionCode(),
+        source.manufacturingFacilityInfo(),
+        pickupLocation,
+        offerCondition,
+        source.entryUserId(),
+        source.entryTimestamp(),
+        source.offerVolume());
+  }
+
+  private PurchaseOfferService.UpdateOfferRequest accentedSnapshotUpdate(
+      LocalDate withdrawalDate, String withdrawReason, LocalDate teacReviewDate) {
+    return new PurchaseOfferService.UpdateOfferRequest(
+        1000456L,
+        81001L,
+        "PKG-903",
+        "Québec Lumber",
+        "José Tremblay",
+        12500.25d,
+        LocalDate.of(2026, 3, 2),
+        withdrawalDate,
+        teacReviewDate == null ? LocalDate.of(2026, 3, 18) : teacReviewDate,
+        "N",
+        "Y",
+        "Résumé",
+        "N",
+        withdrawReason,
+        "P",
+        "Existing mill",
+        "00077881",
+        "Montréal",
+        "Livraison à Port Moody",
+        95.5d);
   }
 
   private PurchaseOfferRepository.PurchaseOfferUpdateSourceRow updateSourceWithReceivedDate(

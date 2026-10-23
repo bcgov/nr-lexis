@@ -47,16 +47,18 @@ export const offerVolumeContextFieldError = (
     : null
 }
 
+// Text equal to the stored value skips the character check, so stored text saves unchanged.
 export const offerTextStorageFieldError = (
   value: string,
   maximumLength: number,
   label: string,
   required = false,
+  storedValue = '',
 ): string | null =>
   firstValidationError(
     () => (required ? requiredFieldError(value, label) : null),
     () =>
-      ASCII_PATTERN.test(value.trim())
+      ASCII_PATTERN.test(value.trim()) || value.trim() === storedValue.trim()
         ? null
         : `${label} contains unsupported characters. Use unaccented letters, numbers, spaces, or standard punctuation.`,
     () => maxLengthFieldError(value, maximumLength, label),

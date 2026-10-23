@@ -1865,10 +1865,6 @@ public class OraclePermitDetailsRpcService implements PermitDetailsRpcService {
     String targetOwnerClientLocation = targetClients.ownerClientLocation();
     String targetAgentClientNumber = targetClients.agentClientNumber();
     String targetAgentClientLocation = targetClients.agentClientLocation();
-    validateClientBinding(targetExemption, targetOwnerClientNumber, exemptionErrors);
-    if (!exemptionErrors.isEmpty()) {
-      return failureMutationResponse(exemptionErrors, permitNumber);
-    }
 
     Double submittedOicRequestVolume = parseDouble(request.oicPermitTotalVolume());
     List<String> numericErrors = new ArrayList<>();
@@ -2028,7 +2024,7 @@ public class OraclePermitDetailsRpcService implements PermitDetailsRpcService {
     PermitMutationRow submittedPermit = updated;
     String submittedPermitStatusCode = normalizeCode(submittedPermit.permitStatusCode());
     ValidationResult validation =
-        permitMutationValidator.validate(submittedPermit, targetExemption.detail());
+        permitMutationValidator.validate(submittedPermit, current, targetExemption.detail());
     if (!validation.valid()) {
       return validationFailureResponse(validation, permitNumber);
     }
@@ -2171,11 +2167,9 @@ public class OraclePermitDetailsRpcService implements PermitDetailsRpcService {
           List.of("Expired permits are read-only."), permitNumber);
     }
     List<String> exemptionErrors = new ArrayList<>();
+    // A shipping save keeps the saved owner, so the owner is not checked against the exemption.
     ValidatedExemptionBinding exemption =
         validateExemptionBinding(current.exemptionNumber(), exemptionErrors);
-    if (exemption != null) {
-      validateClientBinding(exemption, current.clientNumber(), exemptionErrors);
-    }
     if (!exemptionErrors.isEmpty()) {
       return failureMutationResponse(exemptionErrors, permitNumber);
     }
@@ -2228,16 +2222,15 @@ public class OraclePermitDetailsRpcService implements PermitDetailsRpcService {
     }
 
     ValidationResult validation =
-        permitMutationValidator.validate(updated, exemption.detail());
+        permitMutationValidator.validate(updated, current, exemption.detail());
     if (!validation.valid()) {
       return validationFailureResponse(validation, permitNumber);
     }
     updated = validation.permit();
-    // Validation moves an Interior Complete permit with a blank receipt to Payment pending.
-    // Ministry staff save that change through the permit details once they confirm Payment
-    // pending, so their shipping save is refused. A Provincial Submitter can't save the details of
-    // a Completed permit, so their shipping save stores Payment pending and returns the warning.
-    if (ministryUser && !sameIgnoreCase(current.permitStatusCode(), updated.permitStatusCode())) {
+    // Validation moves an Interior Complete permit with a blank receipt to Payment pending. That
+    // change is saved through the permit details once Payment pending is confirmed, so a shipping
+    // save that would make it is refused.
+    if (!sameIgnoreCase(current.permitStatusCode(), updated.permitStatusCode())) {
       return failureMutationResponse(
           List.of(ProvincialPermitMutationValidator.PAYMENT_PENDING_SHIPPING_MESSAGE),
           permitNumber);
@@ -4637,8 +4630,12 @@ public class OraclePermitDetailsRpcService implements PermitDetailsRpcService {
       }
       ApplicationInfoRow application =
           repository.findApplicationInfoByNumber(packageInfo.applicationNumber()).orElse(null);
-      if (application == null || trimToNull(application.exemptionNumber()) == null) {
+      if (application == null) {
         return false;
+      }
+      // An application on no exemption has no package data to synchronize.
+      if (trimToNull(application.exemptionNumber()) == null) {
+        continue;
       }
       String exemptionType =
           repository.findExemptionTypeCode(application.exemptionNumber()).orElse(null);
@@ -4935,20 +4932,15 @@ public class OraclePermitDetailsRpcService implements PermitDetailsRpcService {
         throw new DataRetrievalFailureException(
             "A scale application is required for internal permit invoicing.");
       }
-      ApplicationInfoRow application =
-          applicationByNumber.computeIfAbsent(
-              applicationNumber,
-              key ->
-                  repository
-                      .findApplicationInfoByNumber(key)
-                      .orElseThrow(
-                          () ->
-                              new DataRetrievalFailureException(
-                                  "The scale application was unavailable for invoicing.")));
-      if (!sameIgnoreCase(permit.exemptionNumber(), application.exemptionNumber())) {
-        throw new DataRetrievalFailureException(
-            "The permit exemption does not match its scale applications.");
-      }
+      applicationByNumber.computeIfAbsent(
+          applicationNumber,
+          key ->
+              repository
+                  .findApplicationInfoByNumber(key)
+                  .orElseThrow(
+                      () ->
+                          new DataRetrievalFailureException(
+                              "The scale application was unavailable for invoicing.")));
 
       BigDecimal amount = calculateRoundedFeeForScale(scale, context);
       BigDecimal amvRate =

@@ -155,7 +155,7 @@ public class PurchaseOfferOracleService implements PurchaseOfferService {
   public CreateOfferResult addOffer(CreateOfferRequest request, String userId) {
     CreateOfferRequest normalized = normalizeCreateOfferRequest(request);
     Double normalizedOfferVolume = normalizeLegacyOfferVolume(normalized.offerVolume());
-    List<String> errors = validateCreateOffer(normalized);
+    List<String> errors = validateCreateOffer(normalized, null);
     if (errors.isEmpty()) {
       validateStorageNumber(errors, normalizedOfferVolume, OFFER_VOLUME_MAX, "Offer volume");
     }
@@ -267,7 +267,7 @@ public class PurchaseOfferOracleService implements PurchaseOfferService {
             : snapshotUpdateRequest(normalizedInput, current);
     Double normalizedOfferVolume = normalizeLegacyOfferVolume(updated.offerVolume());
     List<String> errors = validateUpdateIdentity(normalizedInput, current);
-    errors.addAll(validateCreateOffer(updated));
+    errors.addAll(validateCreateOffer(updated, current));
     errors.addAll(
         validateChangedReceivedDate(updated.purchaseOfferDate(), current.purchaseOfferDate()));
     if (errors.isEmpty()) {
@@ -531,7 +531,9 @@ public class PurchaseOfferOracleService implements PurchaseOfferService {
         input.offerVolume());
   }
 
-  private List<String> validateCreateOffer(CreateOfferRequest request) {
+  /** The stored offer is null on create and holds the saved values on update. */
+  private List<String> validateCreateOffer(
+      CreateOfferRequest request, PurchaseOfferRepository.PurchaseOfferUpdateSourceRow stored) {
     List<String> errors = new ArrayList<>();
     if (request.applicationNumber() == null || request.applicationNumber() <= 0) {
       errors.add(required("application number"));
@@ -568,20 +570,48 @@ public class PurchaseOfferOracleService implements PurchaseOfferService {
       errors.add(required("fair offer indicator"));
     }
     validateStorageNumber(errors, request.offerVolume(), OFFER_VOLUME_MAX, "Offer volume");
-    validateStorageText(errors, request.companyName(), COMPANY_NAME_MAX_BYTES, "Company name");
-    validateStorageText(errors, request.contactName(), CONTACT_NAME_MAX_BYTES, "Contact name");
-    validateStorageText(errors, request.offerRemark(), OFFER_REMARK_MAX_BYTES, "Offer remarks");
     validateStorageText(
-        errors, request.withdrawReason(), WITHDRAW_REASON_MAX_BYTES, "Withdraw reason");
+        errors,
+        request.companyName(),
+        stored == null ? null : stored.companyName(),
+        COMPANY_NAME_MAX_BYTES,
+        "Company name");
+    validateStorageText(
+        errors,
+        request.contactName(),
+        stored == null ? null : stored.contactName(),
+        CONTACT_NAME_MAX_BYTES,
+        "Contact name");
+    validateStorageText(
+        errors,
+        request.offerRemark(),
+        stored == null ? null : stored.offerRemark(),
+        OFFER_REMARK_MAX_BYTES,
+        "Offer remarks");
+    validateStorageText(
+        errors,
+        request.withdrawReason(),
+        stored == null ? null : stored.withdrawReason(),
+        WITHDRAW_REASON_MAX_BYTES,
+        "Withdraw reason");
     validateStorageText(
         errors,
         request.manufacturingFacilityInfo(),
+        stored == null ? null : stored.manufacturingFacilityInfo(),
         MANUFACTURING_FACILITY_MAX_BYTES,
         "Manufacturing facility information");
     validateStorageText(
-        errors, request.pickupLocation(), PICKUP_LOCATION_MAX_BYTES, "Pickup location");
+        errors,
+        request.pickupLocation(),
+        stored == null ? null : stored.pickupLocation(),
+        PICKUP_LOCATION_MAX_BYTES,
+        "Pickup location");
     validateStorageText(
-        errors, request.offerCondition(), OFFER_CONDITION_MAX_BYTES, "Offer conditions");
+        errors,
+        request.offerCondition(),
+        stored == null ? null : stored.offerCondition(),
+        OFFER_CONDITION_MAX_BYTES,
+        "Offer conditions");
     return errors;
   }
 
@@ -607,15 +637,18 @@ public class PurchaseOfferOracleService implements PurchaseOfferService {
     }
   }
 
+  /** Text equal to the stored value skips the character check, so stored text saves unchanged. */
   private void validateStorageText(
-      List<String> errors, String value, int maximumBytes, String fieldName) {
+      List<String> errors, String value, String storedValue, int maximumBytes, String fieldName) {
     if (value == null) {
       return;
     }
     if (value.length() > maximumBytes) {
       errors.add(fieldName + " must be " + maximumBytes + " ASCII characters or fewer");
     }
-    if (!value.chars().allMatch(character -> character <= 0x7f)) {
+    String trimmed = trimToNull(value);
+    boolean unchanged = trimmed != null && trimmed.equals(trimToNull(storedValue));
+    if (!unchanged && !value.chars().allMatch(character -> character <= 0x7f)) {
       errors.add(fieldName + " must contain ASCII characters only");
     }
   }
