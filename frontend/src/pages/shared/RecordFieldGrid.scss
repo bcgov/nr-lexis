@@ -9,12 +9,6 @@
   padding-inline: 0;
 }
 
-.legacy-form-footer .record-field-grid.cds--css-grid,
-.legacy-form-footer .record-field-grid.cds--subgrid {
-  flex: 1 1 24rem;
-  margin: 0;
-}
-
 // Exemption create's Conditions row sits in a flex action row; it takes the whole row.
 .create-form-comments > .record-field-grid.cds--css-grid,
 .create-form-comments > .record-field-grid.cds--subgrid {

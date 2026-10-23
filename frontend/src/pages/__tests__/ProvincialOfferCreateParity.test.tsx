@@ -6,7 +6,7 @@ import ProvincialOfferCreatePage from '@/pages/ProvincialOfferCreate'
 import { useAuth } from '@/context/auth/useAuth'
 import {
   submitProvincialOfferCreate,
-  type CreateSubmissionResult,
+  type OfferSubmissionResult,
 } from '@/service/create-submit-service'
 import {
   fetchOfferApplicationDetails,
@@ -67,15 +67,19 @@ const EMAIL_QUEUED_MESSAGE =
 
 const createResult = (
   createdId: string,
-  overrides: Partial<CreateSubmissionResult> = {},
-): CreateSubmissionResult => ({
+  overrides: Partial<OfferSubmissionResult> = {},
+): OfferSubmissionResult => ({
   success: true,
   message: EMAIL_QUEUED_MESSAGE,
   createdId,
   errors: [],
   warnings: [],
+  emailRequired: true,
+  applicantEmailFound: true,
   ...overrides,
 })
+
+const fieldValue = (label: string) => screen.getByText(label, { selector: 'dt' }).nextElementSibling
 
 const scopedSubmitterAuth = () =>
   createTestAuthContext({
@@ -129,11 +133,12 @@ describe('Provincial offer create page', () => {
     mockedSubmitProvincialOfferCreate.mockResolvedValue(createResult('8090'))
   })
 
-  describe('listing date', () => {
-    it('shows the application listing date in ISO format', async () => {
+  describe('list date', () => {
+    it('shows the application list date in ISO format', async () => {
       renderCreatePage(APPROVER_QUERY)
 
-      expect(await screen.findByLabelText('Listing date')).toHaveValue('2026-02-26')
+      await screen.findByLabelText('Contact name')
+      expect(fieldValue('List date')).toHaveTextContent('2026-02-26')
     })
   })
 
@@ -148,9 +153,10 @@ describe('Provincial offer create page', () => {
 
       renderCreatePage(SCOPED_QUERY)
 
-      expect(await screen.findByDisplayValue('Buyer, Jane Quinn')).toHaveAttribute('readonly')
+      await waitFor(() => expect(fieldValue('Company')).toHaveTextContent('Buyer, Jane Quinn'))
+      expect(screen.queryByLabelText('Company')).not.toBeInTheDocument()
       await waitFor(() => expect(screen.getByLabelText('Contact name')).toHaveValue('Jane Quinn'))
-      await userEvent.click(screen.getByRole('button', { name: 'Save new offer' }))
+      await userEvent.click(screen.getByRole('button', { name: 'Save offer' }))
 
       await waitFor(() => {
         expect(mockedSubmitProvincialOfferCreate).toHaveBeenCalledWith(
@@ -176,7 +182,7 @@ describe('Provincial offer create page', () => {
       await waitFor(() => expect(screen.getByLabelText('Contact name')).toHaveValue('Jane Quinn'))
       await userEvent.clear(screen.getByLabelText('Contact name'))
       await userEvent.type(screen.getByLabelText('Contact name'), 'Sam Buyer')
-      await userEvent.click(screen.getByRole('button', { name: 'Save new offer' }))
+      await userEvent.click(screen.getByRole('button', { name: 'Save offer' }))
 
       await waitFor(() => {
         expect(mockedSubmitProvincialOfferCreate).toHaveBeenCalledWith(
@@ -190,7 +196,9 @@ describe('Provincial offer create page', () => {
 
       renderCreatePage(SCOPED_QUERY)
 
-      expect(await screen.findByDisplayValue('Authoritative Buyer Ltd.')).toBeInTheDocument()
+      await waitFor(() =>
+        expect(fieldValue('Company')).toHaveTextContent('Authoritative Buyer Ltd.'),
+      )
       expect(screen.getByLabelText('Contact name')).toHaveValue('')
     })
 
@@ -214,7 +222,7 @@ describe('Provincial offer create page', () => {
         legalContactName: 'Jane Quinn',
       })
 
-      expect(await screen.findByDisplayValue('Buyer, Jane Quinn')).toBeInTheDocument()
+      await waitFor(() => expect(fieldValue('Company')).toHaveTextContent('Buyer, Jane Quinn'))
       expect(contactName).toHaveValue('Typed Contact')
     })
   })
@@ -228,7 +236,7 @@ describe('Provincial offer create page', () => {
 
       await userEvent.clear(teacReviewDate)
       expect(teacReviewDate).toHaveValue('')
-      await userEvent.click(screen.getByRole('button', { name: 'Save new offer' }))
+      await userEvent.click(screen.getByRole('button', { name: 'Save offer' }))
 
       await waitFor(() => {
         expect(mockedSubmitProvincialOfferCreate).toHaveBeenCalledWith(
@@ -243,7 +251,7 @@ describe('Provincial offer create page', () => {
       await waitFor(() =>
         expect(screen.getByLabelText('TEAC review date')).toHaveValue('2026-03-05'),
       )
-      await userEvent.click(screen.getByRole('button', { name: 'Save new offer' }))
+      await userEvent.click(screen.getByRole('button', { name: 'Save offer' }))
 
       await waitFor(() => {
         expect(mockedSubmitProvincialOfferCreate).toHaveBeenCalledWith(
@@ -255,8 +263,8 @@ describe('Provincial offer create page', () => {
     it('keeps the date from the link instead of the schedule date', async () => {
       renderCreatePage(`${APPROVER_QUERY}&teacReviewDate=2026-06-01`)
 
-      expect(await screen.findByLabelText('Species/grade')).toHaveValue('H/SA')
-      expect(screen.getByLabelText('TEAC review date')).toHaveValue('2026-06-01')
+      expect(await screen.findByLabelText('TEAC review date')).toHaveValue('2026-06-01')
+      await waitFor(() => expect(fieldValue('Species/grade')).toHaveTextContent('H/SA'))
     })
 
     it('fills the new schedule date when the application changes and the date was not edited', async () => {
@@ -299,28 +307,34 @@ describe('Provincial offer create page', () => {
       await userEvent.clear(applicationNumber)
       await userEvent.type(applicationNumber, '2002')
 
-      await waitFor(() => expect(screen.getByLabelText('Species/grade')).toHaveValue('F/LUM'))
+      await waitFor(() => expect(fieldValue('Species/grade')).toHaveTextContent('F/LUM'))
       expect(screen.getByLabelText('TEAC review date')).toHaveValue('2026-05-05')
     })
   })
 
   describe('save notice', () => {
-    it('carries the queued-email message to the offer page', async () => {
+    it('carries a success notice when the applicant and the regional office were emailed', async () => {
       renderCreatePage(APPROVER_QUERY)
 
       await waitFor(() =>
         expect(screen.getByLabelText('TEAC review date')).toHaveValue('2026-03-05'),
       )
-      await userEvent.click(screen.getByRole('button', { name: 'Save new offer' }))
+      await userEvent.click(screen.getByRole('button', { name: 'Save offer' }))
 
       await waitFor(() => {
         expect(mockNavigate).toHaveBeenCalledWith('/provincial/offers/8090', {
-          state: { offerCreationNotice: { warnings: [], message: EMAIL_QUEUED_MESSAGE } },
+          state: {
+            offerCreationNotice: {
+              kind: 'success',
+              title: 'Offer saved.',
+              message: 'Email notification sent to the applicant and the regional office.',
+            },
+          },
         })
       })
     })
 
-    it('carries the save message with the warnings when the save raised them', async () => {
+    it('carries a warning to notify the regional office when the save raised warnings', async () => {
       mockedSubmitProvincialOfferCreate.mockResolvedValue(
         createResult('8090', {
           message: 'The purchase offer was saved successfully.',
@@ -332,31 +346,64 @@ describe('Provincial offer create page', () => {
       await waitFor(() =>
         expect(screen.getByLabelText('TEAC review date')).toHaveValue('2026-03-05'),
       )
-      await userEvent.click(screen.getByRole('button', { name: 'Save new offer' }))
+      await userEvent.click(screen.getByRole('button', { name: 'Save offer' }))
 
       await waitFor(() => {
         expect(mockNavigate).toHaveBeenCalledWith('/provincial/offers/8090', {
           state: {
             offerCreationNotice: {
-              warnings: [NO_CLIENT_EMAIL_WARNING],
-              message: 'The purchase offer was saved successfully.',
+              kind: 'warning',
+              title: 'Offer saved.',
+              message:
+                'Email notification sent to the applicant. Notify the regional office another way.',
             },
           },
         })
       })
     })
 
-    it('opens the offer without a notice when the server sent no message', async () => {
-      mockedSubmitProvincialOfferCreate.mockResolvedValue(createResult('8090', { message: ' ' }))
+    it('carries a warning that no email was sent when the applicant has no email address', async () => {
+      mockedSubmitProvincialOfferCreate.mockResolvedValue(
+        createResult('8090', { applicantEmailFound: false }),
+      )
       renderCreatePage(APPROVER_QUERY)
 
       await waitFor(() =>
         expect(screen.getByLabelText('TEAC review date')).toHaveValue('2026-03-05'),
       )
-      await userEvent.click(screen.getByRole('button', { name: 'Save new offer' }))
+      await userEvent.click(screen.getByRole('button', { name: 'Save offer' }))
 
       await waitFor(() => {
-        expect(mockNavigate).toHaveBeenCalledWith('/provincial/offers/8090')
+        expect(mockNavigate).toHaveBeenCalledWith('/provincial/offers/8090', {
+          state: {
+            offerCreationNotice: {
+              kind: 'warning',
+              title: 'Offer saved.',
+              message:
+                'No email was sent. Let the applicant and the regional office know about your offer another way.',
+            },
+          },
+        })
+      })
+    })
+
+    it('carries a notice without a message when no email was required', async () => {
+      mockedSubmitProvincialOfferCreate.mockResolvedValue(
+        createResult('8090', { emailRequired: false, applicantEmailFound: false }),
+      )
+      renderCreatePage(APPROVER_QUERY)
+
+      await waitFor(() =>
+        expect(screen.getByLabelText('TEAC review date')).toHaveValue('2026-03-05'),
+      )
+      await userEvent.click(screen.getByRole('button', { name: 'Save offer' }))
+
+      await waitFor(() => {
+        expect(mockNavigate).toHaveBeenCalledWith('/provincial/offers/8090', {
+          state: {
+            offerCreationNotice: { kind: 'success', title: 'Offer saved.', message: '' },
+          },
+        })
       })
     })
   })

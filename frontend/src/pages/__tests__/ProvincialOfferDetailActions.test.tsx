@@ -33,10 +33,13 @@ const mockedReleaseOfferEditLock = vi.mocked(releaseOfferEditLock)
 const mockedSubmitProvincialOfferUpdate = vi.mocked(submitProvincialOfferUpdate)
 const mockedFetchOfferScaleDetails = vi.mocked(fetchOfferScaleDetails)
 
-const NO_CLIENT_EMAIL_WARNING =
-  'As no valid email address is attached to this client, no email notification will be sent and the Region will not be notified, consequently you must notify both the Applicant and the corresponding Regional office of your offer and/or offer withdrawal at this time.'
-const EMAIL_QUEUED_MESSAGE =
-  'The purchase offer was saved successfully. An email notification is queued for the applicant and the regional office.'
+const NO_REGIONAL_EMAIL_WARNING =
+  'The regional office does not have an email address on file, so no email notification will be sent to it.'
+const EMAILED_BOTH_MESSAGE = 'Email notification sent to the applicant and the regional office.'
+const NOTIFY_REGION_MESSAGE =
+  'Email notification sent to the applicant. Notify the regional office another way.'
+const NO_EMAIL_SENT_MESSAGE =
+  'No email was sent. Let the applicant and the regional office know about your offer another way.'
 
 const offerDetail: ProvincialOfferDetail = {
   offerNumber: 81001,
@@ -114,6 +117,8 @@ describe('Provincial Offer Detail Actions', () => {
       createdId: '81001',
       errors: [],
       warnings: [],
+      emailRequired: false,
+      applicantEmailFound: false,
     })
   })
 
@@ -143,10 +148,11 @@ describe('Provincial Offer Detail Actions', () => {
       '/provincial/offers',
     )
     expect(
-      within(pageHeader as HTMLElement).getByRole('button', { name: 'Edit' }),
+      within(pageHeader as HTMLElement).getByRole('button', { name: 'Edit offer' }),
     ).toBeInTheDocument()
-    expect(screen.getByText('Author')).toBeInTheDocument()
-    expect(screen.getByText('idir\\offer-author')).toBeInTheDocument()
+    expect(
+      within(pageHeader as HTMLElement).getByText('Author: idir\\offer-author'),
+    ).toBeInTheDocument()
   })
 
   it('groups each offer form area in a distinct section', async () => {
@@ -161,9 +167,11 @@ describe('Provincial Offer Detail Actions', () => {
       screen.getByRole('group', { name: 'Approval' }),
     ]
 
+    const card = sections[0].closest('.offer-form-card')
+    expect(card).toBeInTheDocument()
     for (const section of sections) {
       expect(section).toHaveClass('offer-form-section')
-      expect(section.closest('.provincial-offer-sections')).toBeInTheDocument()
+      expect(section.closest('.offer-form-card')).toBe(card)
     }
   })
 
@@ -184,13 +192,13 @@ describe('Provincial Offer Detail Actions', () => {
     }
     expectHiddenFields()
 
-    await userEvent.click(await screen.findByRole('button', { name: 'Edit' }))
+    await userEvent.click(await screen.findByRole('button', { name: 'Edit offer' }))
     expectHiddenFields()
 
     const amountInput = screen.getByLabelText('Offer amount ($/m³)')
     await userEvent.clear(amountInput)
     await userEvent.type(amountInput, '13000')
-    await userEvent.click(screen.getByRole('button', { name: 'Save' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Save changes' }))
 
     await waitFor(() => {
       expect(mockedSubmitProvincialOfferUpdate).toHaveBeenCalledWith(
@@ -208,7 +216,7 @@ describe('Provincial Offer Detail Actions', () => {
     await screen.findByRole('heading', { name: 'Offer 81001' })
     expect(screen.queryByLabelText('TEAC review date')).not.toBeInTheDocument()
     expect(fieldValue('TEAC review date')).toHaveTextContent('Mar 5, 2026')
-    await userEvent.click(await screen.findByRole('button', { name: 'Edit' }))
+    await userEvent.click(await screen.findByRole('button', { name: 'Edit offer' }))
     expect(screen.getByLabelText('TEAC review date')).toHaveValue('2026-03-05')
     expect(screen.getByLabelText('TEAC review date')).not.toBeDisabled()
 
@@ -219,7 +227,7 @@ describe('Provincial Offer Detail Actions', () => {
     await userEvent.clear(amountInput)
     await userEvent.type(amountInput, '13000')
 
-    await userEvent.click(screen.getByRole('button', { name: 'Save' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Save changes' }))
 
     await waitFor(() => {
       expect(mockedSubmitProvincialOfferUpdate).toHaveBeenCalledWith(
@@ -234,117 +242,100 @@ describe('Provincial Offer Detail Actions', () => {
         }),
       )
     })
-    expect(await screen.findByText('Offer saved')).toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: 'Save' })).not.toBeInTheDocument()
+    expect(await screen.findByText('Offer saved.')).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Save changes' })).not.toBeInTheDocument()
   })
 
-  it('shows an offer notification warning returned after an update', async () => {
+  it('shows a warning to notify the regional office after an update that raised warnings', async () => {
     mockedSubmitProvincialOfferUpdate.mockResolvedValue({
       success: true,
       message: 'The purchase offer was updated successfully.',
       createdId: '81001',
       errors: [],
-      warnings: [NO_CLIENT_EMAIL_WARNING],
+      warnings: [NO_REGIONAL_EMAIL_WARNING],
+      emailRequired: true,
+      applicantEmailFound: true,
     })
     renderPage()
 
     await screen.findByRole('heading', { name: 'Offer 81001' })
-    await userEvent.click(await screen.findByRole('button', { name: 'Edit' }))
+    await userEvent.click(await screen.findByRole('button', { name: 'Edit offer' }))
     const amountInput = screen.getByLabelText('Offer amount ($/m³)')
     await userEvent.clear(amountInput)
     await userEvent.type(amountInput, '13000')
-    await userEvent.click(screen.getByRole('button', { name: 'Save' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Save changes' }))
 
-    expect(await screen.findByText('Offer saved with warning')).toBeInTheDocument()
+    expect(await screen.findByText('Offer saved.')).toBeInTheDocument()
     expect(
-      screen.getByText(`The purchase offer was updated successfully. ${NO_CLIENT_EMAIL_WARNING}`),
-    ).toBeInTheDocument()
-  })
-
-  it('shows an offer notification warning carried from the create page', async () => {
-    render(
-      <MemoryRouter
-        initialEntries={[
-          {
-            pathname: '/provincial/offers/81001',
-            state: {
-              offerCreationNotice: {
-                warnings: [NO_CLIENT_EMAIL_WARNING],
-                message: 'The purchase offer was saved successfully.',
-              },
-            },
-          },
-        ]}
-      >
-        <Routes>
-          <Route path="/provincial/offers/:offerNumber" element={<ProvincialOfferDetailsPage />} />
-        </Routes>
-      </MemoryRouter>,
-    )
-
-    await screen.findByRole('heading', { name: 'Offer 81001' })
-    expect(await screen.findByText('Offer saved with warning')).toBeInTheDocument()
+      screen.getByText(NOTIFY_REGION_MESSAGE).closest('.cds--inline-notification'),
+    ).toHaveClass('cds--inline-notification--warning')
+    expect(screen.queryByText(NO_REGIONAL_EMAIL_WARNING)).not.toBeInTheDocument()
     expect(
-      screen.getByText(`The purchase offer was saved successfully. ${NO_CLIENT_EMAIL_WARNING}`),
-    ).toBeInTheDocument()
+      screen.queryByText('The purchase offer was updated successfully.'),
+    ).not.toBeInTheDocument()
   })
 
-  it('shows only the warnings when the create page carried a blank save message', async () => {
-    render(
-      <MemoryRouter
-        initialEntries={[
-          {
-            pathname: '/provincial/offers/81001',
-            state: { offerCreationNotice: { warnings: [NO_CLIENT_EMAIL_WARNING], message: '' } },
-          },
-        ]}
-      >
-        <Routes>
-          <Route path="/provincial/offers/:offerNumber" element={<ProvincialOfferDetailsPage />} />
-        </Routes>
-      </MemoryRouter>,
-    )
-
-    await screen.findByRole('heading', { name: 'Offer 81001' })
-    expect(await screen.findByText('Offer saved with warning')).toBeInTheDocument()
-    expect(screen.getByText(NO_CLIENT_EMAIL_WARNING)).toBeInTheDocument()
-  })
-
-  it('shows that the notification is queued after an update that emails the applicant', async () => {
+  it('shows that no email was sent after an update when the applicant has no email address', async () => {
     mockedSubmitProvincialOfferUpdate.mockResolvedValue({
       success: true,
-      message:
-        'The purchase offer was updated successfully. An email notification is queued for the applicant and the regional office.',
+      message: 'The purchase offer was updated successfully.',
       createdId: '81001',
       errors: [],
       warnings: [],
+      emailRequired: true,
+      applicantEmailFound: false,
     })
     renderPage()
 
     await screen.findByRole('heading', { name: 'Offer 81001' })
-    await userEvent.click(await screen.findByRole('button', { name: 'Edit' }))
+    await userEvent.click(await screen.findByRole('button', { name: 'Edit offer' }))
     const amountInput = screen.getByLabelText('Offer amount ($/m³)')
     await userEvent.clear(amountInput)
     await userEvent.type(amountInput, '13000')
-    await userEvent.click(screen.getByRole('button', { name: 'Save' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Save changes' }))
 
-    expect(await screen.findByText('Offer saved')).toBeInTheDocument()
+    expect(await screen.findByText('Offer saved.')).toBeInTheDocument()
+    expect(
+      screen.getByText(NO_EMAIL_SENT_MESSAGE).closest('.cds--inline-notification'),
+    ).toHaveClass('cds--inline-notification--warning')
+  })
+
+  it('titles the notice Offer withdrawn only on the save that adds a withdrawal date', async () => {
+    mockedFetchProvincialOfferDetail.mockResolvedValue({
+      ...offerDetail,
+      offerWithdrawalDate: null,
+      withdrawReason: null,
+    })
+    mockedSubmitProvincialOfferUpdate.mockResolvedValue({
+      success: true,
+      message: 'The purchase offer was updated successfully.',
+      createdId: '81001',
+      errors: [],
+      warnings: [],
+      emailRequired: true,
+      applicantEmailFound: false,
+    })
+    renderPage()
+
+    await screen.findByRole('heading', { name: 'Offer 81001' })
+    await userEvent.click(await screen.findByRole('button', { name: 'Edit offer' }))
+    await userEvent.type(screen.getByLabelText('Offer withdrawal date'), '2026-03-10')
+    await userEvent.type(screen.getByLabelText(/Offer withdrawal reason/), 'Buyer withdrew')
+    await userEvent.click(screen.getByRole('button', { name: 'Save changes' }))
+
+    expect(await screen.findByText('Offer withdrawn.')).toBeInTheDocument()
     expect(
       screen.getByText(
-        'The purchase offer was updated successfully. An email notification is queued for the applicant and the regional office.',
+        'No email was sent. Let the applicant and the regional office know about your withdrawal another way.',
       ),
     ).toBeInTheDocument()
+    expect(screen.queryByText('Offer saved.')).not.toBeInTheDocument()
   })
 
-  it('shows that the notification is queued after the create page saved the offer', async () => {
+  const renderCarriedNotice = (offerCreationNotice: unknown) =>
     render(
       <MemoryRouter
-        initialEntries={[
-          {
-            pathname: '/provincial/offers/81001',
-            state: { offerCreationNotice: { warnings: [], message: EMAIL_QUEUED_MESSAGE } },
-          },
-        ]}
+        initialEntries={[{ pathname: '/provincial/offers/81001', state: { offerCreationNotice } }]}
       >
         <Routes>
           <Route path="/provincial/offers/:offerNumber" element={<ProvincialOfferDetailsPage />} />
@@ -352,38 +343,51 @@ describe('Provincial Offer Detail Actions', () => {
       </MemoryRouter>,
     )
 
-    await screen.findByRole('heading', { name: 'Offer 81001' })
-    expect(await screen.findByText('Offer saved')).toBeInTheDocument()
-    expect(screen.getByText(EMAIL_QUEUED_MESSAGE)).toBeInTheDocument()
-    expect(screen.queryByText('Offer saved with warning')).not.toBeInTheDocument()
-  })
-
-  it('puts the save message ahead of the warnings when the create page carried both', async () => {
-    render(
-      <MemoryRouter
-        initialEntries={[
-          {
-            pathname: '/provincial/offers/81001',
-            state: {
-              offerCreationNotice: {
-                warnings: [NO_CLIENT_EMAIL_WARNING],
-                message: 'The purchase offer was saved successfully.',
-              },
-            },
-          },
-        ]}
-      >
-        <Routes>
-          <Route path="/provincial/offers/:offerNumber" element={<ProvincialOfferDetailsPage />} />
-        </Routes>
-      </MemoryRouter>,
-    )
+  it('shows an offer notification warning carried from the create page', async () => {
+    renderCarriedNotice({ kind: 'warning', title: 'Offer saved.', message: NO_EMAIL_SENT_MESSAGE })
 
     await screen.findByRole('heading', { name: 'Offer 81001' })
-    expect(await screen.findByText('Offer saved with warning')).toBeInTheDocument()
+    expect(await screen.findByText('Offer saved.')).toBeInTheDocument()
     expect(
-      screen.getByText(`The purchase offer was saved successfully. ${NO_CLIENT_EMAIL_WARNING}`),
-    ).toBeInTheDocument()
+      screen.getByText(NO_EMAIL_SENT_MESSAGE).closest('.cds--inline-notification'),
+    ).toHaveClass('cds--inline-notification--warning')
+  })
+
+  it('shows the regional office warning carried from the create page', async () => {
+    renderCarriedNotice({ kind: 'warning', title: 'Offer saved.', message: NOTIFY_REGION_MESSAGE })
+
+    await screen.findByRole('heading', { name: 'Offer 81001' })
+    expect(await screen.findByText('Offer saved.')).toBeInTheDocument()
+    expect(
+      screen.getByText(NOTIFY_REGION_MESSAGE).closest('.cds--inline-notification'),
+    ).toHaveClass('cds--inline-notification--warning')
+  })
+
+  it('shows that the applicant and regional office were emailed after the create page saved the offer', async () => {
+    renderCarriedNotice({ kind: 'success', title: 'Offer saved.', message: EMAILED_BOTH_MESSAGE })
+
+    await screen.findByRole('heading', { name: 'Offer 81001' })
+    expect(await screen.findByText('Offer saved.')).toBeInTheDocument()
+    expect(screen.getByText(EMAILED_BOTH_MESSAGE).closest('.cds--inline-notification')).toHaveClass(
+      'cds--inline-notification--success',
+    )
+  })
+
+  it('shows only the title when the create page carried a notice without a message', async () => {
+    renderCarriedNotice({ kind: 'success', title: 'Offer saved.', message: '' })
+
+    await screen.findByRole('heading', { name: 'Offer 81001' })
+    expect(
+      (await screen.findByText('Offer saved.')).closest('.cds--inline-notification'),
+    ).toHaveClass('cds--inline-notification--success')
+    expect(screen.queryByText(EMAILED_BOTH_MESSAGE)).not.toBeInTheDocument()
+  })
+
+  it('opens an offer created from the create page without a back link', async () => {
+    renderCarriedNotice({ kind: 'success', title: 'Offer saved.', message: '' })
+
+    await screen.findByRole('heading', { name: 'Offer 81001' })
+    expect(screen.queryByRole('link', { name: 'Back to Offer search' })).not.toBeInTheDocument()
   })
 
   it('hides Edit when the server grants an offering client no rights after the withdrawal day', async () => {
@@ -399,7 +403,7 @@ describe('Provincial Offer Detail Actions', () => {
     renderPage()
 
     await screen.findByRole('heading', { name: 'Offer 81001' })
-    expect(screen.queryByRole('button', { name: 'Edit' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Edit offer' })).not.toBeInTheDocument()
   })
 
   it('keeps Edit when the server grants an offering client rights on the withdrawal day', async () => {
@@ -415,16 +419,16 @@ describe('Provincial Offer Detail Actions', () => {
     renderPage()
 
     await screen.findByRole('heading', { name: 'Offer 81001' })
-    expect(await screen.findByRole('button', { name: 'Edit' })).toBeInTheDocument()
+    expect(await screen.findByRole('button', { name: 'Edit offer' })).toBeInTheDocument()
   })
 
   it('submits an explicitly cleared offer condition', async () => {
     renderPage()
 
     await screen.findByRole('heading', { name: 'Offer 81001' })
-    await userEvent.click(await screen.findByRole('button', { name: 'Edit' }))
-    await userEvent.clear(screen.getByLabelText('Offer conditions / remarks'))
-    await userEvent.click(screen.getByRole('button', { name: 'Save' }))
+    await userEvent.click(await screen.findByRole('button', { name: 'Edit offer' }))
+    await userEvent.clear(screen.getByLabelText('Offer conditions/remarks'))
+    await userEvent.click(screen.getByRole('button', { name: 'Save changes' }))
 
     await waitFor(() => {
       expect(mockedSubmitProvincialOfferUpdate).toHaveBeenCalledWith(
@@ -440,9 +444,9 @@ describe('Provincial Offer Detail Actions', () => {
     renderPage()
 
     await screen.findByRole('heading', { name: 'Offer 81001' })
-    await userEvent.click(await screen.findByRole('button', { name: 'Edit' }))
+    await userEvent.click(await screen.findByRole('button', { name: 'Edit offer' }))
     await userEvent.clear(screen.getByLabelText('Offer volume (m³)'))
-    await userEvent.click(screen.getByRole('button', { name: 'Save' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Save changes' }))
 
     await waitFor(() => {
       expect(mockedSubmitProvincialOfferUpdate).toHaveBeenCalledWith(
@@ -460,13 +464,13 @@ describe('Provincial Offer Detail Actions', () => {
       renderPage()
 
       await screen.findByRole('heading', { name: 'Offer 81001' })
-      await userEvent.click(await screen.findByRole('button', { name: 'Edit' }))
+      await userEvent.click(await screen.findByRole('button', { name: 'Edit offer' }))
       const volumeInput = screen.getByLabelText('Offer volume (m³)')
       await userEvent.clear(volumeInput)
       await userEvent.type(volumeInput, volume)
       await userEvent.tab()
       expect(volumeInput).toHaveValue('0.0')
-      await userEvent.click(screen.getByRole('button', { name: 'Save' }))
+      await userEvent.click(screen.getByRole('button', { name: 'Save changes' }))
 
       await waitFor(() => {
         expect(mockedSubmitProvincialOfferUpdate).toHaveBeenCalledWith(
@@ -481,13 +485,13 @@ describe('Provincial Offer Detail Actions', () => {
     renderPage()
 
     await screen.findByRole('heading', { name: 'Offer 81001' })
-    await userEvent.click(await screen.findByRole('button', { name: 'Edit' }))
-    await userEvent.clear(screen.getByLabelText('Offer conditions / remarks'))
-    await userEvent.click(screen.getByRole('button', { name: 'Save' }))
+    await userEvent.click(await screen.findByRole('button', { name: 'Edit offer' }))
+    await userEvent.clear(screen.getByLabelText('Offer conditions/remarks'))
+    await userEvent.click(screen.getByRole('button', { name: 'Save changes' }))
 
     await waitFor(() => {
       expect(mockedSubmitProvincialOfferUpdate).toHaveBeenCalledWith(
-        expect.objectContaining({ offerVolume: '0', offerCondition: '' }),
+        expect.objectContaining({ offerVolume: '0.0', offerCondition: '' }),
       )
     })
   })
@@ -496,11 +500,11 @@ describe('Provincial Offer Detail Actions', () => {
     renderPage()
 
     await screen.findByRole('heading', { name: 'Offer 81001' })
-    await userEvent.click(await screen.findByRole('button', { name: 'Edit' }))
+    await userEvent.click(await screen.findByRole('button', { name: 'Edit offer' }))
     const offerVolumeInput = screen.getByLabelText('Offer volume (m³)')
     await userEvent.clear(offerVolumeInput)
     await userEvent.type(offerVolumeInput, '45.6')
-    await userEvent.click(screen.getByRole('button', { name: 'Save' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Save changes' }))
 
     expect(
       await screen.findAllByText('Offer volume cannot exceed the application/package volume'),
@@ -519,11 +523,11 @@ describe('Provincial Offer Detail Actions', () => {
     await screen.findByRole('heading', { name: 'Offer 81001' })
     expect(fieldValue('Application/package volume (m³)')).toHaveTextContent('12.2')
     expect(fieldValue('Offer volume (m³)')).toHaveTextContent('12.1')
-    await userEvent.click(await screen.findByRole('button', { name: 'Edit' }))
+    await userEvent.click(await screen.findByRole('button', { name: 'Edit offer' }))
     const offerVolumeInput = screen.getByLabelText('Offer volume (m³)')
     await userEvent.clear(offerVolumeInput)
     await userEvent.type(offerVolumeInput, '12.3')
-    await userEvent.click(screen.getByRole('button', { name: 'Save' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Save changes' }))
 
     expect(
       await screen.findAllByText('Offer volume cannot exceed the application/package volume'),
@@ -540,11 +544,11 @@ describe('Provincial Offer Detail Actions', () => {
     renderPage()
 
     await screen.findByRole('heading', { name: 'Offer 81001' })
-    await userEvent.click(await screen.findByRole('button', { name: 'Edit' }))
+    await userEvent.click(await screen.findByRole('button', { name: 'Edit offer' }))
     const offerVolumeInput = screen.getByLabelText('Offer volume (m³)')
     await userEvent.clear(offerVolumeInput)
     await userEvent.type(offerVolumeInput, '12.24')
-    await userEvent.click(screen.getByRole('button', { name: 'Save' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Save changes' }))
 
     expect(offerVolumeInput).toHaveValue('12.24')
     expect(
@@ -561,12 +565,12 @@ describe('Provincial Offer Detail Actions', () => {
     renderPage()
 
     await screen.findByRole('heading', { name: 'Offer 81001' })
-    await userEvent.click(await screen.findByRole('button', { name: 'Edit' }))
+    await userEvent.click(await screen.findByRole('button', { name: 'Edit offer' }))
     expect(screen.getByLabelText('Offer volume (m³)')).toHaveValue('')
     const amountInput = screen.getByLabelText('Offer amount ($/m³)')
     await userEvent.clear(amountInput)
     await userEvent.type(amountInput, '13000')
-    await userEvent.click(screen.getByRole('button', { name: 'Save' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Save changes' }))
 
     await waitFor(() => {
       expect(mockedSubmitProvincialOfferUpdate).toHaveBeenCalledWith(
@@ -595,11 +599,11 @@ describe('Provincial Offer Detail Actions', () => {
     renderPage()
 
     await screen.findByRole('heading', { name: 'Offer 81001' })
-    await userEvent.click(screen.getByRole('button', { name: 'Edit' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Edit offer' }))
     const remarkInput = screen.getByLabelText('Offer remarks')
     await userEvent.clear(remarkInput)
     await userEvent.type(remarkInput, 'First unrelated update')
-    await userEvent.click(screen.getByRole('button', { name: 'Save' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Save changes' }))
 
     await waitFor(() => expect(mockedFetchProvincialOfferDetail).toHaveBeenCalledTimes(2))
     await waitFor(() => expect(fieldValue('Offer volume (m³)')).toHaveTextContent(/^95\.5$/))
@@ -608,11 +612,11 @@ describe('Provincial Offer Detail Actions', () => {
       expect.objectContaining({ offerVolume: '95.54' }),
     )
 
-    await userEvent.click(screen.getByRole('button', { name: 'Edit' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Edit offer' }))
     const refreshedRemarkInput = screen.getByLabelText('Offer remarks')
     await userEvent.clear(refreshedRemarkInput)
     await userEvent.type(refreshedRemarkInput, 'Second unrelated update')
-    await userEvent.click(screen.getByRole('button', { name: 'Save' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Save changes' }))
 
     await waitFor(() => expect(mockedSubmitProvincialOfferUpdate).toHaveBeenCalledTimes(2))
     expect(mockedSubmitProvincialOfferUpdate).toHaveBeenNthCalledWith(
@@ -629,13 +633,10 @@ describe('Provincial Offer Detail Actions', () => {
     renderPage()
 
     await screen.findByRole('heading', { name: 'Offer 81001' })
-    await userEvent.click(await screen.findByRole('button', { name: 'Edit' }))
-    await userEvent.clear(screen.getByLabelText('Offer conditions / remarks'))
-    await userEvent.type(
-      screen.getByLabelText('Offer conditions / remarks'),
-      'Reviewed by ministry',
-    )
-    await userEvent.click(screen.getByRole('button', { name: 'Save' }))
+    await userEvent.click(await screen.findByRole('button', { name: 'Edit offer' }))
+    await userEvent.clear(screen.getByLabelText('Offer conditions/remarks'))
+    await userEvent.type(screen.getByLabelText('Offer conditions/remarks'), 'Reviewed by ministry')
+    await userEvent.click(screen.getByRole('button', { name: 'Save changes' }))
 
     await waitFor(() => {
       expect(mockedSubmitProvincialOfferUpdate).toHaveBeenCalledWith(
@@ -655,19 +656,26 @@ describe('Provincial Offer Detail Actions', () => {
         'The offer edit lock has expired or is held by another user. Close and re-open the offer before saving again.',
       errors: [],
       warnings: [],
+      emailRequired: false,
+      applicantEmailFound: false,
     })
     renderPage()
 
     await screen.findByRole('heading', { name: 'Offer 81001' })
-    await userEvent.click(await screen.findByRole('button', { name: 'Edit' }))
+    await userEvent.click(await screen.findByRole('button', { name: 'Edit offer' }))
     const amountInput = screen.getByLabelText('Offer amount ($/m³)')
     await userEvent.clear(amountInput)
     await userEvent.type(amountInput, '13000')
-    await userEvent.click(screen.getByRole('button', { name: 'Save' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Save changes' }))
 
-    expect(await screen.findByText('Save failed')).toBeInTheDocument()
+    expect(await screen.findByText('Offer not saved.')).toBeInTheDocument()
+    expect(
+      screen.getByText(
+        'The offer edit lock has expired or is held by another user. Close and re-open the offer before saving again.',
+      ),
+    ).toBeInTheDocument()
     expect(amountInput).toHaveValue('13000')
-    expect(screen.getByRole('button', { name: 'Save' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Save changes' })).toBeInTheDocument()
   })
 
   it('does not expose edit controls when the offer detail has no edit permissions', async () => {
@@ -682,7 +690,7 @@ describe('Provincial Offer Detail Actions', () => {
     renderPage()
 
     expect(await screen.findByText('Original Buyer')).toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: 'Edit' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Edit offer' })).not.toBeInTheDocument()
     expect(screen.queryByRole('textbox')).not.toBeInTheDocument()
     expect(screen.queryByRole('combobox')).not.toBeInTheDocument()
     expect(screen.queryByLabelText('Offer remarks')).not.toBeInTheDocument()
@@ -703,7 +711,7 @@ describe('Provincial Offer Detail Actions', () => {
     expect(
       screen.getByText('This offer is currently locked for editing by Reviewer One.'),
     ).toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: 'Edit' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Edit offer' })).not.toBeInTheDocument()
     expect(mockedSubmitProvincialOfferUpdate).not.toHaveBeenCalled()
   })
 
@@ -719,7 +727,7 @@ describe('Provincial Offer Detail Actions', () => {
   it('guards unload only after an offer field differs from its persisted baseline', async () => {
     renderPage()
     await screen.findByRole('heading', { name: 'Offer 81001' })
-    await userEvent.click(screen.getByRole('button', { name: 'Edit' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Edit offer' }))
 
     const unchangedUnload = new Event('beforeunload', { cancelable: true })
     window.dispatchEvent(unchangedUnload)
@@ -767,13 +775,13 @@ describe('Provincial Offer Detail Actions', () => {
       'Species/grade',
       'Offer volume (m³)',
       'Pickup location',
-      'Offer conditions / remarks',
+      'Offer conditions/remarks',
       'Offer withdrawal date',
       'Offer withdrawal reason',
     ]) {
       expect(fieldValue(label)).toHaveTextContent('—Not provided')
     }
-    expect(fieldValue('Offer amount ($/m³)')).toHaveTextContent('12500')
+    expect(fieldValue('Offer amount ($/m³)')).toHaveTextContent('12,500.00')
     expect(fieldValue('Offer received date')).toHaveTextContent('Mar 2, 2026')
     expect(fieldValue('Fair market value')).toHaveTextContent(/^No$/)
     expect(fieldValue('Valid offer')).toHaveTextContent(/^Yes$/)
@@ -836,12 +844,12 @@ describe('Provincial Offer Detail Actions', () => {
     renderPage()
 
     await screen.findByRole('heading', { name: 'Offer 81001' })
-    await userEvent.click(await screen.findByRole('button', { name: 'Edit' }))
+    await userEvent.click(await screen.findByRole('button', { name: 'Edit offer' }))
 
     const amountInput = screen.getByLabelText('Offer amount ($/m³)')
     await userEvent.clear(amountInput)
     await userEvent.type(amountInput, '100000')
-    await userEvent.click(screen.getByRole('button', { name: 'Save' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Save changes' }))
 
     await waitFor(() => {
       expect(screen.getAllByText('Offer amount must be 99999.99 or less').length).toBeGreaterThan(0)
@@ -853,12 +861,12 @@ describe('Provincial Offer Detail Actions', () => {
     renderPage()
 
     await screen.findByRole('heading', { name: 'Offer 81001' })
-    await userEvent.click(await screen.findByRole('button', { name: 'Edit' }))
+    await userEvent.click(await screen.findByRole('button', { name: 'Edit offer' }))
 
     expect(screen.getByLabelText('Pickup location')).toHaveAttribute('maxlength', '250')
-    expect(screen.getByLabelText('Offer conditions / remarks')).toHaveAttribute('maxlength', '254')
-    expect(screen.getByLabelText('Offer withdrawal reason')).toHaveAttribute('maxlength', '254')
-    expect(screen.getByLabelText('Offer remarks')).toHaveAttribute('maxlength', '254')
+    expect(screen.getByLabelText('Offer conditions/remarks')).toHaveAttribute('maxlength', '250')
+    expect(screen.getByLabelText('Offer withdrawal reason')).toHaveAttribute('maxlength', '250')
+    expect(screen.getByLabelText('Offer remarks')).toHaveAttribute('maxlength', '250')
   })
 
   it('saves and withdraws an offer whose stored text holds accented characters', async () => {
@@ -873,10 +881,10 @@ describe('Provincial Offer Detail Actions', () => {
     renderPage()
 
     await screen.findByRole('heading', { name: 'Offer 81001' })
-    await userEvent.click(await screen.findByRole('button', { name: 'Edit' }))
+    await userEvent.click(await screen.findByRole('button', { name: 'Edit offer' }))
     await userEvent.type(screen.getByLabelText('Offer withdrawal date'), '2026-03-10')
-    await userEvent.type(screen.getByLabelText('Offer withdrawal reason'), 'Buyer withdrew')
-    await userEvent.click(screen.getByRole('button', { name: 'Save' }))
+    await userEvent.type(screen.getByLabelText(/Offer withdrawal reason/), 'Buyer withdrew')
+    await userEvent.click(screen.getByRole('button', { name: 'Save changes' }))
 
     await waitFor(() => {
       expect(mockedSubmitProvincialOfferUpdate).toHaveBeenCalledWith(
@@ -902,11 +910,11 @@ describe('Provincial Offer Detail Actions', () => {
     renderPage()
 
     await screen.findByRole('heading', { name: 'Offer 81001' })
-    await userEvent.click(await screen.findByRole('button', { name: 'Edit' }))
+    await userEvent.click(await screen.findByRole('button', { name: 'Edit offer' }))
     const pickupLocation = screen.getByLabelText('Pickup location')
     await userEvent.clear(pickupLocation)
     await userEvent.type(pickupLocation, 'Québec')
-    await userEvent.click(screen.getByRole('button', { name: 'Save' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Save changes' }))
 
     await waitFor(() => {
       expect(
@@ -920,12 +928,12 @@ describe('Provincial Offer Detail Actions', () => {
     renderPage()
 
     await screen.findByRole('heading', { name: 'Offer 81001' })
-    await userEvent.click(await screen.findByRole('button', { name: 'Edit' }))
+    await userEvent.click(await screen.findByRole('button', { name: 'Edit offer' }))
 
     const volumeInput = screen.getByLabelText('Offer volume (m³)')
     await userEvent.clear(volumeInput)
     await userEvent.type(volumeInput, '1.234')
-    await userEvent.click(screen.getByRole('button', { name: 'Save' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Save changes' }))
 
     expect(
       screen.getAllByText('Offer volume must be a number with up to two decimal places').length,
@@ -946,21 +954,26 @@ describe('Provincial Offer Detail Actions', () => {
 
     await screen.findByRole('heading', { name: 'Offer 81001' })
     expect(screen.queryByText('TEAC review date')).not.toBeInTheDocument()
-    await userEvent.click(await screen.findByRole('button', { name: 'Edit' }))
+    await userEvent.click(await screen.findByRole('button', { name: 'Edit offer' }))
     expect(screen.queryByText('TEAC review date')).not.toBeInTheDocument()
 
     expect(screen.getByLabelText('Offer amount ($/m³)')).toBeInTheDocument()
     expect(screen.getByLabelText('Pickup location')).toBeInTheDocument()
     expect(screen.queryByLabelText('Company')).not.toBeInTheDocument()
-    expect(screen.queryByLabelText('Offer withdrawal reason')).not.toBeInTheDocument()
+    expect(screen.getByLabelText('Offer withdrawal reason')).toHaveAttribute('readonly')
+    expect(
+      screen.getByText(
+        'The withdrawal deadline for this offer has passed. To withdraw it, contact your regional export office.',
+      ),
+    ).toBeInTheDocument()
     expect(screen.queryByText('Offer remarks')).not.toBeInTheDocument()
-    expect(screen.queryByRole('combobox', { name: 'Fair market value' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('radiogroup', { name: 'Fair market value' })).not.toBeInTheDocument()
     expect(fieldValue('Fair market value')).toHaveTextContent(/^No$/)
 
-    const conditionsInput = screen.getByLabelText('Offer conditions / remarks')
+    const conditionsInput = screen.getByLabelText('Offer conditions/remarks')
     await userEvent.clear(conditionsInput)
     await userEvent.type(conditionsInput, 'Updated loading conditions')
-    await userEvent.click(screen.getByRole('button', { name: 'Save' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Save changes' }))
 
     await waitFor(() => {
       expect(mockedSubmitProvincialOfferUpdate).toHaveBeenCalledWith(
@@ -984,9 +997,9 @@ describe('Provincial Offer Detail Actions', () => {
     renderPage()
 
     await screen.findByRole('heading', { name: 'Offer 81001' })
-    await userEvent.click(await screen.findByRole('button', { name: 'Edit' }))
+    await userEvent.click(await screen.findByRole('button', { name: 'Edit offer' }))
 
-    const offerCondition = screen.getByLabelText('Offer conditions / remarks')
+    const offerCondition = screen.getByLabelText('Offer conditions/remarks')
     expect(screen.getByLabelText('Offer withdrawal reason')).toBeInTheDocument()
     expect(screen.queryByLabelText('Offer amount ($/m³)')).not.toBeInTheDocument()
     expect(screen.queryByLabelText('Offer volume (m³)')).not.toBeInTheDocument()
@@ -995,7 +1008,7 @@ describe('Provincial Offer Detail Actions', () => {
 
     await userEvent.clear(offerCondition)
     await userEvent.type(offerCondition, 'Withdraw if loading conditions cannot be met')
-    await userEvent.click(screen.getByRole('button', { name: 'Save' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Save changes' }))
 
     await waitFor(() => {
       expect(mockedSubmitProvincialOfferUpdate).toHaveBeenCalledWith(

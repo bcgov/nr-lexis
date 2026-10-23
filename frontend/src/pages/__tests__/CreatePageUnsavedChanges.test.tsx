@@ -152,8 +152,8 @@ const createCases = [
     createPath: '/provincial/offers/create',
     targetPath: '/provincial/offers',
     heading: 'Create new offer',
-    fieldLabel: 'Offer conditions / remarks',
-    saveButtonName: 'Save new offer',
+    fieldLabel: 'Application number',
+    saveButtonName: 'Save offer',
     discardTitle: 'Discard this offer?',
     discardDescription:
       "The offer hasn't been created yet. Everything you've entered will be lost.",
@@ -248,6 +248,8 @@ describe('create page unsaved changes', () => {
       message: '',
       errors: [],
       warnings: [],
+      emailRequired: false,
+      applicantEmailFound: false,
     })
   })
 
