@@ -1212,7 +1212,7 @@ describe('Exemption and Federal Detail Document Actions', () => {
     expect(permits.getByRole('heading', { name: 'Permits' })).toBeInTheDocument()
     expect(permits.queryByRole('heading', { name: 'Exemption details' })).not.toBeInTheDocument()
     expect(permits.queryByLabelText('Blanket OIC permit volume totals')).not.toBeInTheDocument()
-    expect(permits.queryByText('Approved volume (m³)')).not.toBeInTheDocument()
+    expect(permits.queryByText('Approval volume (m³)')).not.toBeInTheDocument()
     expect(permits.queryByText('Sum of application scales (m³)')).not.toBeInTheDocument()
     expect(permits.queryByText('Balance remaining (m³)')).not.toBeInTheDocument()
     expect(permits.queryByText('Blanket OIC totals unavailable')).not.toBeInTheDocument()

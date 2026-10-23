@@ -323,7 +323,7 @@ describe('Detail Quick Action Smoke', () => {
     await userEvent.click(screen.getByRole('tab', { name: 'Permits' }))
     const permitTotals = screen.getByRole('tabpanel', { name: 'Permits' })
     for (const [label, value] of [
-      ['Approved volume (m³)', '99.0'],
+      ['Approval volume (m³)', '99.0'],
       ['Sum of application scales (m³)', '5.0'],
       ['Balance remaining (m³)', '94.0'],
     ]) {
