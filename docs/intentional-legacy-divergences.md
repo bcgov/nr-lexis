@@ -18,6 +18,14 @@ integration behaviour belong in the divergence table. Refactors, duplicated serv
 enforcement, and early validation of existing legacy or database constraints are parity work.
 Stored-procedure replacements are listed separately below as an implementation inventory.
 
+Modern's stricter checks apply to values a user creates or changes. Data that legacy stored and
+that a save leaves unchanged is accepted as legacy accepted it, so a record legacy could save stays
+saveable in modern. This covers permit invoice states, a Ministerial permit's saved owner, legacy
+accented text, package species and end-use codes, and scales whose application has moved to
+another exemption or to none. Where legacy's own handling of such data was a bug, modern takes the
+simplest correct path and records it as a row below, for example
+`PERMIT_CANCEL_EVERY_ACTIVE_INVOICE`.
+
 Business-record searches default to 10 rows, following the Figma All searches Results note.
 Application Review defaults to 100 rows, on the business's recommendation, with the same page-size
 options. Explicit page sizes in saved search links remain supported.
