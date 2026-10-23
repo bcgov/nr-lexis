@@ -5249,9 +5249,25 @@ $notification-types: 'error', 'info', 'success', 'warning';
   margin-block-start: 0.5rem;
 }
 
-.provincial-summary-page .detail-section-card,
-.provincial-summary-section {
-  margin-block-start: 1rem;
+// Summary is one card: Client, then each section, with a divider between them.
+@media (min-width: 672px) {
+  .cds--tile.provincial-summary-card {
+    padding: 2.5rem;
+  }
+}
+
+.provincial-summary-card > * + * {
+  margin-block-start: 2.5rem;
+  padding-block-start: 2.5rem;
+  border-block-start: 1px solid var(--csp-border-subtle-01);
+}
+
+.provincial-summary-client > .detail-tile-title {
+  margin-block-end: 2rem;
+}
+
+.provincial-summary-client > .lexis-empty-state {
+  margin-block-start: 2rem;
 }
 
 .provincial-summary-section__header {
@@ -5271,18 +5287,13 @@ $notification-types: 'error', 'info', 'success', 'warning';
   align-items: center;
   display: flex;
   flex-wrap: wrap;
-  gap: 0.75rem;
+  gap: 1rem;
 }
 
-.provincial-summary-section__loading,
-.provincial-summary-section__prompt {
+.provincial-summary-section__loading {
   margin: 0;
   min-block-size: 3rem;
   padding-block: 0.75rem;
-}
-
-.provincial-summary-section__prompt {
-  color: var(--csp-text-secondary);
 }
 
 .provincial-summary-section .lexis-table-frame {
@@ -5291,6 +5302,44 @@ $notification-types: 'error', 'info', 'success', 'warning';
 
 .provincial-summary-section .cds--data-table {
   min-inline-size: 48rem;
+}
+
+// Every table pages by 10, so the pager shows the count and pages without Items per page.
+.provincial-summary-section .cds--pagination__left {
+  padding-inline-start: 0;
+
+  > :not(.cds--pagination__items-count) {
+    display: none;
+  }
+}
+
+.provincial-summary-card .lexis-empty-state {
+  min-block-size: 0;
+  padding: 0;
+}
+
+.provincial-summary-card .lexis-empty-state__pictogram {
+  margin-block-end: 1rem;
+}
+
+.provincial-summary-card .lexis-empty-state__title {
+  font-size: 1rem;
+  line-height: 1.5rem;
+}
+
+.provincial-summary-card .lexis-empty-state__description {
+  @include carbon-type.type-style('body-compact-01');
+}
+
+.provincial-summary-card .provincial-summary-fees-prompt .lexis-empty-state__description {
+  color: var(--cds-text-primary);
+  font-size: 1rem;
+  line-height: 1.375rem;
+  letter-spacing: 0;
+}
+
+.provincial-summary-card .provincial-summary-fees-prompt .lexis-empty-state__action {
+  margin-block-start: 2rem;
 }
 
 .detail-page-header {

@@ -3110,7 +3110,7 @@ const ProvincialExemptionDetailsPage = () => {
                                 )}
                               />
                               <RecordField
-                                label="Approved volume (m³)"
+                                label="Approval volume (m³)"
                                 value={formatExemptionVolume(detail.approvedVolume)}
                               />
                               {/* INTENTIONAL_LEGACY_DIVERGENCE(EXEMPTION_PERMIT_TOTALS):

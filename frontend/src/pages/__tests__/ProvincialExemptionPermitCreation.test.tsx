@@ -574,7 +574,7 @@ describe('permit creation from an exemption', () => {
     const totals = screen.getByLabelText('Exemption permit volume totals')
     for (const [label, value] of [
       ['Requested volume (m³)', '307.2'],
-      ['Approved volume (m³)', '100.0'],
+      ['Approval volume (m³)', '100.0'],
       ['Sum of application scales (m³)', '50.0'],
       ['Balance remaining (m³)', '50.0'],
     ]) {

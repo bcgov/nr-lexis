@@ -1,6 +1,6 @@
 import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { MemoryRouter } from 'react-router-dom'
+import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { useAuth } from '@/context/auth/useAuth'
 import ProvincialSummaryPage from '@/pages/ProvincialSummary'
@@ -41,10 +41,19 @@ const mockedFetchSummaryPermits = vi.mocked(fetchSummaryPermits)
 const mockedFetchSummaryFees = vi.mocked(fetchSummaryFees)
 const mockedFetchSummaryOffersPlaced = vi.mocked(fetchSummaryOffersPlaced)
 
+const RecordBackLink = () => {
+  const location = useLocation()
+  const returnTo = (location.state as { returnTo?: { label: string; to: string } } | null)?.returnTo
+  return <p>{`Back to ${returnTo?.label} at ${returnTo?.to}`}</p>
+}
+
 const renderPage = () =>
   render(
     <MemoryRouter initialEntries={['/provincial/summary']}>
-      <ProvincialSummaryPage />
+      <Routes>
+        <Route path="/provincial/summary" element={<ProvincialSummaryPage />} />
+        <Route path="*" element={<RecordBackLink />} />
+      </Routes>
     </MemoryRouter>,
   )
 
@@ -204,22 +213,125 @@ describe('Provincial Summary', () => {
     )
     expect(screen.getByText('PKG-1, PKG-2')).toBeInTheDocument()
     expect(screen.getByText('No offers placed')).toBeInTheDocument()
+    expect(
+      within(screen.getByRole('region', { name: 'My exemptions table' })).getByRole(
+        'columnheader',
+        { name: 'Approval volume (m³)' },
+      ),
+    ).toBeInTheDocument()
+  })
+
+  it('links each section to its search, except Offers placed', async () => {
+    renderPage()
+    await screen.findByText('SYNTHETIC FOREST CLIENT')
+
+    for (const [section, label, href] of [
+      ['My applications', 'Search applications', '/provincial/application'],
+      ['My offers', 'Search offers', '/provincial/offers'],
+      ['My exemptions', 'Search exemptions', '/provincial/exemption'],
+      ['My permits', 'Search permits', '/provincial/permit'],
+      ['My fees', 'Search fees by permit', '/provincial/permit'],
+    ]) {
+      expect(
+        within(screen.getByRole('region', { name: section })).getByRole('link', { name: label }),
+      ).toHaveAttribute('href', href)
+    }
+    expect(
+      within(screen.getByRole('region', { name: 'Offers placed' })).queryByRole('link', {
+        name: /^Search/,
+      }),
+    ).not.toBeInTheDocument()
+  })
+
+  it('shows the item count under every table, even with one page', async () => {
+    renderPage()
+
+    const offers = await screen.findByRole('region', { name: 'My offers' })
+    await within(offers).findByRole('table')
+    expect(within(offers).getByText('1–1 of 1 item')).toBeInTheDocument()
+    expect(within(offers).getByText('of 1 page')).toBeInTheDocument()
+    expect(
+      within(screen.getByRole('region', { name: 'My applications' })).getByText('1–10 of 11 items'),
+    ).toBeInTheDocument()
+  })
+
+  it('opens records with a Back link to Summary', async () => {
+    renderPage()
+
+    await userEvent.click(await screen.findByRole('link', { name: '7000123' }))
+
+    expect(screen.getByText('Back to Summary at /provincial/summary')).toBeInTheDocument()
+  })
+
+  it('marks Active permits as pending and shows a fee with no amount as empty', async () => {
+    const permitRow = {
+      ownerClientNumber: '11111111',
+      agentClientNumber: null,
+      exemption: 'EX-205',
+      totalPieces: 1,
+      totalVolume: 87,
+      receipt: null,
+      issueDate: null,
+    }
+    mockedFetchSummaryPermits.mockResolvedValue({
+      results: [
+        { ...permitRow, permit: 9021098, status: 'Active' },
+        { ...permitRow, permit: 9021097, status: 'Payment Pending' },
+      ],
+      total: 2,
+      page: 0,
+      size: 10,
+    })
+    mockedFetchSummaryFees.mockResolvedValue({
+      results: [{ permit: 9021098, status: 'Active', volume: 4387, fees: null, receipt: null }],
+      total: 1,
+      page: 0,
+      size: 10,
+    })
+
+    renderPage()
+
+    const permitsTable = await screen.findByRole('region', { name: 'My permits table' })
+    expect(within(permitsTable).getByRole('link', { name: '9021098 (Pending)' })).toHaveAttribute(
+      'href',
+      '/provincial/permit/9021098',
+    )
+    expect(within(permitsTable).getByRole('link', { name: '9021097' })).toBeInTheDocument()
+    expect(within(permitsTable).getByText('Payment pending')).toBeInTheDocument()
+    expect(within(permitsTable).queryByText('Payment Pending')).not.toBeInTheDocument()
+
+    await userEvent.click(screen.getByRole('button', { name: 'Display fees' }))
+
+    const feesTable = await screen.findByRole('region', { name: 'My fees table' })
+    const feeRow = within(feesTable)
+      .getByRole('link', { name: '9021098 (Pending)' })
+      .closest('tr') as HTMLElement
+    expect(within(feeRow).getAllByRole('cell')[2]).toHaveTextContent('—Not provided')
+    expect(within(feesTable).queryByText('Not available')).not.toBeInTheDocument()
   })
 
   it('loads fees only when Display fees is selected', async () => {
     renderPage()
 
     await screen.findByText('SYNTHETIC FOREST CLIENT')
-    expect(screen.getByText(/Select Display fees/)).toBeInTheDocument()
+    const feesSection = screen.getByRole('region', { name: 'My fees' })
+    expect(
+      within(feesSection).getByRole('heading', { name: 'View your permit fees' }),
+    ).toBeInTheDocument()
+    expect(within(feesSection).getByText('Fee totals are calculated on request.')).toBeVisible()
+    expect(
+      within(feesSection).queryByRole('button', { name: 'Refresh fees' }),
+    ).not.toBeInTheDocument()
 
-    await userEvent.click(screen.getByRole('button', { name: 'Display fees' }))
+    await userEvent.click(within(feesSection).getByRole('button', { name: 'Display fees' }))
 
     await waitFor(() =>
       expect(mockedFetchSummaryFees).toHaveBeenCalledWith(0, 10, 'permitNumber DESC'),
     )
     const feesTable = screen.getByRole('region', { name: 'My fees table' })
     expect(within(feesTable).getByText('$182.50')).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'Refresh fees' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Refresh fees' })).toHaveFocus()
+    expect(screen.queryByRole('button', { name: 'Display fees' })).not.toBeInTheDocument()
     await userEvent.click(within(feesTable).getByRole('button', { name: 'Permit number' }))
     await waitFor(() =>
       expect(mockedFetchSummaryFees).toHaveBeenLastCalledWith(0, 10, 'permitNumber ASC'),
@@ -305,7 +417,9 @@ describe('Provincial Summary', () => {
       name: 'My applications table',
     })
     expect(within(applicationTable).getByRole('link', { name: '12345' })).toBeInTheDocument()
-    await userEvent.click(screen.getByLabelText('Next page'))
+    await userEvent.click(
+      within(screen.getByRole('region', { name: 'My applications' })).getByLabelText('Next page'),
+    )
 
     await waitFor(() =>
       expect(mockedFetchSummaryApplications).toHaveBeenLastCalledWith(
@@ -330,7 +444,7 @@ describe('Provincial Summary', () => {
         ['Application', 'applicationNumber'],
         ['Package number', 'packageNumber'],
         ['Received date', 'receivedDate'],
-        ['Listing date', 'listingDate'],
+        ['List date', 'listingDate'],
       ],
     ],
     [
@@ -339,7 +453,7 @@ describe('Provincial Summary', () => {
       [
         ['Application', 'applicationNumber'],
         ['Package', 'packageNumber'],
-        ['Listing date', 'listingDate'],
+        ['List date', 'listingDate'],
       ],
     ],
     [
@@ -365,7 +479,7 @@ describe('Provincial Summary', () => {
       [
         ['Application', 'applicationNumber'],
         ['Package', 'packageNumber'],
-        ['Listing date', 'listingDate'],
+        ['List date', 'listingDate'],
       ],
     ],
   ] as const)('maps only the legacy sortable columns in %s', async (title, loader, fields) => {
