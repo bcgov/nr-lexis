@@ -12842,6 +12842,45 @@ describe('Provincial Permit Detail Action Smoke', () => {
     })
   })
 
+  it('saves a stored accented override comment unchanged and refuses newly typed accented text', async () => {
+    configureActivePermit()
+    mockedFetchPermitFeeOverrideContext.mockResolvedValue({
+      overrideEnabled: true,
+      overrideFee: '25.00',
+      overrideComment: 'Révisé test-2026-10-22',
+      locked: false,
+      lockMessage: '',
+      interior: true,
+    })
+
+    renderPermitDetails()
+    await selectPermitDetailTab('Fees')
+    await userEvent.click(await screen.findByRole('button', { name: 'Edit fee override' }))
+
+    const overrideFee = screen.getByLabelText('Override fee (CAD)')
+    const overrideComment = screen.getByLabelText('Override comment')
+    const saveButton = screen.getByRole('button', { name: /^Save (?:fee override|changes)$/ })
+    fireEvent.change(overrideComment, { target: { value: 'Révisé again' } })
+    await userEvent.click(saveButton)
+
+    expect(overrideComment).toHaveAttribute('aria-invalid', 'true')
+    expect(mockedUpdatePermitDetail).not.toHaveBeenCalled()
+
+    fireEvent.change(overrideComment, { target: { value: 'Révisé test-2026-10-22' } })
+    await userEvent.clear(overrideFee)
+    await userEvent.type(overrideFee, '30.00')
+    await userEvent.click(saveButton)
+
+    await waitFor(() => {
+      expect(mockedUpdatePermitDetail).toHaveBeenCalledWith(
+        expect.objectContaining({
+          overrideFee: '30.00',
+          overrideComment: 'Révisé test-2026-10-22',
+        }),
+      )
+    })
+  })
+
   it('keeps reviewed fee actions singular and hides them and the stale override summary while editing', async () => {
     configureMinisterialActivePermit()
     mockedFetchPermitFeeOverrideContext.mockResolvedValue({

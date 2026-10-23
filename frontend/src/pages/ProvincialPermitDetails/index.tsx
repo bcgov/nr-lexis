@@ -912,6 +912,7 @@ const optionalNumberValue = (value: string): number | null => {
 
 const validatePermitFeeOverride = (
   form: PermitFeeOverrideForm,
+  storedComment?: string,
 ): { fieldErrors: PermitFeeOverrideFieldErrors; roundedFee: string | null } => {
   const normalizedFee = form.overrideFee.trim()
   const normalizedComment = form.overrideComment.trim()
@@ -933,7 +934,7 @@ const validatePermitFeeOverride = (
   )
   const overrideCommentError = firstValidationError(
     () =>
-      form.overrideEnabled && !ASCII_PATTERN.test(normalizedComment)
+      form.overrideEnabled && !isStorableText(normalizedComment, storedComment)
         ? 'Override comment contains unsupported characters. Use unaccented letters, numbers, spaces, or standard punctuation.'
         : null,
     () =>
@@ -4697,7 +4698,10 @@ const ProvincialPermitDetailsPage = () => {
     setActionResult(null)
     const normalizedFee = feeOverrideForm.overrideFee.trim()
     const normalizedComment = feeOverrideForm.overrideComment.trim()
-    const { fieldErrors, roundedFee } = validatePermitFeeOverride(feeOverrideForm)
+    const { fieldErrors, roundedFee } = validatePermitFeeOverride(
+      feeOverrideForm,
+      feeOverrideContext?.overrideComment,
+    )
     if (fieldErrors.overrideFee || fieldErrors.overrideComment) {
       setFeeOverrideFieldErrors(fieldErrors)
       setActionResult(null)
