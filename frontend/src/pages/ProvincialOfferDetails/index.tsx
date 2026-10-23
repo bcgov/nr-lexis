@@ -1,13 +1,17 @@
 import { RecordField, RecordFieldGrid, RecordFieldRow } from '@/pages/shared/RecordFieldGrid'
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
+import { DataDefinition, Edit, Enterprise, Result, Stamp, Undo } from '@carbon/icons-react'
 import {
   Button,
   Column,
   Grid,
   InlineNotification,
   Loading,
+  RadioButton,
+  RadioButtonGroup,
   TextArea,
   TextInput,
+  Tile,
 } from '@carbon/react'
 import { Link, useLocation, useNavigate, useParams } from 'react-router-dom'
 import { AppNotification } from '../../components/AppNotification'
@@ -18,7 +22,6 @@ import IsoDatePicker from '../../components/IsoDatePicker'
 import OfferScaleDetailAction from '@/components/OfferScaleDetailAction'
 import PageHeader from '@/components/PageHeader'
 import PendingIcon from '@/components/PendingIcon'
-import SearchableSelect from '../../components/SearchableSelect'
 import UnsavedChangesGuard, { formValuesEqual } from '@/components/UnsavedChangesGuard'
 import { useAuth } from '@/context/auth/useAuth'
 import type { ProvincialOfferDetail } from '@/interfaces/LexisDetails'
@@ -28,6 +31,8 @@ import {
   requiredFieldError,
 } from '@/pages/shared/create-form-utils'
 import { displayValue } from '@/pages/shared/detail-page-utils'
+import OfferFormSection from '@/pages/shared/OfferFormSection'
+import { offerSaveNotice, type OfferSaveNotice } from '@/pages/shared/offer-save-notice'
 import { useEditSections } from '@/pages/shared/useEditSections'
 import { hasFieldErrors, useFieldErrors, type FieldErrors } from '@/pages/shared/useFieldErrors'
 import { useLatestRequestGuard } from '@/pages/shared/useLatestRequestGuard'
@@ -55,7 +60,10 @@ import {
   offerTextStorageFieldError,
   offerVolumeContextFieldError,
 } from '@/pages/shared/offer-storage-validation'
+import { formatBusinessIsoDate } from '@/utils/date'
+import { displayNumericDate, displayValueText } from '@/utils/display-value'
 import { requiredLabel } from '@/utils/required-label'
+import { displayVolume, formatVolumeInput } from '@/utils/volume'
 import RequiredFieldsLegend from '@/components/RequiredFieldsLegend'
 
 type ProvincialOfferDetailField = keyof ProvincialOfferUpdateSubmission & string
@@ -76,24 +84,33 @@ const offerServerField = (message: string): ProvincialOfferDetailField | undefin
   ) {
     return 'withdrawReason'
   }
+  if (message.startsWith('Offer withdrawn date ')) return 'offerWithdrawalDate'
   if (message.startsWith('Offer conditions ')) return 'offerCondition'
   if (message.startsWith('Offer remarks ')) return 'offerRemark'
   if (message === 'A valid fair offer indicator is required.') return 'fairOfferIndicator'
   return undefined
 }
 
-type PageStatus = {
-  kind: 'success' | 'error' | 'warning'
+const OFFER_NOT_SAVED_TITLE = 'Offer not saved.'
+const FIELD_ERRORS_MESSAGE = 'Some fields have errors. Correct them and save again.'
+
+type EditError = {
   title: string
   message: string
-  placement?: 'inline'
 }
 
 type OfferCreationNavigationState = Record<string, unknown> & {
-  offerCreationNotice?: {
-    warnings: string[]
-    message?: string
-  }
+  offerCreationNotice?: OfferSaveNotice
+}
+
+const creationNoticeFrom = (state: OfferCreationNavigationState | null): OfferSaveNotice | null => {
+  const notice = state?.offerCreationNotice
+  return notice &&
+    (notice.kind === 'success' || notice.kind === 'warning') &&
+    typeof notice.title === 'string' &&
+    typeof notice.message === 'string'
+    ? notice
+    : null
 }
 
 const YES_NO_OPTIONS = [
@@ -107,6 +124,19 @@ const yesNoLabel = (value: string): string | undefined =>
 const textValue = (value: string | number | null | undefined): string =>
   value === null || value === undefined ? '' : String(value)
 
+const OFFER_AMOUNT_FORMAT = new Intl.NumberFormat('en-CA', {
+  minimumFractionDigits: 2,
+  maximumFractionDigits: 2,
+})
+
+/** An offer amount in dollars per cubic metre, always with two decimals (10.00). */
+const displayOfferAmount = (value: string): ReactNode => {
+  const amount = Number(value.trim())
+  return value.trim() && Number.isFinite(amount)
+    ? OFFER_AMOUNT_FORMAT.format(amount)
+    : displayValue(value)
+}
+
 const buildOfferForm = (detail: ProvincialOfferDetail): ProvincialOfferUpdateSubmission => ({
   offerNumber: textValue(detail.offerNumber),
   applicationNumber: textValue(detail.applicationNumber),
@@ -115,8 +145,9 @@ const buildOfferForm = (detail: ProvincialOfferDetail): ProvincialOfferUpdateSub
   companyName: textValue(detail.companyName),
   contactName: textValue(detail.contactName),
   region: textValue(detail.region),
-  offerVolume: textValue(detail.offerVolume),
-  purchaseOfferAmount: textValue(detail.purchaseOfferAmount),
+  offerVolume: formatVolumeInput(detail.offerVolume),
+  purchaseOfferAmount:
+    detail.purchaseOfferAmount === null ? '' : detail.purchaseOfferAmount.toFixed(2),
   purchaseOfferDate: textValue(detail.purchaseOfferDate),
   offerWithdrawalDate: textValue(detail.offerWithdrawalDate),
   withdrawReason: textValue(detail.withdrawReason),
@@ -139,16 +170,9 @@ const ProvincialOfferDetailsPage = () => {
     ? { label: 'Offer search', to: '/provincial/offers' }
     : { label: 'Your landing page', to: defaultRoute }
   const detailReturnTo = readDetailReturnTo(navigationState) ?? fallbackReturnTo
-  const creationWarningMessage =
-    navigationState?.offerCreationNotice?.warnings
-      .map((warning) => warning.trim())
-      .filter(Boolean)
-      .join(' ') ?? ''
-  const creationSuccessMessage = navigationState?.offerCreationNotice?.message?.trim() ?? ''
-  const creationNoticeMessage = creationWarningMessage
-    ? [creationSuccessMessage, creationWarningMessage].filter(Boolean).join(' ')
-    : creationSuccessMessage
-  const preserveStatusOnNextLoadRef = useRef(Boolean(creationNoticeMessage))
+  const creationNotice = creationNoticeFrom(navigationState)
+  // A new offer opens from Create offer, which no back link returns to.
+  const [openedAfterCreate] = useState(() => !!creationNotice)
   const [detail, setDetail] = useState<ProvincialOfferDetail | null>(null)
   const [form, setForm] = useState<ProvincialOfferUpdateSubmission | null>(null)
   const [loading, setLoading] = useState(true)
@@ -156,21 +180,16 @@ const ProvincialOfferDetailsPage = () => {
   const isEditing = editingSection === 'offer'
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [errorMessage, setErrorMessage] = useState('')
-  const [status, setStatus] = useState<PageStatus | null>(() =>
-    creationWarningMessage
-      ? {
-          kind: 'warning',
-          title: 'Offer saved with warning',
-          message: creationNoticeMessage,
-        }
-      : creationSuccessMessage
-        ? {
-            kind: 'success',
-            title: 'Offer saved',
-            message: creationSuccessMessage,
-          }
-        : null,
-  )
+  // A save result stays until it is closed or the next save replaces it, and belongs to its offer.
+  const [savedOfferNotice, setSavedOfferNotice] = useState<{
+    offerNumber: string | undefined
+    notice: OfferSaveNotice
+  } | null>(() => (creationNotice ? { offerNumber, notice: creationNotice } : null))
+  const saveNotice =
+    savedOfferNotice && savedOfferNotice.offerNumber === offerNumber
+      ? savedOfferNotice.notice
+      : null
+  const [editError, setEditError] = useState<EditError | null>(null)
   const { clearFieldError, resetFieldErrors, showFieldErrors, invalidProps } =
     useFieldErrors<ProvincialOfferDetailField>()
   const offerContentRef = useRef<HTMLDivElement>(null)
@@ -200,6 +219,14 @@ const ProvincialOfferDetailsPage = () => {
     isEditing && !offerEditLocked && !!currentDetail?.canEditScheduleDates
   const canEditOfferRemarkFields =
     isEditing && !offerEditLocked && !!currentDetail?.canEditOfferRemarks
+  // Only Administrators and Application Approvers edit the schedule dates; an offering client
+  // withdraws on the day it saves the withdrawal, until the application's withdrawal deadline.
+  const isOfferingClientEdit = !!currentDetail && !currentDetail.canEditScheduleDates
+  const withdrawalDeadlinePassed =
+    canEditOfferDetailFields &&
+    isOfferingClientEdit &&
+    !currentDetail?.canEditWithdrawFields &&
+    !currentDetail?.offerWithdrawalDate
   const isOfferDirty = useMemo(
     () =>
       isEditing &&
@@ -208,6 +235,9 @@ const ProvincialOfferDetailsPage = () => {
       !formValuesEqual(form, buildOfferForm(currentDetail)),
     [currentDetail, form, isEditing],
   )
+  // Edit mode shows every date as YYYY-MM-DD, as its date inputs do; view mode shows them in words.
+  const dateValue = (value: string | null | undefined): ReactNode =>
+    isEditing ? displayNumericDate(value) : displayValue(value)
 
   const loadOfferDetail = useCallback(async () => {
     const isLatestRequest = beginDetailRequest()
@@ -221,11 +251,7 @@ const ProvincialOfferDetailsPage = () => {
 
     setLoading(true)
     setErrorMessage('')
-    if (preserveStatusOnNextLoadRef.current) {
-      preserveStatusOnNextLoadRef.current = false
-    } else {
-      setStatus(null)
-    }
+    setEditError(null)
     try {
       const response = await fetchProvincialOfferDetail(offerNumber)
       if (!isLatestRequest()) {
@@ -253,11 +279,11 @@ const ProvincialOfferDetailsPage = () => {
   }, [loadOfferDetail])
 
   useEffect(() => {
-    if (!creationNoticeMessage) {
+    if (!navigationState?.offerCreationNotice) {
       return
     }
 
-    const nextNavigationState = { ...(navigationState ?? {}) }
+    const nextNavigationState = { ...navigationState }
     delete nextNavigationState.offerCreationNotice
     navigate(
       {
@@ -270,14 +296,7 @@ const ProvincialOfferDetailsPage = () => {
         state: Object.keys(nextNavigationState).length > 0 ? nextNavigationState : null,
       },
     )
-  }, [
-    creationNoticeMessage,
-    location.hash,
-    location.pathname,
-    location.search,
-    navigate,
-    navigationState,
-  ])
+  }, [location.hash, location.pathname, location.search, navigate, navigationState])
 
   useEffect(() => {
     return () => {
@@ -287,8 +306,13 @@ const ProvincialOfferDetailsPage = () => {
     }
   }, [offerNumber])
 
-  const validationErrors = useMemo<FieldErrors<ProvincialOfferDetailField>>(
-    () => ({
+  const validationErrors = useMemo<FieldErrors<ProvincialOfferDetailField>>(() => {
+    // The server keeps up to 254 characters, so text saved before the screen's 250 limit still
+    // saves unchanged; only a changed value has to fit.
+    const changedText = (
+      field: 'pickupLocation' | 'offerCondition' | 'offerRemark' | 'withdrawReason',
+    ): boolean => (form?.[field] ?? '') !== textValue(detail?.[field])
+    return {
       offerNumber: requiredFieldError(form?.offerNumber ?? '', 'Offer number') ?? undefined,
       applicationNumber:
         requiredFieldError(form?.applicationNumber ?? '', 'Application number') ?? undefined,
@@ -296,7 +320,7 @@ const ProvincialOfferDetailsPage = () => {
         offerTextStorageFieldError(
           form?.companyName ?? '',
           OFFER_COMPANY_NAME_MAX_LENGTH,
-          'Company name',
+          'Company',
           true,
           textValue(detail?.companyName),
         ) ?? undefined,
@@ -319,7 +343,7 @@ const ProvincialOfferDetailsPage = () => {
           ),
         () => {
           const currentVolume = form?.offerVolume ?? ''
-          const originalVolume = detail?.offerVolume == null ? '' : String(detail.offerVolume)
+          const originalVolume = detail ? formatVolumeInput(detail.offerVolume) : ''
           return currentVolume === originalVolume
             ? null
             : offerVolumeContextFieldError(currentVolume, detail?.packageVolume)
@@ -333,55 +357,70 @@ const ProvincialOfferDetailsPage = () => {
           true,
         ) ?? undefined,
       purchaseOfferDate: firstValidationError(
-        () => requiredFieldError(form?.purchaseOfferDate ?? '', 'Offer date'),
+        () => requiredFieldError(form?.purchaseOfferDate ?? '', 'Offer received date'),
         () => isoDateFieldError(form?.purchaseOfferDate ?? ''),
       ),
-      offerWithdrawalDate: isoDateFieldError(form?.offerWithdrawalDate ?? '') ?? undefined,
+      offerWithdrawalDate: firstValidationError(
+        () => isoDateFieldError(form?.offerWithdrawalDate ?? ''),
+        () =>
+          isOfferingClientEdit &&
+          !!form?.offerWithdrawalDate.trim() &&
+          form.offerWithdrawalDate !== textValue(detail?.offerWithdrawalDate) &&
+          form.offerWithdrawalDate !== formatBusinessIsoDate()
+            ? "Offer withdrawal date must be today's date."
+            : null,
+      ),
       withdrawReason: firstValidationError(
         () =>
-          (form?.offerWithdrawalDate ?? '').trim().length > 0
-            ? requiredFieldError(form?.withdrawReason ?? '', 'Withdraw reason')
+          (form?.offerWithdrawalDate ?? '').trim().length > 0 &&
+          !(form?.withdrawReason ?? '').trim()
+            ? 'Offer withdrawal reason is required when there is an offer withdrawal date.'
             : null,
         () =>
-          offerTextStorageFieldError(
-            form?.withdrawReason ?? '',
-            OFFER_WITHDRAW_REASON_MAX_LENGTH,
-            'Withdraw reason',
-            false,
-            textValue(detail?.withdrawReason),
-          ),
+          changedText('withdrawReason')
+            ? offerTextStorageFieldError(
+                form?.withdrawReason ?? '',
+                OFFER_WITHDRAW_REASON_MAX_LENGTH,
+                'Offer withdrawal reason',
+                false,
+                textValue(detail?.withdrawReason),
+              )
+            : null,
       ),
       teacReviewDate: isoDateFieldError(form?.teacReviewDate ?? '') ?? undefined,
       pickupLocation: firstValidationError(
         () => requiredFieldError(form?.pickupLocation ?? '', 'Pickup location'),
         () =>
-          offerTextStorageFieldError(
-            form?.pickupLocation ?? '',
-            OFFER_PICKUP_LOCATION_MAX_LENGTH,
-            'Pickup location',
-            false,
-            textValue(detail?.pickupLocation),
-          ),
+          changedText('pickupLocation')
+            ? offerTextStorageFieldError(
+                form?.pickupLocation ?? '',
+                OFFER_PICKUP_LOCATION_MAX_LENGTH,
+                'Pickup location',
+                false,
+                textValue(detail?.pickupLocation),
+              )
+            : null,
       ),
-      offerCondition:
-        offerTextStorageFieldError(
-          form?.offerCondition ?? '',
-          OFFER_CONDITION_MAX_LENGTH,
-          'Offer conditions / remarks',
-          false,
-          textValue(detail?.offerCondition),
-        ) ?? undefined,
-      offerRemark:
-        offerTextStorageFieldError(
-          form?.offerRemark ?? '',
-          OFFER_REMARK_MAX_LENGTH,
-          'Offer remarks',
-          false,
-          textValue(detail?.offerRemark),
-        ) ?? undefined,
-    }),
-    [detail, form],
-  )
+      offerCondition: changedText('offerCondition')
+        ? (offerTextStorageFieldError(
+            form?.offerCondition ?? '',
+            OFFER_CONDITION_MAX_LENGTH,
+            'Offer conditions/remarks',
+            false,
+            textValue(detail?.offerCondition),
+          ) ?? undefined)
+        : undefined,
+      offerRemark: changedText('offerRemark')
+        ? (offerTextStorageFieldError(
+            form?.offerRemark ?? '',
+            OFFER_REMARK_MAX_LENGTH,
+            'Offer remarks',
+            false,
+            textValue(detail?.offerRemark),
+          ) ?? undefined)
+        : undefined,
+    }
+  }, [detail, form, isOfferingClientEdit])
 
   const isEditableOfferField = (field: ProvincialOfferDetailField): boolean => {
     switch (field) {
@@ -431,7 +470,7 @@ const ProvincialOfferDetailsPage = () => {
       setForm(buildOfferForm(detail))
     }
     resetFieldErrors()
-    setStatus(null)
+    setEditError(null)
   }
 
   const sections = useEditSections<'offer'>({
@@ -446,12 +485,10 @@ const ProvincialOfferDetailsPage = () => {
     }
 
     if (offerEditLocked) {
-      setStatus({
-        kind: 'error',
-        title: 'Offer locked',
+      setEditError({
+        title: OFFER_NOT_SAVED_TITLE,
         message:
           detail.lockMessage || 'This offer is currently locked for editing by another user.',
-        placement: 'inline',
       })
       return false
     }
@@ -463,39 +500,27 @@ const ProvincialOfferDetailsPage = () => {
       return true
     }
 
+    setSavedOfferNotice(null)
     const { fieldErrors, otherError } = splitOfferErrors(Object.entries(validationErrors))
     const fieldsValid = showFieldErrors(fieldErrors, () => offerContentRef.current)
-    if (otherError) {
-      setStatus({
-        kind: 'error',
-        title: 'Validation error',
-        message: otherError,
-        placement: 'inline',
-      })
-    }
     if (!fieldsValid || otherError) {
+      setEditError({
+        title: OFFER_NOT_SAVED_TITLE,
+        message: otherError ?? FIELD_ERRORS_MESSAGE,
+      })
       return false
     }
 
-    setStatus(null)
+    setEditError(null)
     setIsSubmitting(true)
     try {
       const result = await submitProvincialOfferUpdate(form)
       if (result.success) {
-        const warningMessage = result.warnings
-          .map((warning) => warning.trim())
-          .filter(Boolean)
-          .join(' ')
+        const withdrawalAdded =
+          !detail.offerWithdrawalDate && form.offerWithdrawalDate.trim().length > 0
         resetFieldErrors()
         sections.finishEditing()
-        setStatus({
-          kind: warningMessage ? 'warning' : 'success',
-          title: warningMessage ? 'Offer saved with warning' : 'Offer saved',
-          message: warningMessage
-            ? [result.message.trim(), warningMessage].filter(Boolean).join(' ')
-            : result.message || 'Offer saved successfully.',
-        })
-        preserveStatusOnNextLoadRef.current = true
+        setSavedOfferNotice({ offerNumber, notice: offerSaveNotice(result, withdrawalAdded) })
         setDetail(null)
         setForm(null)
         await loadOfferDetail()
@@ -506,22 +531,19 @@ const ProvincialOfferDetailsPage = () => {
         result.errors.map((message) => [offerServerField(message) ?? '', message]),
       )
       showFieldErrors(serverFieldErrors, () => offerContentRef.current)
-      if (serverError || !hasFieldErrors(serverFieldErrors)) {
-        setStatus({
-          kind: 'error',
-          title: 'Save failed',
-          message:
-            serverError ||
-            result.message ||
-            'Offer update failed. Please review the form and try again.',
-        })
-      }
+      setEditError({
+        title: OFFER_NOT_SAVED_TITLE,
+        message:
+          serverError ||
+          (hasFieldErrors(serverFieldErrors)
+            ? FIELD_ERRORS_MESSAGE
+            : result.message || 'Offer update failed. Please review the form and try again.'),
+      })
       return false
     } catch (error) {
       console.error(error)
-      setStatus({
-        kind: 'error',
-        title: 'Save failed',
+      setEditError({
+        title: OFFER_NOT_SAVED_TITLE,
         message: 'Offer update failed. Please review the form and try again.',
       })
       return false
@@ -530,28 +552,65 @@ const ProvincialOfferDetailsPage = () => {
     }
   }
 
+  const yesNoField = (
+    field: 'fairOfferIndicator' | 'validOfferIndicator' | 'approvalIndicator',
+    id: string,
+    label: string,
+  ) => (
+    <RecordField
+      label={label}
+      value={yesNoLabel(form?.[field] ?? '')}
+      edit={
+        canEditScheduleFields && form ? (
+          <RadioButtonGroup
+            legendText={label}
+            name={id}
+            orientation="horizontal"
+            valueSelected={form[field]}
+            {...invalidProps(field)}
+            onChange={(value) => updateFormField(field, String(value))}
+          >
+            {YES_NO_OPTIONS.map((option) => (
+              <RadioButton
+                key={option.value}
+                id={`${id}-${option.value}`}
+                value={option.value}
+                labelText={option.label}
+              />
+            ))}
+          </RadioButtonGroup>
+        ) : undefined
+      }
+    />
+  )
+
   return (
-    <Grid fullWidth className="default-grid detail-page-grid">
-      <Column sm={4} md={8} lg={16}>
-        <DetailBreadcrumb
-          label={fallbackReturnTo.label}
-          to={fallbackReturnTo.to}
-          returnTo={detailReturnTo}
-        />
-      </Column>
+    <Grid fullWidth className="default-grid detail-page-grid provincial-offer-detail-page">
+      {!openedAfterCreate && (
+        <Column sm={4} md={8} lg={16}>
+          <DetailBreadcrumb
+            label={fallbackReturnTo.label}
+            to={fallbackReturnTo.to}
+            returnTo={detailReturnTo}
+          />
+        </Column>
+      )}
       <Column sm={4} md={8} lg={16} className="detail-page-header">
         <PageHeader
           title={offerPageTitle}
           focusTitle="whenFocusLost"
+          subtitle={currentDetail ? `Author: ${displayValueText(currentDetail.author)}` : undefined}
+          actionsLabel="Offer actions"
           actions={
             !loading && !isEditing && currentDetail && form && canEditAnyOfferField ? (
               <Button
                 ref={sections.editButtonRef('offer')}
                 kind="tertiary"
                 size="md"
+                renderIcon={Edit}
                 onClick={() => sections.startEditing('offer')}
               >
-                Edit
+                Edit offer
               </Button>
             ) : undefined
           }
@@ -573,14 +632,16 @@ const ProvincialOfferDetailsPage = () => {
 
       {!loading && !!errorMessage && <DetailLoadError message={errorMessage} />}
 
-      {!loading && !!status && status.placement !== 'inline' && (
+      {!loading && !!saveNotice && (
         <Column sm={4} md={8} lg={16} className="detail-page-error">
           <AppNotification
-            kind={status.kind}
-            title={status.title}
-            subtitle={status.message}
+            kind={saveNotice.kind}
+            role={saveNotice.kind === 'warning' ? 'alert' : 'status'}
+            title={saveNotice.title}
+            subtitle={saveNotice.message}
+            revealKey={saveNotice}
             lowContrast
-            onCloseButtonClick={() => setStatus(null)}
+            onCloseButtonClick={() => setSavedOfferNotice(null)}
           />
         </Column>
       )}
@@ -615,24 +676,9 @@ const ProvincialOfferDetailsPage = () => {
             loading={isRefreshingDetail}
             loadingDescription="Refreshing provincial offer detail…"
           />
-          {status?.placement === 'inline' && (
-            <AppNotification
-              className="detail-context-notification"
-              kind="error"
-              revealKey={status}
-              title={status.title}
-              subtitle={status.message}
-              lowContrast
-              onCloseButtonClick={() => setStatus(null)}
-            />
-          )}
-          <div
-            ref={sections.sectionRef('offer')}
-            className="provincial-offer-create create-form-tile provincial-offer-sections provincial-offer-section-stack"
-          >
-            {isEditing && <RequiredFieldsLegend />}
-            <fieldset className="legacy-form-fieldset offer-form-section">
-              <legend>Application details</legend>
+          <Tile ref={sections.sectionRef('offer')} className="create-form-tile offer-form-card">
+            <OfferFormSection icon={Result} title="Application details">
+              {isEditing && <RequiredFieldsLegend />}
               <RecordFieldGrid editing={isEditing}>
                 <RecordFieldRow>
                   <RecordField
@@ -658,49 +704,44 @@ const ProvincialOfferDetailsPage = () => {
                       )
                     }
                   />
-                  <RecordField label="Package number" value={displayValue(form.packageNumber)} />
-                </RecordFieldRow>
-                <RecordFieldRow>
-                  <RecordField label="Listing date" value={displayValue(detail.advertisingDate)} />
                   <RecordField
-                    label="Offer in effect until"
-                    value={displayValue(detail.offerEndDate)}
+                    label="Package number"
+                    value={
+                      currentDetail.packageNumber?.trim() ? (
+                        <span className="offer-package-value">
+                          {currentDetail.packageNumber}
+                          <OfferScaleDetailAction
+                            target={{ offerNumber: String(currentDetail.offerNumber) }}
+                          />
+                        </span>
+                      ) : (
+                        'No packages'
+                      )
+                    }
                   />
                 </RecordFieldRow>
               </RecordFieldGrid>
-              <div className="legacy-search-actions">
-                <OfferScaleDetailAction
-                  target={{ offerNumber: String(currentDetail.offerNumber) }}
-                  disabled={!currentDetail.packageNumber?.trim()}
-                />
-              </div>
-            </fieldset>
+            </OfferFormSection>
 
-            <fieldset className="legacy-form-fieldset offer-form-section">
-              <legend>Offering company details</legend>
+            <OfferFormSection icon={Enterprise} title="Offering company details">
               <RecordFieldGrid editing={isEditing}>
                 <RecordFieldRow>
-                  <RecordField label="Company" value={displayValue(form.companyName)} />
-                  <RecordField label="Contact name" value={displayValue(form.contactName)} />
+                  <RecordField label="Company" value={form.companyName} />
+                  <RecordField label="Contact name" value={form.contactName} />
                 </RecordFieldRow>
               </RecordFieldGrid>
-            </fieldset>
+            </OfferFormSection>
 
-            <fieldset className="legacy-form-fieldset offer-form-section">
-              <legend>Offer details</legend>
+            <OfferFormSection icon={DataDefinition} title="Offer details">
               <RecordFieldGrid editing={isEditing}>
                 <RecordFieldRow>
                   <RecordField
                     label="Application/package volume (m³)"
-                    value={displayValue(detail.packageVolume)}
-                  />
-                  <RecordField
-                    label="Species/grade"
-                    value={displayValue(detail.speciesGradeCode)}
+                    value={displayVolume(detail.packageVolume)}
                   />
                   <RecordField
                     label="Offer volume (m³)"
-                    value={displayValue(form.offerVolume)}
+                    value={displayVolume(form.offerVolume)}
                     edit={
                       canEditOfferDetailFields ? (
                         <TextInput
@@ -709,8 +750,7 @@ const ProvincialOfferDetailsPage = () => {
                           value={form.offerVolume}
                           {...invalidProps('offerVolume')}
                           onBlur={() => {
-                            const originalVolume =
-                              detail.offerVolume == null ? '' : String(detail.offerVolume)
+                            const originalVolume = formatVolumeInput(detail.offerVolume)
                             if (
                               form.offerVolume !== originalVolume &&
                               !offerVolumeContextFieldError(form.offerVolume, detail.packageVolume)
@@ -726,9 +766,10 @@ const ProvincialOfferDetailsPage = () => {
                       ) : undefined
                     }
                   />
+                  <RecordField label="Species/grade" value={detail.speciesGradeCode} />
                   <RecordField
                     label="Offer amount ($/m³)"
-                    value={displayValue(form.purchaseOfferAmount)}
+                    value={displayOfferAmount(form.purchaseOfferAmount)}
                     edit={
                       canEditOfferDetailFields ? (
                         <TextInput
@@ -746,21 +787,31 @@ const ProvincialOfferDetailsPage = () => {
                   />
                 </RecordFieldRow>
                 <RecordFieldRow>
+                  <RecordField label="List date" value={dateValue(detail.advertisingDate)} />
                   <RecordField
                     label="Offer received date"
-                    value={displayValue(form.purchaseOfferDate)}
+                    value={dateValue(form.purchaseOfferDate)}
                   />
                   <RecordField
+                    label="Offer in effect until"
+                    value={dateValue(detail.offerEndDate)}
+                  />
+                </RecordFieldRow>
+                <RecordFieldRow>
+                  <RecordField
                     label="Pickup location"
-                    value={displayValue(form.pickupLocation)}
+                    span="wide"
+                    value={form.pickupLocation}
                     edit={
                       canEditOfferDetailFields ? (
                         <TextArea
                           id="offerPickupLocation"
                           labelText={requiredLabel('Pickup location')}
                           aria-required="true"
-                          value={form.pickupLocation}
+                          enableCounter
+                          maxCount={OFFER_PICKUP_LOCATION_MAX_LENGTH}
                           maxLength={OFFER_PICKUP_LOCATION_MAX_LENGTH}
+                          value={form.pickupLocation}
                           {...invalidProps('pickupLocation')}
                           onChange={(event) =>
                             updateFormField('pickupLocation', event.target.value)
@@ -772,16 +823,18 @@ const ProvincialOfferDetailsPage = () => {
                 </RecordFieldRow>
                 <RecordFieldRow>
                   <RecordField
-                    label="Offer conditions / remarks"
-                    span="full"
-                    value={displayValue(form.offerCondition)}
+                    label="Offer conditions/remarks"
+                    span="wide"
+                    value={form.offerCondition}
                     edit={
                       canEditOfferCondition ? (
                         <TextArea
                           id="offerCondition"
-                          labelText="Offer conditions / remarks"
-                          value={form.offerCondition}
+                          labelText="Offer conditions/remarks"
+                          enableCounter
+                          maxCount={OFFER_CONDITION_MAX_LENGTH}
                           maxLength={OFFER_CONDITION_MAX_LENGTH}
+                          value={form.offerCondition}
                           {...invalidProps('offerCondition')}
                           onChange={(event) =>
                             updateFormField('offerCondition', event.target.value)
@@ -792,21 +845,27 @@ const ProvincialOfferDetailsPage = () => {
                   />
                 </RecordFieldRow>
               </RecordFieldGrid>
-            </fieldset>
+            </OfferFormSection>
 
-            <fieldset className="legacy-form-fieldset offer-form-section">
-              <legend>Offer withdrawals</legend>
+            <OfferFormSection icon={Undo} title="Offer withdrawals">
+              {withdrawalDeadlinePassed && (
+                <p className="detail-read-only-note">
+                  The withdrawal deadline for this offer has passed. To withdraw it, contact your
+                  regional export office.
+                </p>
+              )}
               <RecordFieldGrid editing={isEditing}>
                 <RecordFieldRow>
                   <RecordField
                     label="Offer withdrawal date"
-                    value={displayValue(form.offerWithdrawalDate)}
+                    value={dateValue(form.offerWithdrawalDate)}
                     edit={
-                      canEditWithdrawFields ? (
+                      canEditWithdrawFields || withdrawalDeadlinePassed ? (
                         <IsoDatePicker
                           id="offerWithdrawalDate"
                           labelText="Offer withdrawal date"
                           value={form.offerWithdrawalDate}
+                          readOnly={withdrawalDeadlinePassed}
                           {...invalidProps('offerWithdrawalDate')}
                           onChange={(value) => updateFormField('offerWithdrawalDate', value)}
                         />
@@ -817,10 +876,10 @@ const ProvincialOfferDetailsPage = () => {
                 <RecordFieldRow>
                   <RecordField
                     label="Offer withdrawal reason"
-                    span="full"
-                    value={displayValue(form.withdrawReason)}
+                    span="wide"
+                    value={form.withdrawReason}
                     edit={
-                      canEditWithdrawFields ? (
+                      canEditWithdrawFields || withdrawalDeadlinePassed ? (
                         <TextArea
                           id="offerWithdrawReason"
                           labelText={requiredLabel(
@@ -830,8 +889,11 @@ const ProvincialOfferDetailsPage = () => {
                           aria-required={
                             form.offerWithdrawalDate.trim().length > 0 ? 'true' : undefined
                           }
-                          value={form.withdrawReason}
+                          enableCounter
+                          maxCount={OFFER_WITHDRAW_REASON_MAX_LENGTH}
                           maxLength={OFFER_WITHDRAW_REASON_MAX_LENGTH}
+                          readOnly={withdrawalDeadlinePassed}
+                          value={form.withdrawReason}
                           {...invalidProps('withdrawReason')}
                           onChange={(event) =>
                             updateFormField('withdrawReason', event.target.value)
@@ -842,16 +904,15 @@ const ProvincialOfferDetailsPage = () => {
                   />
                 </RecordFieldRow>
               </RecordFieldGrid>
-            </fieldset>
+            </OfferFormSection>
 
-            <fieldset className="legacy-form-fieldset offer-form-section">
-              <legend>Approval</legend>
+            <OfferFormSection icon={Stamp} title="Approval">
               <RecordFieldGrid editing={isEditing}>
                 <RecordFieldRow>
                   <RecordField
                     label="TEAC review date"
                     hidden={!detail.canEditScheduleDates}
-                    value={displayValue(form.teacReviewDate)}
+                    value={dateValue(form.teacReviewDate)}
                     edit={
                       canEditScheduleFields ? (
                         <IsoDatePicker
@@ -864,68 +925,24 @@ const ProvincialOfferDetailsPage = () => {
                       ) : undefined
                     }
                   />
-                  <RecordField
-                    label="Fair market value"
-                    value={displayValue(yesNoLabel(form.fairOfferIndicator))}
-                    edit={
-                      canEditScheduleFields ? (
-                        <SearchableSelect
-                          id="offerFairOfferIndicator"
-                          labelText="Fair market value"
-                          value={form.fairOfferIndicator}
-                          placeholder="Select value"
-                          options={YES_NO_OPTIONS}
-                          {...invalidProps('fairOfferIndicator')}
-                          onChange={(value) => updateFormField('fairOfferIndicator', value)}
-                        />
-                      ) : undefined
-                    }
-                  />
-                  <RecordField
-                    label="Valid offer"
-                    value={displayValue(yesNoLabel(form.validOfferIndicator))}
-                    edit={
-                      canEditScheduleFields ? (
-                        <SearchableSelect
-                          id="offerValidOfferIndicator"
-                          labelText="Valid offer"
-                          value={form.validOfferIndicator}
-                          placeholder="Select value"
-                          options={YES_NO_OPTIONS}
-                          onChange={(value) => updateFormField('validOfferIndicator', value)}
-                        />
-                      ) : undefined
-                    }
-                  />
-                  <RecordField
-                    label="Offer approved"
-                    value={displayValue(yesNoLabel(form.approvalIndicator))}
-                    edit={
-                      canEditScheduleFields ? (
-                        <SearchableSelect
-                          id="offerApprovalIndicator"
-                          labelText="Offer approved"
-                          value={form.approvalIndicator}
-                          placeholder="Select value"
-                          options={YES_NO_OPTIONS}
-                          onChange={(value) => updateFormField('approvalIndicator', value)}
-                        />
-                      ) : undefined
-                    }
-                  />
+                  {yesNoField('fairOfferIndicator', 'offerFairOfferIndicator', 'Fair market value')}
+                  {yesNoField('validOfferIndicator', 'offerValidOfferIndicator', 'Valid offer')}
+                  {yesNoField('approvalIndicator', 'offerApprovalIndicator', 'Offer approved')}
                 </RecordFieldRow>
                 <RecordFieldRow hidden={!detail.canEditOfferRemarks}>
                   <RecordField
                     label="Offer remarks"
-                    span="full"
-                    value={displayValue(form.offerRemark)}
+                    span="wide"
+                    value={form.offerRemark}
                     edit={
                       canEditOfferRemarkFields ? (
                         <TextArea
                           id="offerRemark"
                           labelText="Offer remarks"
-                          value={form.offerRemark}
+                          enableCounter
+                          maxCount={OFFER_REMARK_MAX_LENGTH}
                           maxLength={OFFER_REMARK_MAX_LENGTH}
+                          value={form.offerRemark}
                           {...invalidProps('offerRemark')}
                           onChange={(event) => updateFormField('offerRemark', event.target.value)}
                         />
@@ -934,40 +951,40 @@ const ProvincialOfferDetailsPage = () => {
                   />
                 </RecordFieldRow>
               </RecordFieldGrid>
-            </fieldset>
+            </OfferFormSection>
 
-            <div className="legacy-form-footer">
-              <RecordFieldGrid>
-                <RecordFieldRow>
-                  <RecordField label="Offer number" value={displayValue(detail.offerNumber)} />
-                  <RecordField label="Author" value={displayValue(detail.author)} />
-                </RecordFieldRow>
-              </RecordFieldGrid>
+            {isEditing && !!editError && (
+              <AppNotification
+                kind="error"
+                revealKey={editError}
+                title={editError.title}
+                subtitle={editError.message}
+                lowContrast
+                onCloseButtonClick={() => setEditError(null)}
+              />
+            )}
+            {isEditing && (
               <div className="legacy-search-actions">
-                {isEditing ? (
-                  <>
-                    <Button
-                      kind="tertiary"
-                      size="md"
-                      onClick={sections.cancelEditing}
-                      disabled={isSubmitting}
-                    >
-                      Cancel
-                    </Button>
-                    <Button
-                      kind="primary"
-                      size="md"
-                      onClick={() => void onSave()}
-                      disabled={isSubmitting}
-                      renderIcon={isSubmitting ? PendingIcon : undefined}
-                    >
-                      {isSubmitting ? 'Saving…' : 'Save'}
-                    </Button>
-                  </>
-                ) : null}
+                <Button
+                  kind="tertiary"
+                  size="md"
+                  onClick={sections.cancelEditing}
+                  disabled={isSubmitting}
+                >
+                  Cancel
+                </Button>
+                <Button
+                  kind="primary"
+                  size="md"
+                  onClick={() => void onSave()}
+                  disabled={isSubmitting}
+                  renderIcon={isSubmitting ? PendingIcon : undefined}
+                >
+                  {isSubmitting ? 'Saving…' : 'Save changes'}
+                </Button>
               </div>
-            </div>
-          </div>
+            )}
+          </Tile>
         </Column>
       )}
       <UnsavedChangesGuard

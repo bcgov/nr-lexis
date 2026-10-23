@@ -11,6 +11,7 @@ import {
   submitProvincialExemptionCreate,
   submitProvincialOfferCreate,
   type CreateSubmissionResult,
+  type OfferSubmissionResult,
 } from '@/service/create-submit-service'
 import {
   fetchProvincialApplicationOptions,
@@ -157,6 +158,18 @@ const successfulCreate = (createdId: string): CreateSubmissionResult => ({
   warnings: [],
 })
 
+const successfulOfferCreate = (
+  createdId: string,
+  overrides: Partial<OfferSubmissionResult> = {},
+): OfferSubmissionResult => ({
+  ...successfulCreate(createdId),
+  emailRequired: false,
+  applicantEmailFound: false,
+  ...overrides,
+})
+
+const fieldValue = (label: string) => screen.getByText(label, { selector: 'dt' }).nextElementSibling
+
 const chooseComboBoxOption = async (combobox: HTMLElement, optionName: string) => {
   await userEvent.click(combobox)
   await userEvent.clear(combobox)
@@ -280,7 +293,7 @@ describe('Create Page Core Flows', () => {
     mockedFetchOfferApplicationDetails.mockResolvedValue({
       success: true,
       speciesGradeCode: 'H/SA',
-      advertisingDate: '03/01/2026',
+      advertisingDate: '2026-03-01',
       teacReviewDate: '',
       region: 'Cariboo Natural Resource Region',
     })
@@ -3360,10 +3373,13 @@ describe('Create Page Core Flows', () => {
         }),
       }),
     )
-    mockedSubmitProvincialOfferCreate.mockResolvedValue({
-      ...successfulCreate('8080'),
-      warnings: ['Offer saved, but no client email address was found.'],
-    })
+    mockedSubmitProvincialOfferCreate.mockResolvedValue(
+      successfulOfferCreate('8080', {
+        warnings: ['Offer saved, but no client email address was found.'],
+        emailRequired: true,
+        applicantEmailFound: true,
+      }),
+    )
 
     render(
       <MemoryRouter
@@ -3378,14 +3394,16 @@ describe('Create Page Core Flows', () => {
     )
 
     await screen.findByRole('heading', { level: 1, name: 'Create new offer' })
-    expect(screen.getByText('Enter offer details and save a new offer.')).toBeInTheDocument()
+    expect(
+      screen.getByText('Make an offer to buy timber advertised on the Advertising List.'),
+    ).toBeInTheDocument()
     expect(screen.getAllByRole('heading', { level: 1 })).toHaveLength(1)
     const offerFormActions = screen.getByRole('group', { name: 'Offer form actions' })
     expect(
       within(offerFormActions)
         .getAllByRole('button')
         .map((button) => button.textContent),
-    ).toEqual(['Cancel', 'Save new offer'])
+    ).toEqual(['Cancel', 'Save offer'])
     expect(
       screen.getByRole('heading', { level: 1, name: 'Create new offer' }).closest('header'),
     ).toContainElement(offerFormActions)
@@ -3393,29 +3411,29 @@ describe('Create Page Core Flows', () => {
       'type',
       'button',
     )
-    expect(
-      within(offerFormActions).getByRole('button', { name: 'Save new offer' }),
-    ).toHaveAttribute('type', 'button')
+    expect(within(offerFormActions).getByRole('button', { name: 'Save offer' })).toHaveAttribute(
+      'type',
+      'button',
+    )
     expect(screen.queryByRole('group', { name: 'New offer state' })).not.toBeInTheDocument()
     expect(screen.queryByRole('textbox', { name: /offer number/i })).not.toBeInTheDocument()
     const offerSections = [
-      screen.getByRole('group', { name: 'Application details' }),
-      screen.getByRole('group', { name: 'Offering company details' }),
-      screen.getByRole('group', { name: 'Offer details' }),
-      screen.getByRole('group', { name: 'Offer withdrawals' }),
-      screen.getByRole('group', { name: 'Approval' }),
+      await screen.findByRole('group', { name: 'Application details' }),
+      await screen.findByRole('group', { name: 'Offering company details' }),
+      await screen.findByRole('group', { name: 'Offer details' }),
+      await screen.findByRole('group', { name: 'Approval' }),
     ]
-    const offerSectionStack = offerSections[0].closest('.provincial-offer-section-stack')
-    expect(offerSectionStack).toHaveClass('create-form-tile')
-    expect(offerSectionStack).not.toHaveClass('cds--tile')
+    expect(screen.queryByRole('group', { name: 'Offer withdrawals' })).not.toBeInTheDocument()
+    const offerCard = offerSections[0].closest('.offer-form-card')
+    expect(offerCard).toHaveClass('create-form-tile')
+    expect(offerCard).toHaveClass('cds--tile')
     for (const section of offerSections) {
-      expect(section).toHaveClass('create-form-section')
       expect(section).toHaveClass('offer-form-section')
-      expect(section.parentElement).toBe(offerSectionStack)
+      expect(section.parentElement).toBe(offerCard)
       expect(section.querySelector('.record-field-grid')).toHaveClass('record-field-grid--editing')
     }
-    expect(screen.getByRole('button', { name: 'See scale detail' })).toBeEnabled()
     expect(await screen.findByDisplayValue('PKG-9')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'See scale detail' })).toBeEnabled()
     await userEvent.click(screen.getByRole('button', { name: 'See scale detail' }))
     const scaleDialog = await screen.findByRole('dialog', { name: 'Scale Detail' })
     expect(await within(scaleDialog).findByText('TM-9')).toBeInTheDocument()
@@ -3426,31 +3444,43 @@ describe('Create Page Core Flows', () => {
     )
     expect(mockNavigate).not.toHaveBeenCalled()
     await userEvent.click(within(scaleDialog).getByRole('button', { name: 'Close' }))
-    expect(await screen.findByDisplayValue('95.0')).toBeInTheDocument()
-    expect(screen.getByDisplayValue('H/SA')).toBeInTheDocument()
-    expect(screen.getByDisplayValue('03/01/2026')).toBeInTheDocument()
+    await waitFor(() =>
+      expect(fieldValue('Application/package volume (m³)')).toHaveTextContent('95.0'),
+    )
+    expect(fieldValue('Species/grade')).toHaveTextContent('H/SA')
+    expect(fieldValue('List date')).toHaveTextContent('2026-03-01')
     expect(screen.queryByLabelText('Region')).not.toBeInTheDocument()
-    expect(screen.getByLabelText('Offer received date')).toHaveValue(formatBusinessIsoDate())
-    expect(screen.getByLabelText('Offer received date')).toHaveAttribute('readonly')
-    expect(screen.getByLabelText('Offer withdrawal date')).toHaveValue('')
-    expect(screen.getByLabelText('Offer withdrawal date')).toHaveAttribute('readonly')
-    expect(screen.getByLabelText('Offer withdrawal reason')).toHaveValue('')
-    expect(screen.getByLabelText('Offer withdrawal reason')).toHaveAttribute('readonly')
+    expect(fieldValue('Offer received date')).toHaveTextContent(formatBusinessIsoDate())
+    expect(screen.queryByLabelText('Offer received date')).not.toBeInTheDocument()
+    expect(screen.queryByLabelText('Offer withdrawal date')).not.toBeInTheDocument()
+    expect(screen.queryByLabelText('Offer withdrawal reason')).not.toBeInTheDocument()
+    expect(screen.queryByLabelText('Offer in effect until')).not.toBeInTheDocument()
     expect(screen.queryByLabelText('Offering client number')).not.toBeInTheDocument()
-    expect(screen.getByRole('combobox', { name: 'Fair market value' })).toBeInTheDocument()
+    const fairMarketValue = screen.getByRole('group', { name: 'Fair market value' })
+    expect(within(fairMarketValue).getByRole('radio', { name: 'No' })).toBeChecked()
+    expect(
+      within(screen.getByRole('group', { name: 'Valid offer' })).getByRole('radio', {
+        name: 'Yes',
+      }),
+    ).toBeChecked()
+    expect(
+      within(screen.getByRole('group', { name: 'Offer approved' })).getByRole('radio', {
+        name: 'No',
+      }),
+    ).toBeChecked()
     expect(screen.getByLabelText('Offer remarks')).toBeInTheDocument()
     await userEvent.type(screen.getByLabelText('Company'), 'Example Lumber')
     await userEvent.type(screen.getByLabelText('Contact name'), 'Sample Contact')
     await userEvent.type(screen.getByLabelText('Offer volume (m³)'), '94.9')
     await userEvent.type(screen.getByLabelText('Offer amount ($/m³)'), '25000')
     await userEvent.type(screen.getByLabelText('Pickup location'), 'Yard A')
-    await userEvent.type(screen.getByLabelText('Offer conditions / remarks'), 'No partial loads')
+    await userEvent.type(screen.getByLabelText('Offer conditions/remarks'), 'No partial loads')
     await userEvent.type(screen.getByLabelText('Offer remarks'), 'Ready for review')
 
     expect(screen.queryByRole('button', { name: 'Submit' })).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Save Draft' })).not.toBeInTheDocument()
     expect(screen.queryByRole('link', { name: 'Back to Search' })).not.toBeInTheDocument()
-    const saveButton = screen.getByRole('button', { name: 'Save new offer' })
+    const saveButton = screen.getByRole('button', { name: 'Save offer' })
     expect(saveButton).toBeEnabled()
     await userEvent.click(saveButton)
 
@@ -3470,14 +3500,15 @@ describe('Create Page Core Flows', () => {
         offerRemark: 'Ready for review',
         pickupLocation: 'Yard A',
         offerCondition: 'No partial loads',
-        offerInEffectUntil: '',
       })
     })
     expect(mockNavigate).toHaveBeenCalledWith('/provincial/offers/8080', {
       state: {
         offerCreationNotice: {
-          warnings: ['Offer saved, but no client email address was found.'],
-          message: 'ok',
+          kind: 'warning',
+          title: 'Offer saved.',
+          message:
+            'Email notification sent to the applicant. Notify the regional office another way.',
         },
       },
     })
@@ -3496,7 +3527,7 @@ describe('Create Page Core Flows', () => {
     mockedFetchOfferPackageVolume.mockImplementation(async (packageNumber) =>
       packageNumber === storedPackageNumber ? '95.0' : '40.0',
     )
-    mockedSubmitProvincialOfferCreate.mockResolvedValue(successfulCreate('8085'))
+    mockedSubmitProvincialOfferCreate.mockResolvedValue(successfulOfferCreate('8085'))
 
     render(
       <MemoryRouter
@@ -3510,13 +3541,14 @@ describe('Create Page Core Flows', () => {
       </MemoryRouter>,
     )
 
-    expect(screen.getByRole('combobox', { name: 'Package number' })).toHaveValue(storedPackageLabel)
+    expect(screen.queryByRole('combobox', { name: 'Package number' })).not.toBeInTheDocument()
+    await waitFor(() => expect(resolvePackageList).toBeDefined())
     await act(async () => resolvePackageList?.([plainPackageNumber, storedPackageNumber]))
 
+    const packageSelector = await screen.findByRole('combobox', { name: 'Package number' })
     await waitFor(() =>
       expect(mockedFetchOfferPackageVolume).toHaveBeenCalledWith(storedPackageNumber),
     )
-    const packageSelector = screen.getByRole('combobox', { name: 'Package number' })
     expect(packageSelector).toHaveValue(storedPackageLabel)
     await waitFor(() => expect(packageSelector).toBeEnabled())
     await chooseComboBoxOption(packageSelector, plainPackageNumber)
@@ -3536,7 +3568,7 @@ describe('Create Page Core Flows', () => {
     )
     await userEvent.click(within(scaleDialog).getByRole('button', { name: 'Close' }))
 
-    await userEvent.click(screen.getByRole('button', { name: 'Save new offer' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Save offer' }))
     await waitFor(() =>
       expect(mockedSubmitProvincialOfferCreate).toHaveBeenCalledWith(
         expect.objectContaining({ packageNumber: storedPackageNumber }),
@@ -3557,8 +3589,10 @@ describe('Create Page Core Flows', () => {
       </MemoryRouter>,
     )
 
-    expect(await screen.findByDisplayValue('95.0')).toBeInTheDocument()
-    await userEvent.click(screen.getByRole('button', { name: 'Save new offer' }))
+    await waitFor(() =>
+      expect(fieldValue('Application/package volume (m³)')).toHaveTextContent('95.0'),
+    )
+    await userEvent.click(screen.getByRole('button', { name: 'Save offer' }))
 
     await waitFor(() => {
       expect(mockedSubmitProvincialOfferCreate).toHaveBeenCalledWith(
@@ -3580,13 +3614,18 @@ describe('Create Page Core Flows', () => {
       </MemoryRouter>,
     )
 
-    expect(await screen.findByDisplayValue('95.0')).toBeInTheDocument()
-    await userEvent.click(screen.getByRole('button', { name: 'Save new offer' }))
+    await waitFor(() =>
+      expect(fieldValue('Application/package volume (m³)')).toHaveTextContent('95.0'),
+    )
+    await userEvent.click(screen.getByRole('button', { name: 'Save offer' }))
 
     expect(
       await screen.findByText('Offer volume cannot exceed the application/package volume'),
     ).toBeInTheDocument()
-    expect(screen.queryByText('Validation error')).not.toBeInTheDocument()
+    expect(screen.getByText('Offer not saved.')).toBeInTheDocument()
+    expect(
+      screen.getByText('Some fields have errors. Correct them and save again.'),
+    ).toBeInTheDocument()
     await waitFor(() => expect(screen.getByLabelText('Offer volume (m³)')).toHaveFocus())
     expect(mockedSubmitProvincialOfferCreate).not.toHaveBeenCalled()
   })
@@ -3613,14 +3652,16 @@ describe('Create Page Core Flows', () => {
       </MemoryRouter>,
     )
 
-    expect(await screen.findByDisplayValue('120.0')).toBeInTheDocument()
-    const saveButton = screen.getByRole('button', { name: 'Save new offer' })
+    await waitFor(() =>
+      expect(fieldValue('Application/package volume (m³)')).toHaveTextContent('120.0'),
+    )
+    const saveButton = screen.getByRole('button', { name: 'Save offer' })
     expect(saveButton).toBeEnabled()
 
     await chooseComboBoxOption(screen.getByRole('combobox', { name: 'Package number' }), 'PKG-11')
 
     await waitFor(() => expect(mockedFetchOfferPackageVolume).toHaveBeenCalledWith('PKG-11'))
-    expect(screen.queryByDisplayValue('120.0')).not.toBeInTheDocument()
+    expect(fieldValue('Application/package volume (m³)')).not.toHaveTextContent('120.0')
     expect(saveButton).toBeEnabled()
     await userEvent.click(saveButton)
     expect(
@@ -3632,7 +3673,9 @@ describe('Create Page Core Flows', () => {
 
     await act(async () => resolveSelectedPackageVolume('80.0'))
 
-    expect(await screen.findByDisplayValue('80.0')).toBeInTheDocument()
+    await waitFor(() =>
+      expect(fieldValue('Application/package volume (m³)')).toHaveTextContent('80.0'),
+    )
     expect(saveButton).toBeEnabled()
     await userEvent.click(saveButton)
     expect(
@@ -3661,7 +3704,7 @@ describe('Create Page Core Flows', () => {
         'Application/package volume could not be loaded. Reload the page to try again.',
       ),
     ).toBeInTheDocument()
-    await userEvent.click(screen.getByRole('button', { name: 'Save new offer' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Save offer' }))
     await waitFor(() =>
       expect(screen.getByRole('combobox', { name: 'Package number' })).toHaveFocus(),
     )
@@ -3688,7 +3731,7 @@ describe('Create Page Core Flows', () => {
         'Application/package volume could not be loaded. Reload the page to try again.',
       ),
     ).toBeInTheDocument()
-    await userEvent.click(screen.getByRole('button', { name: 'Save new offer' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Save offer' }))
     await waitFor(() =>
       expect(screen.getByRole('combobox', { name: 'Package number' })).toHaveFocus(),
     )
@@ -3715,7 +3758,7 @@ describe('Create Page Core Flows', () => {
         'Application packages could not be loaded. Reload the page and try again.',
       ),
     ).toBeInTheDocument()
-    await userEvent.click(screen.getByRole('button', { name: 'Save new offer' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Save offer' }))
     await waitFor(() => expect(screen.getByLabelText('Application number')).toHaveFocus())
     expect(mockedSubmitProvincialOfferCreate).not.toHaveBeenCalled()
   })
@@ -3741,7 +3784,7 @@ describe('Create Page Core Flows', () => {
         'Application volume could not be loaded. Reload the page and try again.',
       ),
     ).toBeInTheDocument()
-    await userEvent.click(screen.getByRole('button', { name: 'Save new offer' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Save offer' }))
     await waitFor(() => expect(screen.getByLabelText('Application number')).toHaveFocus())
     expect(mockedSubmitProvincialOfferCreate).not.toHaveBeenCalled()
   })
@@ -3766,17 +3809,19 @@ describe('Create Page Core Flows', () => {
     )
 
     await waitFor(() => expect(mockedFetchOfferPackageVolume).toHaveBeenCalledWith('PKG-9'))
-    const saveButton = screen.getByRole('button', { name: 'Save new offer' })
+    const saveButton = screen.getByRole('button', { name: 'Save offer' })
     expect(saveButton).toBeEnabled()
 
-    const offerVolumeInput = screen.getByLabelText('Offer volume (m³)')
+    const offerVolumeInput = await screen.findByLabelText('Offer volume (m³)')
     await userEvent.type(offerVolumeInput, '95.54')
     await userEvent.click(screen.getByLabelText('Offer amount ($/m³)'))
     expect(offerVolumeInput).toHaveValue('95.54')
 
     await act(async () => resolvePackageVolume('95.5'))
 
-    expect(await screen.findByDisplayValue('95.5')).toBeInTheDocument()
+    await waitFor(() =>
+      expect(fieldValue('Application/package volume (m³)')).toHaveTextContent('95.5'),
+    )
     expect(saveButton).toBeEnabled()
     await userEvent.click(saveButton)
     expect(
@@ -3799,10 +3844,12 @@ describe('Create Page Core Flows', () => {
       </MemoryRouter>,
     )
 
-    expect(await screen.findByDisplayValue('95.5')).toBeInTheDocument()
-    const offerVolumeInput = screen.getByLabelText('Offer volume (m³)')
+    const offerVolumeInput = await screen.findByLabelText('Offer volume (m³)')
+    await waitFor(() =>
+      expect(fieldValue('Application/package volume (m³)')).toHaveTextContent('95.5'),
+    )
     await userEvent.type(offerVolumeInput, '95.54')
-    await userEvent.click(screen.getByRole('button', { name: 'Save new offer' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Save offer' }))
 
     expect(offerVolumeInput).toHaveValue('95.54')
     expect(
@@ -3859,7 +3906,7 @@ describe('Create Page Core Flows', () => {
     fireEvent.change(screen.getByLabelText('Application number'), {
       target: { value: '1e3' },
     })
-    await userEvent.click(screen.getByRole('button', { name: 'Save new offer' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Save offer' }))
 
     expect(
       screen.getAllByText('Application number must be a positive whole number'),
@@ -3885,7 +3932,7 @@ describe('Create Page Core Flows', () => {
     )
 
     expect(await screen.findByText(eligibilityError)).toBeInTheDocument()
-    await userEvent.click(screen.getByRole('button', { name: 'Save new offer' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Save offer' }))
     await waitFor(() => expect(screen.getByLabelText('Application number')).toHaveFocus())
     expect(mockedFetchOfferApplicationDetails).not.toHaveBeenCalled()
     expect(mockedFetchOfferPackageList).not.toHaveBeenCalled()
@@ -3908,6 +3955,8 @@ describe('Create Page Core Flows', () => {
       message: '',
       errors: [saveError],
       warnings: [],
+      emailRequired: false,
+      applicantEmailFound: false,
     })
 
     render(
@@ -3927,9 +3976,10 @@ describe('Create Page Core Flows', () => {
     await userEvent.type(screen.getByLabelText('Contact name'), 'Sample Contact')
     await userEvent.type(screen.getByLabelText('Offer amount ($/m³)'), '25000')
     await userEvent.type(screen.getByLabelText('Pickup location'), 'Yard A')
-    await userEvent.click(screen.getByRole('button', { name: 'Save new offer' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Save offer' }))
 
     expect(await screen.findByText(saveError)).toBeInTheDocument()
+    expect(screen.getByText('Offer not saved.')).toBeInTheDocument()
     expect(mockedSubmitProvincialOfferCreate).toHaveBeenCalledTimes(1)
   })
 
@@ -3946,11 +3996,11 @@ describe('Create Page Core Flows', () => {
     mockedFetchOfferApplicationDetails.mockResolvedValue({
       success: true,
       speciesGradeCode: 'H/SA',
-      advertisingDate: '03/01/2026',
+      advertisingDate: '2026-03-01',
       teacReviewDate: '2026-03-20',
       region: 'Cariboo Natural Resource Region',
     })
-    mockedSubmitProvincialOfferCreate.mockResolvedValue(successfulCreate('8084'))
+    mockedSubmitProvincialOfferCreate.mockResolvedValue(successfulOfferCreate('8084'))
 
     render(
       <MemoryRouter
@@ -3965,7 +4015,11 @@ describe('Create Page Core Flows', () => {
     )
 
     await screen.findByRole('heading', { level: 1, name: 'Create new offer' })
-    expect(await screen.findByDisplayValue('Authoritative Buyer Ltd.')).toHaveAttribute('readonly')
+    await waitFor(() => expect(fieldValue('Company')).toHaveTextContent('Authoritative Buyer Ltd.'))
+    expect(screen.queryByLabelText('Company')).not.toBeInTheDocument()
+    expect(
+      screen.queryByText('Loaded from your authenticated forest client.'),
+    ).not.toBeInTheDocument()
     expect(mockedFetchOfferClientData).toHaveBeenCalledWith('77881')
     expect(screen.queryByLabelText('Offering client number')).not.toBeInTheDocument()
     expect(screen.queryByDisplayValue('00099999')).not.toBeInTheDocument()
@@ -3975,13 +4029,14 @@ describe('Create Page Core Flows', () => {
     expect(screen.queryByDisplayValue('Buyer Contact')).not.toBeInTheDocument()
     expect(screen.queryByLabelText('TEAC review date')).not.toBeInTheDocument()
     expect(screen.queryByDisplayValue('2026-03-20')).not.toBeInTheDocument()
-    expect(screen.getByLabelText('Fair market value')).toHaveAttribute('readonly')
-    expect(screen.getByLabelText('Valid offer')).toHaveAttribute('readonly')
-    expect(screen.getByLabelText('Offer approved')).toHaveAttribute('readonly')
+    expect(fieldValue('Fair market value')).toHaveTextContent(/^No$/)
+    expect(fieldValue('Valid offer')).toHaveTextContent(/^Yes$/)
+    expect(fieldValue('Offer approved')).toHaveTextContent(/^No$/)
+    expect(screen.queryByRole('radio')).not.toBeInTheDocument()
     expect(screen.queryByLabelText('Offer remarks')).not.toBeInTheDocument()
     await userEvent.type(contactName, 'Buyer Contact')
 
-    await userEvent.click(screen.getByRole('button', { name: 'Save new offer' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Save offer' }))
 
     await waitFor(() => {
       expect(mockedSubmitProvincialOfferCreate).toHaveBeenCalledWith(
@@ -3998,7 +4053,7 @@ describe('Create Page Core Flows', () => {
       )
     })
     expect(mockNavigate).toHaveBeenCalledWith('/provincial/offers/8084', {
-      state: { offerCreationNotice: { message: 'ok', warnings: [] } },
+      state: { offerCreationNotice: { kind: 'success', title: 'Offer saved.', message: '' } },
     })
   })
 
@@ -4026,10 +4081,11 @@ describe('Create Page Core Flows', () => {
     )
 
     await screen.findByRole('heading', { level: 1, name: 'Create new offer' })
-    expect(await screen.findByDisplayValue('Authoritative Buyer Ltd.')).toHaveAttribute('readonly')
+    await waitFor(() => expect(fieldValue('Company')).toHaveTextContent('Authoritative Buyer Ltd.'))
+    expect(screen.queryByLabelText('Company')).not.toBeInTheDocument()
     expect(screen.queryByLabelText('Offering client number')).not.toBeInTheDocument()
     expect(screen.queryByDisplayValue('00099999')).not.toBeInTheDocument()
-    expect(screen.getByRole('combobox', { name: 'Fair market value' })).toBeInTheDocument()
+    expect(screen.getByRole('group', { name: 'Fair market value' })).toBeInTheDocument()
     expect(screen.getByLabelText('Offer remarks')).toBeInTheDocument()
   })
 
@@ -4058,13 +4114,13 @@ describe('Create Page Core Flows', () => {
     )
 
     expect(await screen.findByText('Offering client unavailable')).toBeInTheDocument()
-    expect(screen.getByLabelText('Company')).toHaveValue('')
-    expect(screen.getByLabelText('Contact name')).toHaveValue('')
-    expect(screen.queryByDisplayValue('Forged Company')).not.toBeInTheDocument()
+    expect(await screen.findByLabelText('Contact name')).toHaveValue('')
+    expect(fieldValue('Company')).toHaveTextContent('—Not provided')
+    expect(screen.queryByText('Forged Company')).not.toBeInTheDocument()
     expect(screen.queryByDisplayValue('Forged Contact')).not.toBeInTheDocument()
 
-    await userEvent.click(screen.getByRole('button', { name: 'Save new offer' }))
-    expect(await screen.findByText('Cannot save yet.')).toBeInTheDocument()
+    await userEvent.click(screen.getByRole('button', { name: 'Save offer' }))
+    expect(await screen.findByText('Offer not saved.')).toBeInTheDocument()
     expect(
       screen.getAllByText(
         'The offering company could not be loaded from the authenticated forest client.',
@@ -4074,7 +4130,7 @@ describe('Create Page Core Flows', () => {
   })
 
   it('uses create offer query prefill for company, contact, pickup, and package options', async () => {
-    mockedSubmitProvincialOfferCreate.mockResolvedValue(successfulCreate('8081'))
+    mockedSubmitProvincialOfferCreate.mockResolvedValue(successfulOfferCreate('8081'))
     mockedFetchOfferPackageList.mockResolvedValue(['PKG-10', 'PKG-11'])
     mockedFetchOfferPackageVolume.mockResolvedValue('120.0')
 
@@ -4101,7 +4157,7 @@ describe('Create Page Core Flows', () => {
   })
 
   it('replaces stale create offer package query values with application package list values', async () => {
-    mockedSubmitProvincialOfferCreate.mockResolvedValue(successfulCreate('8082'))
+    mockedSubmitProvincialOfferCreate.mockResolvedValue(successfulOfferCreate('8082'))
     mockedFetchOfferPackageList.mockResolvedValue(['PKG-10'])
     mockedFetchOfferPackageVolume.mockResolvedValue('120.0')
 
@@ -4121,7 +4177,7 @@ describe('Create Page Core Flows', () => {
     expect(await screen.findByDisplayValue('PKG-10')).toBeInTheDocument()
 
     await userEvent.type(screen.getByLabelText('Offer amount ($/m³)'), '25000')
-    await userEvent.click(screen.getByRole('button', { name: 'Save new offer' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Save offer' }))
 
     await waitFor(() => {
       expect(mockedSubmitProvincialOfferCreate).toHaveBeenCalledWith(
@@ -4134,7 +4190,7 @@ describe('Create Page Core Flows', () => {
   })
 
   it('allows provincial offer creation when legacy returns no packages', async () => {
-    mockedSubmitProvincialOfferCreate.mockResolvedValue(successfulCreate('8083'))
+    mockedSubmitProvincialOfferCreate.mockResolvedValue(successfulOfferCreate('8083'))
     mockedFetchOfferPackageList.mockResolvedValue([])
     mockedFetchOfferApplicationVolume.mockResolvedValue('100.0')
 
@@ -4151,12 +4207,14 @@ describe('Create Page Core Flows', () => {
     )
 
     await screen.findByRole('heading', { level: 1, name: 'Create new offer' })
-    expect(await screen.findByDisplayValue('No Packages')).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'See scale detail' })).toBeDisabled()
-    expect(screen.getByDisplayValue('100.0')).toBeInTheDocument()
+    await screen.findByLabelText('Offer amount ($/m³)')
+    await waitFor(() => expect(fieldValue('Package number')).toHaveTextContent('No packages'))
+    expect(screen.queryByRole('combobox', { name: 'Package number' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'See scale detail' })).not.toBeInTheDocument()
+    expect(fieldValue('Application/package volume (m³)')).toHaveTextContent('100.0')
 
     await userEvent.type(screen.getByLabelText('Offer amount ($/m³)'), '25000')
-    await userEvent.click(screen.getByRole('button', { name: 'Save new offer' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Save offer' }))
 
     await waitFor(() => {
       expect(mockedSubmitProvincialOfferCreate).toHaveBeenCalledWith(
@@ -4167,7 +4225,7 @@ describe('Create Page Core Flows', () => {
       )
     })
     expect(mockNavigate).toHaveBeenCalledWith('/provincial/offers/8083', {
-      state: { offerCreationNotice: { message: 'ok', warnings: [] } },
+      state: { offerCreationNotice: { kind: 'success', title: 'Offer saved.', message: '' } },
     })
   })
 })
