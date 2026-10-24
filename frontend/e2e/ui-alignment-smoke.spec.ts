@@ -3248,6 +3248,7 @@ test.describe('FSPTS-aligned LEXIS shell', () => {
     await expect(filPanel.getByLabel('Policy effective date')).toBeFocused()
     await expect(filPanel.getByLabel('Fee in lieu percentage')).toBeVisible()
     await expect(filPanel.getByText('Whole numbers from 1 to 99')).toBeVisible()
+    await expect(filPanel.getByRole('button', { name: 'Save fee in lieu policy' })).toBeVisible()
 
     const mobilePanel = await filPanel.evaluate((panel) => {
       const fields = panel.querySelector('.admin-policy-modal__fields')

@@ -480,6 +480,31 @@ describe('Layout shell', () => {
     expect(averageMarketValuesLink).not.toHaveClass('cds--side-nav__link--current')
   })
 
+  it('shows a cut-off menu label in full in the browser tooltip', async () => {
+    mockedUseAuth.mockReturnValue(
+      createTestAuthContext({
+        capabilities: createTestCapabilities({
+          grantedActions: ['/lexisPolicyAdmin', '/lexisFILAdmin'],
+        }),
+        canPerform: (action: string) => ['/lexisPolicyAdmin', '/lexisFILAdmin'].includes(action),
+      }),
+    )
+
+    renderLayout('/admin/policies/fil')
+
+    const filPolicyLink = screen.getByRole('link', { name: 'Non-appraised Sec.3 FIL%' })
+    const feePolicyLink = screen.getByRole('link', { name: 'Multiplication Factor' })
+    const cutOffText = filPolicyLink.querySelector('.cds--side-nav__link-text') as HTMLElement
+    Object.defineProperty(cutOffText, 'scrollWidth', { configurable: true, value: 240 })
+    Object.defineProperty(cutOffText, 'clientWidth', { configurable: true, value: 180 })
+
+    await userEvent.hover(filPolicyLink)
+    await userEvent.hover(feePolicyLink)
+
+    expect(filPolicyLink).toHaveAttribute('title', 'Non-appraised Sec.3 FIL%')
+    expect(feePolicyLink).not.toHaveAttribute('title')
+  })
+
   it('ignores stale RTM-only runtime configuration for admin navigation', async () => {
     window.config = { VITE_LEXIS_PROD_RTM_ONLY: 'true' }
 

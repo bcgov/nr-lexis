@@ -122,7 +122,7 @@ type PendingDeletion =
     }
 
 const ADMIN_PAGE_SIZES = [20, 50, 100, 200]
-const FEE_PAGE_SIZES = [...SEARCH_PAGE_SIZE_OPTIONS]
+const POLICY_PAGE_SIZES = [...SEARCH_PAGE_SIZE_OPTIONS]
 const EMPTY_FEE_VALUES = ['', '', '']
 const EMPTY_FIL_VALUES = ['', '']
 const EMPTY_SCHEDULE_VALUES = ['', '', '', '', '', '']
@@ -131,7 +131,7 @@ const PendingIcon = () => <Loading small withOverlay={false} description="" />
 const FEE_REGION_OPTIONS_ERROR =
   "Regions couldn't be loaded. Refresh the page to add or edit fee policies."
 
-// A fee policy can only start on a future B.C. business day, so its calendar starts tomorrow.
+// A policy can only start on a future B.C. business day, so its calendar starts tomorrow.
 const firstFutureBusinessIsoDate = (): string => {
   const { year, month, day } = businessDateParts()
   return formatLocalIsoDate(new Date(year, month - 1, day + 1))
@@ -326,12 +326,13 @@ const AdminPoliciesPage = ({ area }: AdminPoliciesPageProps) => {
         : 'Loading fee policies…'
   const notificationTitle = area === 'schedule' ? 'Schedule update' : 'Policy update'
   const errorTitle = area === 'schedule' ? 'Schedule error' : 'Policy error'
-  // A fee policy result is titled by what happened. A save whose refresh failed still reports both.
-  const feeSuccessOnly = area === 'fee' && Boolean(successMessage) && !errorMessage
-  const pageActionResult: ActionResult | null = feeSuccessOnly
+  // A policy result is titled by what happened. A save whose refresh failed still reports both.
+  const isPolicyArea = area !== 'schedule'
+  const policySuccessOnly = isPolicyArea && Boolean(successMessage) && !errorMessage
+  const pageActionResult: ActionResult | null = policySuccessOnly
     ? { kind: 'success', title: successMessage, message: '' }
     : combineActionMessages(
-        area === 'fee' && successMessage ? `${successMessage}.` : successMessage,
+        isPolicyArea && successMessage ? `${successMessage}.` : successMessage,
         errorMessage,
         {
           error: errorTitle,
@@ -875,7 +876,7 @@ const AdminPoliciesPage = ({ area }: AdminPoliciesPageProps) => {
       })
       await loadPolicies()
       setSuccessMessage(
-        editingFilPolicyId ? 'Fee in lieu policy updated.' : 'Fee in lieu policy added.',
+        editingFilPolicyId ? 'Fee in lieu policy updated' : 'Fee in lieu policy added',
       )
       resetFilForm()
       setIsPolicyEditorOpen(false)
@@ -913,7 +914,7 @@ const AdminPoliciesPage = ({ area }: AdminPoliciesPageProps) => {
       if (editingFilPolicyId === rowId) {
         resetFilForm()
       }
-      setSuccessMessage('Fee in lieu policy deleted.')
+      setSuccessMessage('Fee in lieu policy deleted')
     } finally {
       setIsMutatingPolicies(false)
     }
@@ -1090,7 +1091,7 @@ const AdminPoliciesPage = ({ area }: AdminPoliciesPageProps) => {
       forwardText="Next page"
       page={page + 1}
       pageSize={pageSize}
-      pageSizes={area === 'fee' ? FEE_PAGE_SIZES : ADMIN_PAGE_SIZES}
+      pageSizes={isPolicyArea ? POLICY_PAGE_SIZES : ADMIN_PAGE_SIZES}
       totalItems={totalRows}
       onChange={({ page: nextPage, pageSize: nextPageSize }) => {
         setPage(Math.max(0, nextPage - 1))
@@ -1170,10 +1171,7 @@ const AdminPoliciesPage = ({ area }: AdminPoliciesPageProps) => {
             />
           )}
           <RequiredFieldsLegend />
-          <div
-            ref={policyFieldsRef}
-            className="admin-policy-modal__fields admin-policy-modal__fields--fee"
-          >
+          <div ref={policyFieldsRef} className="admin-policy-modal__fields">
             {/* Fee policy errors show when Save fee policy is selected, not when a field is left. */}
             <IsoDatePicker
               id="feeEffectiveDate"
@@ -1226,6 +1224,8 @@ const AdminPoliciesPage = ({ area }: AdminPoliciesPageProps) => {
         </DetailSidePanel>
       )}
 
+      {/* INTENTIONAL_LEGACY_DIVERGENCE(FEE_IN_LIEU_POLICY_EDITOR): fee in lieu policies are added
+          and edited in a side panel with labelled fields, and each save or delete is confirmed. */}
       {area === 'fil' && (
         <DetailSidePanel
           open={isPolicyEditorOpen}
@@ -1245,13 +1245,9 @@ const AdminPoliciesPage = ({ area }: AdminPoliciesPageProps) => {
               onClick: requestClosePolicyEditor,
             },
             {
-              label: isMutatingPolicies
-                ? 'Saving…'
-                : editingFilPolicyId
-                  ? 'Update fee in lieu policy'
-                  : 'Add fee in lieu policy',
+              label: isMutatingPolicies ? 'Saving…' : 'Save fee in lieu policy',
               kind: 'primary',
-              renderIcon: isMutatingPolicies ? PendingIcon : editingFilPolicyId ? undefined : Add,
+              renderIcon: isMutatingPolicies ? PendingIcon : undefined,
               disabled: isMutatingPolicies,
               onClick: () => void upsertFilPolicy(),
             },
@@ -1274,15 +1270,17 @@ const AdminPoliciesPage = ({ area }: AdminPoliciesPageProps) => {
           )}
           <RequiredFieldsLegend />
           <div ref={policyFieldsRef} className="admin-policy-modal__fields">
+            {/* Fee in lieu policy errors show when Save fee in lieu policy is selected, not when a
+                field is left. */}
             <IsoDatePicker
               id="filEffectiveDate"
               labelText={requiredLabel('Policy effective date')}
               required
               value={filEffectiveDate}
+              minDate={firstFutureBusinessIsoDate()}
               invalid={!!filFieldError('filEffectiveDate')}
               invalidText={filFieldError('filEffectiveDate')}
               disabled={isMutatingPolicies}
-              onBlur={() => markFieldTouched('filEffectiveDate')}
               onChange={setFilEffectiveDate}
             />
             <TextInput
@@ -1295,7 +1293,6 @@ const AdminPoliciesPage = ({ area }: AdminPoliciesPageProps) => {
               invalid={!!filFieldError('filPolicyPercentage')}
               invalidText={filFieldError('filPolicyPercentage')}
               disabled={isMutatingPolicies}
-              onBlur={() => markFieldTouched('filPolicyPercentage')}
               onChange={(event) => setFilPolicyPercentage(event.target.value)}
             />
           </div>
@@ -1309,7 +1306,7 @@ const AdminPoliciesPage = ({ area }: AdminPoliciesPageProps) => {
             pendingDeletion.area === 'fee'
               ? 'Are you sure you want to delete this fee policy?'
               : pendingDeletion.area === 'fil'
-                ? 'Delete fee in lieu policy?'
+                ? 'Are you sure you want to delete this fee in lieu policy?'
                 : 'Delete export schedule?'
           }
           description={
@@ -1326,7 +1323,17 @@ const AdminPoliciesPage = ({ area }: AdminPoliciesPageProps) => {
                 </span>
               </>
             ) : pendingDeletion.area === 'fil' ? (
-              `This permanently deletes the fee in lieu policy effective ${pendingDeletion.effectiveDate} (${pendingDeletion.percentage}%). This cannot be undone.`
+              <>
+                <strong>
+                  The fee in lieu policy effective{' '}
+                  {formatIsoDateLabel(pendingDeletion.effectiveDate)} ({pendingDeletion.percentage}
+                  %)
+                </strong>{' '}
+                will be deleted.{' '}
+                <span className="lexis-confirmation-modal__description-note">
+                  This action cannot be undone.
+                </span>
+              </>
             ) : (
               `This permanently deletes export schedule ${pendingDeletion.row.exportScheduleId} with advertising date ${pendingDeletion.row.advertisingDate}. This cannot be undone.`
             )
@@ -1412,11 +1419,11 @@ const AdminPoliciesPage = ({ area }: AdminPoliciesPageProps) => {
                           {column.label}
                         </TableHeader>
                       ))}
-                      <TableHeader className="admin-fee-policy-table__user-id">
+                      <TableHeader className="admin-policy-table__user-id">
                         Entry user ID
                       </TableHeader>
                       <TableHeader>Entry timestamp</TableHeader>
-                      <TableHeader className="admin-fee-policy-table__user-id">
+                      <TableHeader className="admin-policy-table__user-id">
                         Update user ID
                       </TableHeader>
                       <TableHeader>Update timestamp</TableHeader>
@@ -1433,13 +1440,13 @@ const AdminPoliciesPage = ({ area }: AdminPoliciesPageProps) => {
                           {row.orgUnitCode || row.orgUnitNo}
                         </TableCell>
                         <TableCell>{row.policyPercentage}</TableCell>
-                        <TableCell className="admin-fee-policy-table__user-id">
+                        <TableCell className="admin-policy-table__user-id">
                           {breakableUserId(row.entryUserId)}
                         </TableCell>
                         <TableCell className="legacy-search-table-date">
                           {formatIsoDateLabel(row.entryTimestamp)}
                         </TableCell>
-                        <TableCell className="admin-fee-policy-table__user-id">
+                        <TableCell className="admin-policy-table__user-id">
                           {breakableUserId(row.updateUserId)}
                         </TableCell>
                         <TableCell className="legacy-search-table-date">
@@ -1541,7 +1548,11 @@ const AdminPoliciesPage = ({ area }: AdminPoliciesPageProps) => {
               }
             >
               {filPolicies.length > 0 ? (
-                <Table size="md" useZebraStyles className="admin-policy-table">
+                <Table
+                  size="md"
+                  useZebraStyles
+                  className="admin-policy-table admin-fil-policy-table"
+                >
                   <TableHead>
                     <TableRow>
                       {FIL_POLICY_SORT_COLUMNS.map((column) => (
@@ -1559,9 +1570,13 @@ const AdminPoliciesPage = ({ area }: AdminPoliciesPageProps) => {
                           {column.label}
                         </TableHeader>
                       ))}
-                      <TableHeader>Entry user</TableHeader>
+                      <TableHeader className="admin-policy-table__user-id">
+                        Entry user ID
+                      </TableHeader>
                       <TableHeader>Entry timestamp</TableHeader>
-                      <TableHeader>Update user</TableHeader>
+                      <TableHeader className="admin-policy-table__user-id">
+                        Update user ID
+                      </TableHeader>
                       <TableHeader>Update timestamp</TableHeader>
                       <TableHeader>Actions</TableHeader>
                     </TableRow>
@@ -1570,16 +1585,20 @@ const AdminPoliciesPage = ({ area }: AdminPoliciesPageProps) => {
                     {filPolicies.map((row) => (
                       <TableRow key={row.id}>
                         <TableCell className="legacy-search-table-date">
-                          {row.effectiveDate}
+                          {formatIsoDateLabel(row.effectiveDate)}
                         </TableCell>
                         <TableCell>{row.filPercentage}</TableCell>
-                        <TableCell>{row.entryUserId}</TableCell>
-                        <TableCell className="legacy-search-table-date">
-                          {row.entryTimestamp}
+                        <TableCell className="admin-policy-table__user-id">
+                          {breakableUserId(row.entryUserId)}
                         </TableCell>
-                        <TableCell>{row.updateUserId}</TableCell>
                         <TableCell className="legacy-search-table-date">
-                          {row.updateTimestamp}
+                          {formatIsoDateLabel(row.entryTimestamp)}
+                        </TableCell>
+                        <TableCell className="admin-policy-table__user-id">
+                          {breakableUserId(row.updateUserId)}
+                        </TableCell>
+                        <TableCell className="legacy-search-table-date">
+                          {formatIsoDateLabel(row.updateTimestamp)}
                         </TableCell>
                         <TableCell>
                           {isFuturePolicyDate(row.effectiveDate) && (
@@ -1587,6 +1606,7 @@ const AdminPoliciesPage = ({ area }: AdminPoliciesPageProps) => {
                               <Button
                                 kind="ghost"
                                 size="md"
+                                renderIcon={Edit}
                                 onClick={(event) => {
                                   policyEditorLauncherRef.current = event.currentTarget
                                   editFilPolicy(row)
@@ -1594,7 +1614,7 @@ const AdminPoliciesPage = ({ area }: AdminPoliciesPageProps) => {
                                 disabled={
                                   isLoadingPolicies || isMutatingPolicies || isPolicyEditorOpen
                                 }
-                                aria-label={`Edit fee in lieu policy ${row.effectiveDate}`}
+                                aria-label={`Edit fee in lieu policy ${formatIsoDateLabel(row.effectiveDate)}`}
                               >
                                 Edit
                               </Button>
@@ -1613,7 +1633,7 @@ const AdminPoliciesPage = ({ area }: AdminPoliciesPageProps) => {
                                 disabled={
                                   isLoadingPolicies || isMutatingPolicies || isPolicyEditorOpen
                                 }
-                                aria-label={`Delete fee in lieu policy ${row.effectiveDate}`}
+                                aria-label={`Delete fee in lieu policy ${formatIsoDateLabel(row.effectiveDate)}`}
                               >
                                 Delete
                               </Button>

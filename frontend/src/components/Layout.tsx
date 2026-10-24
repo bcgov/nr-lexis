@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react'
+import { useCallback, useEffect, useMemo, useState, type MouseEvent, type ReactNode } from 'react'
 import {
   ChartColumn,
   Close,
@@ -329,6 +329,17 @@ const canShowRoleScopedLink = (
   return hasProvincialSubmitter || hasProvincialStaffRole
 }
 
+// A menu label cut off by the navigation width shows in full in the browser tooltip.
+const titleTruncatedMenuLabel = (event: MouseEvent<HTMLElement>, label: string): void => {
+  const link = event.currentTarget
+  const text = link.querySelector('.cds--side-nav__link-text')
+  if (text && text.scrollWidth > text.clientWidth) {
+    link.title = label
+  } else {
+    link.removeAttribute('title')
+  }
+}
+
 function Layout({ children }: LayoutProps) {
   const location = useLocation()
   const navigate = useNavigate()
@@ -597,6 +608,9 @@ function Layout({ children }: LayoutProps) {
         to={link.to}
         isActive={isActive}
         aria-current={isActive ? 'page' : undefined}
+        onMouseEnter={(event: MouseEvent<HTMLElement>) =>
+          titleTruncatedMenuLabel(event, link.label)
+        }
       >
         {link.label}
       </SideNavMenuItem>
