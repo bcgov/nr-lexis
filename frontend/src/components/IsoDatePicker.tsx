@@ -43,6 +43,8 @@ type IsoDatePickerProps = {
   required?: boolean
   disabled?: boolean
   readOnly?: boolean
+  /** The earliest day the calendar offers, as YYYY-MM-DD. A typed earlier date is kept as typed. */
+  minDate?: string
   onBlur?: () => void
   onChange: (value: string) => void
 }
@@ -56,10 +58,14 @@ export default function IsoDatePicker({
   required = false,
   disabled = false,
   readOnly = false,
+  minDate,
   onBlur,
   onChange,
 }: IsoDatePickerProps) {
-  const flatpickrValue = value.trim() && isValidIsoDate(value) ? value : undefined
+  // Text Flatpickr can't select: a partial or impossible date, or a day before minDate.
+  const isUnselectable = (text: string): boolean =>
+    Boolean(text.trim()) && (!isValidIsoDate(text) || (minDate !== undefined && text < minDate))
+  const flatpickrValue = value.trim() && !isUnselectable(value) ? value : undefined
   const latestInputValueRef = useRef(value)
 
   useEffect(() => {
@@ -73,11 +79,12 @@ export default function IsoDatePicker({
       allowInput
       parseDate={parseIsoDate}
       readOnly={readOnly}
+      minDate={minDate}
       value={flatpickrValue}
       onOpen={placeCalendarAfterMotion}
       onChange={(_selectedDates, dateString, calendar) => {
         const latestInputValue = latestInputValueRef.current
-        if (!dateString && latestInputValue.trim() && !isValidIsoDate(latestInputValue)) {
+        if (!dateString && isUnselectable(latestInputValue)) {
           // Enter makes Flatpickr empty the input without blurring it, so put the text back.
           requestAnimationFrame(() => {
             if (latestInputValueRef.current === latestInputValue) {
@@ -109,7 +116,7 @@ export default function IsoDatePicker({
           const latestInputValue = latestInputValueRef.current
           onBlur?.()
 
-          if (latestInputValue.trim() && !isValidIsoDate(latestInputValue)) {
+          if (isUnselectable(latestInputValue)) {
             requestAnimationFrame(() => {
               if (latestInputValueRef.current === latestInputValue) {
                 input.value = latestInputValue

@@ -195,6 +195,38 @@ describe('IsoDatePicker', () => {
     expect(onChange).toHaveBeenLastCalledWith('2026-02-30')
   })
 
+  it('disables days before minDate and keeps an earlier typed date for the server to refuse', async () => {
+    const StatefulDatePicker = () => {
+      const [value, setValue] = useState('')
+
+      return (
+        <>
+          <IsoDatePicker
+            id="effectiveDate"
+            labelText="Effective date"
+            value={value}
+            minDate="2026-10-24"
+            onChange={setValue}
+          />
+          <output aria-label="Current date value">{value}</output>
+        </>
+      )
+    }
+
+    render(<StatefulDatePicker />)
+
+    const input = screen.getByLabelText('Effective date') as HTMLInputElement & {
+      _flatpickr: { isEnabled: (date: Date) => boolean }
+    }
+    expect(input._flatpickr.isEnabled(new Date(2026, 9, 23))).toBe(false)
+    expect(input._flatpickr.isEnabled(new Date(2026, 9, 24))).toBe(true)
+
+    await userEvent.type(input, '2026-10-01{Enter}')
+
+    await waitFor(() => expect(input).toHaveValue('2026-10-01'))
+    expect(screen.getByLabelText('Current date value')).toHaveTextContent('2026-10-01')
+  })
+
   it('does not emit a change when Carbon repeats the controlled date value', () => {
     const onChange = vi.fn()
     render(
