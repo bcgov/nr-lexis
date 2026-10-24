@@ -3151,7 +3151,9 @@ test.describe('FSPTS-aligned LEXIS shell', () => {
     await expect(
       feePolicyTable.getByRole('columnheader', { name: 'Entry user ID', exact: true }),
     ).toBeVisible()
-    await expect(feePolicyTable.getByRole('cell', { name: 'Jan 1, 2099' })).toBeVisible()
+    await expect(
+      feePolicyTable.getByRole('cell', { name: 'Jan 1, 2099', exact: true }),
+    ).toBeVisible()
     const feeTable = await page.locator('.legacy-search-table-content').evaluate((content) => {
       const actionRow = content.querySelector('tbody tr:has(.admin-policy-row-actions)')
       const header = content.querySelector('thead tr')
