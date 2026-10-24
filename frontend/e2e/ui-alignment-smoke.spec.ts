@@ -234,9 +234,9 @@ const feePolicyPage = {
       orgUnitName: 'Cariboo Natural Resource Region',
       policyPercentage: '4',
       entryUserId: 'IDIR\\UI.TESTER',
-      entryTimestamp: '2026-07-01T12:00:00.000Z',
+      entryTimestamp: '2026-07-01',
       updateUserId: 'IDIR\\UI.TESTER',
-      updateTimestamp: '2026-07-01T12:00:00.000Z',
+      updateTimestamp: '2026-07-01',
     },
   ],
   total: 1,
@@ -3033,12 +3033,14 @@ test.describe('FSPTS-aligned LEXIS shell', () => {
         })
       })
       await gotoSyntheticRoute(page, '/admin/policies/fee', {
-        ready: page.getByRole('button', { name: 'Delete fee policy RCO 2099-01-01', exact: true }),
+        ready: page.getByRole('button', { name: 'Delete fee policy RCO Jan 1, 2099', exact: true }),
       })
       await page
-        .getByRole('button', { name: 'Delete fee policy RCO 2099-01-01', exact: true })
+        .getByRole('button', { name: 'Delete fee policy RCO Jan 1, 2099', exact: true })
         .click()
-      const dialog = page.getByRole('dialog', { name: 'Delete fee policy?' })
+      const dialog = page.getByRole('dialog', {
+        name: 'Are you sure you want to delete this fee policy?',
+      })
       await dialog.getByRole('button', { name: 'Delete', exact: true }).click()
       const failure = dialog.locator('.app-inline-notification')
       await expect(failure).toContainText('This fee policy is in use.')
@@ -3056,7 +3058,7 @@ test.describe('FSPTS-aligned LEXIS shell', () => {
       const success = page.locator(
         '.app-inline-notification--success, .app-inline-notification.cds--inline-notification--success',
       )
-      await expect(success).toContainText('Fee policy deleted.')
+      await expect(success).toContainText('Fee policy deleted')
       await expect(success).toBeInViewport()
       expect(attempts).toBe(2)
       await page.clock.install()
@@ -3093,12 +3095,14 @@ test.describe('FSPTS-aligned LEXIS shell', () => {
       await route.fulfill({ json: { success: false, errors: [longError] } })
     })
     await gotoSyntheticRoute(page, '/admin/policies/fee', {
-      ready: page.getByRole('button', { name: 'Delete fee policy RCO 2099-01-01', exact: true }),
+      ready: page.getByRole('button', { name: 'Delete fee policy RCO Jan 1, 2099', exact: true }),
     })
     await page
-      .getByRole('button', { name: 'Delete fee policy RCO 2099-01-01', exact: true })
+      .getByRole('button', { name: 'Delete fee policy RCO Jan 1, 2099', exact: true })
       .click()
-    const dialog = page.getByRole('dialog', { name: 'Delete fee policy?' })
+    const dialog = page.getByRole('dialog', {
+      name: 'Are you sure you want to delete this fee policy?',
+    })
     await dialog.getByRole('button', { name: 'Delete', exact: true }).click()
     const failure = dialog.locator('.app-inline-notification')
     await expect(failure).toContainText(longError)
@@ -3121,7 +3125,7 @@ test.describe('FSPTS-aligned LEXIS shell', () => {
       .toBe(true)
     await dialog.getByRole('button', { name: 'Cancel', exact: true }).click()
     await page
-      .getByRole('button', { name: 'Delete fee policy RCO 2099-01-01', exact: true })
+      .getByRole('button', { name: 'Delete fee policy RCO Jan 1, 2099', exact: true })
       .click()
     await expect(dialog.locator('.app-inline-notification')).toHaveCount(0)
   })
@@ -3142,11 +3146,25 @@ test.describe('FSPTS-aligned LEXIS shell', () => {
       .getByRole('region', { name: 'Search results table' })
       .getByRole('table')
     await expect(
-      feePolicyTable.getByRole('columnheader', { name: 'Fee increase %', exact: true }),
+      feePolicyTable.getByRole('columnheader', { name: 'Fee increase percentage', exact: true }),
     ).toBeVisible()
     await expect(
-      feePolicyTable.getByRole('columnheader', { name: 'Entry user', exact: true }),
+      feePolicyTable.getByRole('columnheader', { name: 'Entry user ID', exact: true }),
     ).toBeVisible()
+    await expect(feePolicyTable.getByRole('cell', { name: 'Jan 1, 2099' })).toBeVisible()
+    const feeTable = await page.locator('.legacy-search-table-content').evaluate((content) => {
+      const actionRow = content.querySelector('tbody tr:has(.admin-policy-row-actions)')
+      const header = content.querySelector('thead tr')
+      if (!(actionRow instanceof HTMLElement) || !(header instanceof HTMLElement)) {
+        throw new Error('Fee policy row actions not found')
+      }
+      return {
+        overflow: content.scrollWidth - content.clientWidth,
+        actionRowHeight: actionRow.getBoundingClientRect().height,
+      }
+    })
+    expect(feeTable.overflow).toBeLessThanOrEqual(0)
+    expect(feeTable.actionRowHeight).toBe(40)
     const feeAddButton = page.getByRole('button', { name: 'Add fee policy' })
     await expect(feeAddButton).toBeEnabled()
     await expect(feeAddButton).toHaveCSS('height', '40px')
@@ -3194,6 +3212,14 @@ test.describe('FSPTS-aligned LEXIS shell', () => {
     await expect(feePanel.getByLabel('Region')).toBeVisible()
     await expect(feePanel.getByLabel('Fee increase percentage')).toBeVisible()
     await expect(feePanel.getByText('Whole numbers from 0 to 100')).toBeVisible()
+    await expect(feePanel.getByRole('button', { name: 'Save fee policy' })).toBeVisible()
+    const feeFieldLefts = await feePanel
+      .locator('.admin-policy-modal__fields > *')
+      .evaluateAll((fields) =>
+        fields.map((field) => Math.round(field.getBoundingClientRect().left)),
+      )
+    expect(feeFieldLefts).toHaveLength(3)
+    expect(new Set(feeFieldLefts).size).toBe(1)
     const feePanelCancel = feePanel.getByRole('button', { name: 'Cancel' })
     await expect(feePanelCancel).toHaveClass(/cds--btn--tertiary/)
     await expect(feePanelCancel).toHaveCSS('height', '40px')

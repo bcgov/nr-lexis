@@ -1,5 +1,5 @@
 import { RecordFieldCell, RecordFieldGrid, RecordFieldRow } from '@/pages/shared/RecordFieldGrid'
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import {
   Button,
   Column,
@@ -17,7 +17,7 @@ import {
   TextInput,
   Tile,
 } from '@carbon/react'
-import { Add, TrashCan } from '@carbon/icons-react'
+import { Add, Edit, TrashCan } from '@carbon/icons-react'
 import { useAuth } from '@/context/auth/useAuth'
 import { ActionResultNotification } from '../../components/ActionResultNotification'
 import { AppNotification } from '../../components/AppNotification'
@@ -65,9 +65,14 @@ import {
 } from '@/service/admin-policy-service'
 import { fetchReportOptions, type SearchOption } from '@/service/search-options-service'
 import IsoDatePicker from '../../components/IsoDatePicker'
-import { toCarbonSortDirection } from '@/pages/shared/search-query-utils'
-import { combineActionMessages } from '@/utils/action-result'
-import { formatBusinessIsoDate } from '@/utils/date'
+import { SEARCH_PAGE_SIZE_OPTIONS, toCarbonSortDirection } from '@/pages/shared/search-query-utils'
+import { combineActionMessages, type ActionResult } from '@/utils/action-result'
+import {
+  businessDateParts,
+  formatBusinessIsoDate,
+  formatIsoDateLabel,
+  formatLocalIsoDate,
+} from '@/utils/date'
 import { fieldErrorText } from '@/utils/field-error'
 import {
   focusFirstEditableFieldAfterPanelChange,
@@ -116,13 +121,29 @@ type PendingDeletion =
     }
 
 const ADMIN_PAGE_SIZES = [20, 50, 100, 200]
+const FEE_PAGE_SIZES = [...SEARCH_PAGE_SIZE_OPTIONS]
 const EMPTY_FEE_VALUES = ['', '', '']
 const EMPTY_FIL_VALUES = ['', '']
 const EMPTY_SCHEDULE_VALUES = ['', '', '', '', '', '']
 const DEFAULT_ADMIN_PAGE_SIZE = 100
 const PendingIcon = () => <Loading small withOverlay={false} description="" />
 const FEE_REGION_OPTIONS_ERROR =
-  'Authoritative region options are unavailable. Fee policy saves are disabled.'
+  "Regions couldn't be loaded. Refresh the page to add or edit fee policies."
+
+// A fee policy can only start on a future B.C. business day, so its calendar starts tomorrow.
+const firstFutureBusinessIsoDate = (): string => {
+  const { year, month, day } = businessDateParts()
+  return formatLocalIsoDate(new Date(year, month - 1, day + 1))
+}
+
+// Long user IDs, such as ORG_BOUNDARY_SCRIPT, wrap after a backslash or underscore.
+const breakableUserId = (userId: string): ReactNode =>
+  userId.split(/(?<=[\\_])/).map((part, index, parts) => (
+    <Fragment key={parts.slice(0, index + 1).join('')}>
+      {index > 0 && <wbr />}
+      {part}
+    </Fragment>
+  ))
 
 const validFeeRegionOptions = (options: SearchOption[]): boolean => {
   if (options.length === 0) {
@@ -185,7 +206,7 @@ const SCHEDULE_SORT_COLUMNS: Array<{ id: ExportScheduleSortField; label: string 
 const FEE_POLICY_SORT_COLUMNS: Array<{ id: FeePolicySortField; label: string }> = [
   { id: 'effective_date', label: 'Policy effective date' },
   { id: 'org_unit_no', label: 'Region' },
-  { id: 'percent_increase', label: 'Fee increase %' },
+  { id: 'percent_increase', label: 'Fee increase percentage' },
 ]
 
 const FIL_POLICY_SORT_COLUMNS: Array<{ id: FilPolicySortField; label: string }> = [
@@ -302,11 +323,19 @@ const AdminPoliciesPage = ({ area }: AdminPoliciesPageProps) => {
         : 'Loading fee policies…'
   const notificationTitle = area === 'schedule' ? 'Schedule update' : 'Policy update'
   const errorTitle = area === 'schedule' ? 'Schedule error' : 'Policy error'
-  const pageActionResult = combineActionMessages(successMessage, errorMessage, {
-    error: errorTitle,
-    success: notificationTitle,
-    warning: `${notificationTitle} needs attention`,
-  })
+  // A fee policy result is titled by what happened. A save whose refresh failed still reports both.
+  const feeSuccessOnly = area === 'fee' && Boolean(successMessage) && !errorMessage
+  const pageActionResult: ActionResult | null = feeSuccessOnly
+    ? { kind: 'success', title: successMessage, message: '' }
+    : combineActionMessages(
+        area === 'fee' && successMessage ? `${successMessage}.` : successMessage,
+        errorMessage,
+        {
+          error: errorTitle,
+          success: notificationTitle,
+          warning: `${notificationTitle} needs attention`,
+        },
+      )
   const fieldErrors = useMemo<FieldErrors<PolicyField>>(
     () => ({
       feeEffectiveDate:
@@ -748,7 +777,7 @@ const AdminPoliciesPage = ({ area }: AdminPoliciesPageProps) => {
         policyPercentage: feePolicyPercentage,
       })
       await loadPolicies()
-      setSuccessMessage(editingFeePolicyId ? 'Fee policy updated.' : 'Fee policy added.')
+      setSuccessMessage(editingFeePolicyId ? 'Fee policy updated' : 'Fee policy added')
       resetFeeForm()
       setIsPolicyEditorOpen(false)
     } catch (error) {
@@ -793,7 +822,7 @@ const AdminPoliciesPage = ({ area }: AdminPoliciesPageProps) => {
       if (editingFeePolicyId === rowId) {
         resetFeeForm()
       }
-      setSuccessMessage('Fee policy deleted.')
+      setSuccessMessage('Fee policy deleted')
     } finally {
       setIsMutatingPolicies(false)
     }
@@ -1045,7 +1074,7 @@ const AdminPoliciesPage = ({ area }: AdminPoliciesPageProps) => {
       forwardText="Next page"
       page={page + 1}
       pageSize={pageSize}
-      pageSizes={ADMIN_PAGE_SIZES}
+      pageSizes={area === 'fee' ? FEE_PAGE_SIZES : ADMIN_PAGE_SIZES}
       totalItems={totalRows}
       onChange={({ page: nextPage, pageSize: nextPageSize }) => {
         setPage(Math.max(0, nextPage - 1))
@@ -1080,6 +1109,8 @@ const AdminPoliciesPage = ({ area }: AdminPoliciesPageProps) => {
         />
       )}
 
+      {/* INTENTIONAL_LEGACY_DIVERGENCE(MULTIPLICATION_FACTOR_EDITOR): fee policies are added and
+          edited in a side panel with labelled fields, and each save or delete is confirmed. */}
       {area === 'fee' && (
         <DetailSidePanel
           open={isPolicyEditorOpen}
@@ -1099,13 +1130,9 @@ const AdminPoliciesPage = ({ area }: AdminPoliciesPageProps) => {
               onClick: requestClosePolicyEditor,
             },
             {
-              label: isMutatingPolicies
-                ? 'Saving…'
-                : editingFeePolicyId
-                  ? 'Update fee policy'
-                  : 'Add fee policy',
+              label: isMutatingPolicies ? 'Saving…' : 'Save fee policy',
               kind: 'primary',
-              renderIcon: isMutatingPolicies ? PendingIcon : editingFeePolicyId ? undefined : Add,
+              renderIcon: isMutatingPolicies ? PendingIcon : undefined,
               disabled: isMutatingPolicies,
               onClick: () => void upsertFeePolicy(),
             },
@@ -1131,15 +1158,16 @@ const AdminPoliciesPage = ({ area }: AdminPoliciesPageProps) => {
             ref={policyFieldsRef}
             className="admin-policy-modal__fields admin-policy-modal__fields--fee"
           >
+            {/* Fee policy errors show when Save fee policy is selected, not when a field is left. */}
             <IsoDatePicker
               id="feeEffectiveDate"
               labelText={requiredLabel('Policy effective date')}
               required
               value={feeEffectiveDate}
+              minDate={firstFutureBusinessIsoDate()}
               invalid={!!feeFieldError('feeEffectiveDate')}
               invalidText={feeFieldError('feeEffectiveDate')}
               disabled={isMutatingPolicies}
-              onBlur={() => markFieldTouched('feeEffectiveDate')}
               onChange={setFeeEffectiveDate}
             />
             <Select
@@ -1149,7 +1177,6 @@ const AdminPoliciesPage = ({ area }: AdminPoliciesPageProps) => {
               value={feeOrgUnitNo}
               invalid={!!feeFieldError('feeOrgUnitNo')}
               invalidText={feeFieldError('feeOrgUnitNo')}
-              onBlur={() => markFieldTouched('feeOrgUnitNo')}
               onChange={(event) => setFeeOrgUnitNo(event.target.value)}
               disabled={
                 isLoadingPolicies ||
@@ -1177,7 +1204,6 @@ const AdminPoliciesPage = ({ area }: AdminPoliciesPageProps) => {
               invalid={!!feeFieldError('feePolicyPercentage')}
               invalidText={feeFieldError('feePolicyPercentage')}
               disabled={isMutatingPolicies}
-              onBlur={() => markFieldTouched('feePolicyPercentage')}
               onChange={(event) => setFeePolicyPercentage(event.target.value)}
             />
           </div>
@@ -1265,17 +1291,26 @@ const AdminPoliciesPage = ({ area }: AdminPoliciesPageProps) => {
           open
           title={
             pendingDeletion.area === 'fee'
-              ? 'Delete fee policy?'
+              ? 'Are you sure you want to delete this fee policy?'
               : pendingDeletion.area === 'fil'
                 ? 'Delete fee in lieu policy?'
                 : 'Delete export schedule?'
           }
           description={
-            pendingDeletion.area === 'fee'
-              ? `This permanently deletes the ${pendingDeletion.regionLabel} fee policy effective ${pendingDeletion.effectiveDate} (${pendingDeletion.percentage}% increase). This cannot be undone.`
-              : pendingDeletion.area === 'fil'
-                ? `This permanently deletes the fee in lieu policy effective ${pendingDeletion.effectiveDate} (${pendingDeletion.percentage}%). This cannot be undone.`
-                : `This permanently deletes export schedule ${pendingDeletion.row.exportScheduleId} with advertising date ${pendingDeletion.row.advertisingDate}. This cannot be undone.`
+            pendingDeletion.area === 'fee' ? (
+              <>
+                <strong>
+                  The {pendingDeletion.regionLabel} fee policy effective{' '}
+                  {formatIsoDateLabel(pendingDeletion.effectiveDate)} ({pendingDeletion.percentage}%
+                  increase)
+                </strong>{' '}
+                will be deleted.
+              </>
+            ) : pendingDeletion.area === 'fil' ? (
+              `This permanently deletes the fee in lieu policy effective ${pendingDeletion.effectiveDate} (${pendingDeletion.percentage}%). This cannot be undone.`
+            ) : (
+              `This permanently deletes export schedule ${pendingDeletion.row.exportScheduleId} with advertising date ${pendingDeletion.row.advertisingDate}. This cannot be undone.`
+            )
           }
           confirmLabel="Delete"
           pendingLabel="Deleting…"
@@ -1297,7 +1332,11 @@ const AdminPoliciesPage = ({ area }: AdminPoliciesPageProps) => {
               handlePolicyDeleteError(error, pendingDeletion.area)
             }
           }}
-        />
+        >
+          {pendingDeletion.area === 'fee' && (
+            <p className="lexis-confirmation-modal__description">This action cannot be undone.</p>
+          )}
+        </ConfirmationModal>
       )}
 
       {area === 'fee' && (
@@ -1336,7 +1375,11 @@ const AdminPoliciesPage = ({ area }: AdminPoliciesPageProps) => {
               }
             >
               {feePolicies.length > 0 ? (
-                <Table size="md" useZebraStyles className="admin-policy-table">
+                <Table
+                  size="md"
+                  useZebraStyles
+                  className="admin-policy-table admin-fee-policy-table"
+                >
                   <TableHead>
                     <TableRow>
                       {FEE_POLICY_SORT_COLUMNS.map((column) => (
@@ -1354,9 +1397,13 @@ const AdminPoliciesPage = ({ area }: AdminPoliciesPageProps) => {
                           {column.label}
                         </TableHeader>
                       ))}
-                      <TableHeader>Entry user</TableHeader>
+                      <TableHeader className="admin-fee-policy-table__user-id">
+                        Entry user ID
+                      </TableHeader>
                       <TableHeader>Entry timestamp</TableHeader>
-                      <TableHeader>Update user</TableHeader>
+                      <TableHeader className="admin-fee-policy-table__user-id">
+                        Update user ID
+                      </TableHeader>
                       <TableHeader>Update timestamp</TableHeader>
                       <TableHeader>Actions</TableHeader>
                     </TableRow>
@@ -1365,19 +1412,23 @@ const AdminPoliciesPage = ({ area }: AdminPoliciesPageProps) => {
                     {feePolicies.map((row) => (
                       <TableRow key={row.id}>
                         <TableCell className="legacy-search-table-date">
-                          {row.effectiveDate}
+                          {formatIsoDateLabel(row.effectiveDate)}
                         </TableCell>
                         <TableCell title={row.orgUnitName}>
                           {row.orgUnitCode || row.orgUnitNo}
                         </TableCell>
                         <TableCell>{row.policyPercentage}</TableCell>
-                        <TableCell>{row.entryUserId}</TableCell>
-                        <TableCell className="legacy-search-table-date">
-                          {row.entryTimestamp}
+                        <TableCell className="admin-fee-policy-table__user-id">
+                          {breakableUserId(row.entryUserId)}
                         </TableCell>
-                        <TableCell>{row.updateUserId}</TableCell>
                         <TableCell className="legacy-search-table-date">
-                          {row.updateTimestamp}
+                          {formatIsoDateLabel(row.entryTimestamp)}
+                        </TableCell>
+                        <TableCell className="admin-fee-policy-table__user-id">
+                          {breakableUserId(row.updateUserId)}
+                        </TableCell>
+                        <TableCell className="legacy-search-table-date">
+                          {formatIsoDateLabel(row.updateTimestamp)}
                         </TableCell>
                         <TableCell>
                           {isFuturePolicyDate(row.effectiveDate) && (
@@ -1385,6 +1436,7 @@ const AdminPoliciesPage = ({ area }: AdminPoliciesPageProps) => {
                               <Button
                                 kind="ghost"
                                 size="md"
+                                renderIcon={Edit}
                                 onClick={(event) => {
                                   policyEditorLauncherRef.current = event.currentTarget
                                   editFeePolicy(row)
@@ -1397,7 +1449,7 @@ const AdminPoliciesPage = ({ area }: AdminPoliciesPageProps) => {
                                   Boolean(feeRegionOptionsError) ||
                                   feeRegionOptions.length === 0
                                 }
-                                aria-label={`Edit fee policy ${row.orgUnitCode || row.orgUnitNo} ${row.effectiveDate}`}
+                                aria-label={`Edit fee policy ${row.orgUnitCode || row.orgUnitNo} ${formatIsoDateLabel(row.effectiveDate)}`}
                               >
                                 Edit
                               </Button>
@@ -1417,7 +1469,7 @@ const AdminPoliciesPage = ({ area }: AdminPoliciesPageProps) => {
                                 disabled={
                                   isLoadingPolicies || isMutatingPolicies || isPolicyEditorOpen
                                 }
-                                aria-label={`Delete fee policy ${row.orgUnitCode || row.orgUnitNo} ${row.effectiveDate}`}
+                                aria-label={`Delete fee policy ${row.orgUnitCode || row.orgUnitNo} ${formatIsoDateLabel(row.effectiveDate)}`}
                               >
                                 Delete
                               </Button>

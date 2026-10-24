@@ -1646,6 +1646,51 @@ $notification-types: 'error', 'info', 'success', 'warning';
   text-align: right;
 }
 
+// Headers wrap between words and the user ID columns take the width left over, so all eight
+// columns fit at 1440px; a long user ID wraps at its separators rather than widening the table.
+.legacy-search-table-frame .cds--data-table.admin-fee-policy-table {
+  thead th .cds--table-header-label {
+    white-space: normal;
+  }
+
+  th.admin-fee-policy-table__user-id {
+    inline-size: 16%;
+  }
+
+  tbody td {
+    vertical-align: middle;
+  }
+
+  tbody td.admin-fee-policy-table__user-id {
+    white-space: normal;
+    overflow-wrap: break-word;
+  }
+
+  th:last-child,
+  td:last-child {
+    text-align: left;
+  }
+
+  th:last-child .cds--table-header-label {
+    justify-content: flex-start;
+    text-align: left;
+  }
+
+  // The md row actions fill the row less its border, so the row keeps the height of the others.
+  tbody td:has(> .admin-policy-row-actions) {
+    padding-block: 0;
+  }
+
+  .admin-policy-row-actions {
+    justify-content: flex-start;
+  }
+
+  .admin-policy-row-actions .cds--btn {
+    min-block-size: 0;
+    block-size: calc(2.5rem - 1px);
+  }
+}
+
 .admin-policy-modal__description {
   margin-block-end: 1.25rem;
   color: var(--csp-text-secondary);
@@ -1664,7 +1709,7 @@ $notification-types: 'error', 'info', 'success', 'warning';
 }
 
 .admin-policy-modal__fields--fee {
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: minmax(0, 1fr);
 }
 
 .admin-policy-modal__fields > *,
