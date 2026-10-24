@@ -476,6 +476,34 @@ describe('Admin policy action states', () => {
     ).not.toBeInTheDocument()
   })
 
+  it('focuses a refused effective date once the save has finished, even after an early frame', async () => {
+    mockedUpsertFeePolicy.mockRejectedValue(
+      new AdminPolicyMutationError(['Effective date must be greater than the current date.']),
+    )
+    renderPage('fee')
+    const dialog = await openAddPolicyDialog('fee')
+    const effectiveDate = within(dialog).getByLabelText('Policy effective date')
+    fireEvent.change(effectiveDate, { target: { value: '2026-10-01' } })
+    await userEvent.selectOptions(within(dialog).getByLabelText('Region'), '1904')
+    await userEvent.type(within(dialog).getByLabelText('Fee increase percentage'), '5')
+    // A browser can paint a frame before React commits the refusal, while the field is still
+    // disabled from the save.
+    const nextFrame = vi.spyOn(window, 'requestAnimationFrame').mockImplementation((callback) => {
+      callback(performance.now())
+      return 0
+    })
+    try {
+      await userEvent.click(within(dialog).getByRole('button', { name: 'Save fee policy' }))
+
+      expect(
+        await within(dialog).findByText('Effective date must be greater than the current date'),
+      ).toBeInTheDocument()
+      await waitFor(() => expect(effectiveDate).toHaveFocus())
+    } finally {
+      nextFrame.mockRestore()
+    }
+  })
+
   it('shows a taken fee in lieu effective date on its field and clears it on Cancel', async () => {
     mockedUpsertFilPolicy.mockRejectedValue(
       new AdminPolicyMutationError(['Effective date already exists.']),

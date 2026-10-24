@@ -76,6 +76,7 @@ import {
 import { fieldErrorText } from '@/utils/field-error'
 import {
   focusFirstEditableFieldAfterPanelChange,
+  focusFirstInvalidField,
   focusFirstInvalidFieldAfterRender,
 } from '@/utils/focus'
 import { getResponseMessage, getResponseStatus } from '@/utils/http-error'
@@ -294,6 +295,8 @@ const AdminPoliciesPage = ({ area }: AdminPoliciesPageProps) => {
   const [isPolicyEditorOpen, setIsPolicyEditorOpen] = useState(false)
   const policyEditorLauncherRef = useRef<HTMLElement>(null)
   const policyFieldsRef = useRef<HTMLDivElement>(null)
+  const [policyErrorFocusRequest, setPolicyErrorFocusRequest] = useState(0)
+  const lastHandledPolicyErrorFocusRequestRef = useRef(0)
   const scheduleFieldsRef = useRef<HTMLDivElement>(null)
   // The row Edit button that opened the schedule edit, which takes focus back when the edit ends.
   const scheduleEditButtonRef = useRef<HTMLElement | null>(null)
@@ -738,8 +741,21 @@ const AdminPoliciesPage = ({ area }: AdminPoliciesPageProps) => {
     if (otherErrors.length > 0) {
       setErrorMessage(otherErrors.join(' '))
     }
-    focusFirstInvalidFieldAfterRender(() => policyFieldsRef.current)
+    setPolicyErrorFocusRequest((current) => current + 1)
   }
+
+  // The policy fields stay disabled while a save runs, so a refused save asks for focus and this
+  // effect moves it to the field once the saving state has cleared.
+  useEffect(() => {
+    if (
+      isMutatingPolicies ||
+      policyErrorFocusRequest === lastHandledPolicyErrorFocusRequestRef.current
+    ) {
+      return
+    }
+    lastHandledPolicyErrorFocusRequestRef.current = policyErrorFocusRequest
+    focusFirstInvalidField(policyFieldsRef.current)
+  }, [isMutatingPolicies, policyErrorFocusRequest])
 
   const upsertFeePolicy = async (): Promise<void> => {
     if (isMutatingPolicies) return
