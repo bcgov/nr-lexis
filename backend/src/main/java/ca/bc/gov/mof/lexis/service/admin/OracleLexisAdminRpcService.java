@@ -393,6 +393,14 @@ public class OracleLexisAdminRpcService implements LexisAdminRpcService {
       return failureResponse(List.of(FIL_POLICY_UPDATE_FUTURE_ONLY_MESSAGE));
     }
 
+    // INTENTIONAL_LEGACY_DIVERGENCE(FEE_IN_LIEU_POLICY_EDITOR): an edit can't move a policy onto
+    // another policy's effective date.
+    Optional<LexisAdminPolicyRepository.FilPolicyRow> matchingPolicy =
+        repository.findFilPolicy(effectiveDate);
+    if (matchingPolicy.isPresent() && !filPolicyId.equals(matchingPolicy.get().filPolicyId())) {
+      return failureResponse(List.of(FIL_POLICY_KEY_EXISTS_MESSAGE));
+    }
+
     boolean updated;
     try {
       updated =

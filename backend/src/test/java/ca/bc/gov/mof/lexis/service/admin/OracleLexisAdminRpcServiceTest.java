@@ -435,15 +435,20 @@ class OracleLexisAdminRpcServiceTest {
   }
 
   @Test
-  void shouldAllowLegacyFilPolicyUpdateToAnExistingEffectiveDate() {
+  void shouldRejectFilPolicyUpdateWhenEffectiveDateBelongsToAnotherRecord() {
     OracleLexisAdminRpcService service = new OracleLexisAdminRpcService(repository);
+    LocalDate storedDate = LexisBusinessTime.today().plusDays(6);
     LocalDate effectiveDate = LexisBusinessTime.today().plusDays(5);
-    when(repository.updateFilPolicy(8L, effectiveDate, 20, null)).thenReturn(true);
     when(repository.findFilPolicyById(8L))
         .thenReturn(
             Optional.of(
                 new LexisAdminPolicyRepository.FilPolicyRow(
-                    8L, effectiveDate, 20L, "idir\\owner", effectiveDate, "", null)));
+                    8L, storedDate, 20L, "idir\\owner", storedDate, "", null)));
+    when(repository.findFilPolicy(effectiveDate))
+        .thenReturn(
+            Optional.of(
+                new LexisAdminPolicyRepository.FilPolicyRow(
+                    7L, effectiveDate, 15L, "idir\\owner", effectiveDate, "", null)));
 
     Object response =
         service
@@ -457,9 +462,12 @@ class OracleLexisAdminRpcServiceTest {
             .orElseThrow();
 
     assertThat(response).isInstanceOf(Map.class);
-    assertThat(((Map<?, ?>) response).get("success")).isEqualTo(true);
-    verify(repository, never()).findFilPolicy(effectiveDate);
-    verify(repository).updateFilPolicy(8L, effectiveDate, 20, null);
+    @SuppressWarnings("unchecked")
+    Map<String, Object> payload = (Map<String, Object>) response;
+    assertThat(payload).containsEntry("success", false);
+    assertThat((List<String>) payload.get("errors"))
+        .containsExactly("Effective date already exists.");
+    verify(repository, never()).updateFilPolicy(any(), any(), any(), any());
   }
 
   @Test
@@ -478,6 +486,11 @@ class OracleLexisAdminRpcServiceTest {
             Optional.of(
                 new LexisAdminPolicyRepository.FeePolicyRow(
                     8L, feeDate, 30L, 12L, "idir\\owner", feeDate, "", null)));
+    when(repository.findFilPolicy(filDate))
+        .thenReturn(
+            Optional.of(
+                new LexisAdminPolicyRepository.FilPolicyRow(
+                    9L, filDate, 20L, "idir\\owner", filDate, "", null)));
     when(repository.updateFilPolicy(9L, filDate, 20, null)).thenReturn(true);
     when(repository.findFilPolicyById(9L))
         .thenReturn(

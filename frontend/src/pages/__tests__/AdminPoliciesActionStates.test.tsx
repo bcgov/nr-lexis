@@ -140,7 +140,7 @@ const openAddPolicyDialog = async (area: 'fee' | 'fil') => {
 describe('Admin policy action states', () => {
   it.each([
     { area: 'fee' as const, save: 'Save fee policy' },
-    { area: 'fil' as const, save: 'Update fee in lieu policy' },
+    { area: 'fil' as const, save: 'Save fee in lieu policy' },
     { area: 'schedule' as const, save: 'Update Export Schedule' },
   ])('closes unchanged $area editing without updating a policy', async ({ area, save }) => {
     renderPage(area)
@@ -305,12 +305,8 @@ describe('Admin policy action states', () => {
 
       renderPage(area)
 
-      const historicalRow = (
-        await screen.findByText(area === 'fee' ? 'Jan 15, 2020' : '2020-01-15')
-      ).closest('tr')
-      const futureRow = screen
-        .getByText(area === 'fee' ? 'Jan 1, 2099' : '2099-01-01')
-        .closest('tr')
+      const historicalRow = (await screen.findByText('Jan 15, 2020')).closest('tr')
+      const futureRow = screen.getByText('Jan 1, 2099').closest('tr')
       expect(historicalRow).not.toBeNull()
       expect(futureRow).not.toBeNull()
       expect(
@@ -320,7 +316,7 @@ describe('Admin policy action states', () => {
         within(historicalRow as HTMLElement).queryByRole('button', { name: /^Delete / }),
       ).not.toBeInTheDocument()
       const policyName =
-        area === 'fee' ? 'fee policy RCO Jan 1, 2099' : 'fee in lieu policy 2099-01-01'
+        area === 'fee' ? 'fee policy RCO Jan 1, 2099' : 'fee in lieu policy Jan 1, 2099'
       expect(
         within(futureRow as HTMLElement).getByRole('button', { name: `Edit ${policyName}` }),
       ).toBeEnabled()
@@ -343,12 +339,11 @@ describe('Admin policy action states', () => {
     {
       area: 'fil' as const,
       rowId: 'fil-1',
-      rowDate: '2099-01-01',
-      dialogName: 'Delete fee in lieu policy?',
+      rowDate: 'Jan 1, 2099',
+      dialogName: 'Are you sure you want to delete this fee in lieu policy?',
       deleteRequest: mockedDeleteFilPolicy,
-      successMessage: 'Fee in lieu policy deleted.',
-      description:
-        'This permanently deletes the fee in lieu policy effective 2099-01-01 (2%). This cannot be undone.',
+      successMessage: 'Fee in lieu policy deleted',
+      description: 'The fee in lieu policy effective Jan 1, 2099 (2%) will be deleted.',
     },
   ])(
     'confirms $area policy deletion before mutating',
@@ -514,7 +509,7 @@ describe('Admin policy action states', () => {
     const effectiveDate = within(dialog).getByLabelText('Policy effective date')
     fireEvent.change(effectiveDate, { target: { value: '2099-01-01' } })
     await userEvent.type(within(dialog).getByLabelText('Fee in lieu percentage'), '3')
-    await userEvent.click(within(dialog).getByRole('button', { name: 'Add fee in lieu policy' }))
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Save fee in lieu policy' }))
 
     expect(await within(dialog).findByText('Effective date already exists')).toBeInTheDocument()
     expect(effectiveDate).toHaveAttribute('aria-invalid', 'true')
@@ -539,6 +534,29 @@ describe('Admin policy action states', () => {
       target: { value: '2099-01-01' },
     })
     expect(within(reopened).queryByText('Effective date already exists')).not.toBeInTheDocument()
+  })
+
+  it('shows a taken fee in lieu effective date on its field when an edit is refused', async () => {
+    mockedUpsertFilPolicy.mockRejectedValue(
+      new AdminPolicyMutationError(['Effective date already exists.']),
+    )
+    renderPage('fil')
+
+    const policyRow = (await screen.findByText('Jan 1, 2099')).closest('tr') as HTMLElement
+    await userEvent.click(within(policyRow).getByRole('button', { name: /^Edit / }))
+    const dialog = screen.getByRole('complementary', { name: 'Edit fee in lieu policy' })
+    const effectiveDate = within(dialog).getByLabelText('Policy effective date')
+    fireEvent.change(effectiveDate, { target: { value: '2099-02-01' } })
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Save fee in lieu policy' }))
+
+    expect(await within(dialog).findByText('Effective date already exists')).toBeInTheDocument()
+    expect(effectiveDate).toHaveAttribute('aria-invalid', 'true')
+    await waitFor(() => expect(effectiveDate).toHaveFocus())
+    expect(mockedUpsertFilPolicy).toHaveBeenCalledWith({
+      id: 'fil-1',
+      effectiveDate: '2099-02-01',
+      filPercentage: '2',
+    })
   })
 
   it('surfaces backend delete guard errors after confirmation', async () => {
@@ -770,7 +788,7 @@ describe('Admin policy action states', () => {
       target: { value: '2026-02-01' },
     })
     await userEvent.type(within(dialog).getByLabelText('Fee in lieu percentage'), '3')
-    await userEvent.click(within(dialog).getByRole('button', { name: 'Add fee in lieu policy' }))
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Save fee in lieu policy' }))
 
     await waitFor(() => {
       expect(mockedUpsertFilPolicy).toHaveBeenCalledWith({
@@ -779,13 +797,14 @@ describe('Admin policy action states', () => {
         filPercentage: '3',
       })
     })
-    expect(screen.getByText('Fee in lieu policy added.')).toBeInTheDocument()
+    expect(await screen.findByText('Fee in lieu policy added')).toBeInTheDocument()
+    expect(screen.queryByText('Policy update')).not.toBeInTheDocument()
     expect(
       screen.queryByRole('complementary', { name: 'Add fee in lieu policy' }),
     ).not.toBeInTheDocument()
     expect(screen.getByText('2 results found')).toBeInTheDocument()
     const rows = within(screen.getByRole('table')).getAllByRole('row')
-    expect(rows[1]).toHaveTextContent('2026-02-01')
+    expect(rows[1]).toHaveTextContent('Feb 1, 2026')
     expect(rows[1]).toHaveTextContent('3')
   })
 
@@ -796,7 +815,7 @@ describe('Admin policy action states', () => {
       level: 1,
       name: 'Non-appraised Sec.3 FIL%',
     })
-    const policyRow = screen.getByText('2099-01-01').closest('tr')
+    const policyRow = screen.getByText('Jan 1, 2099').closest('tr')
     expect(policyRow).not.toBeNull()
     await userEvent.click(within(policyRow as HTMLElement).getByRole('button', { name: /^Edit / }))
 
@@ -804,7 +823,7 @@ describe('Admin policy action states', () => {
     expect(within(dialog).getByLabelText('Policy effective date')).toHaveValue('2099-01-01')
     await userEvent.clear(within(dialog).getByLabelText('Fee in lieu percentage'))
     await userEvent.type(within(dialog).getByLabelText('Fee in lieu percentage'), '3')
-    await userEvent.click(within(dialog).getByRole('button', { name: 'Update fee in lieu policy' }))
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Save fee in lieu policy' }))
 
     await waitFor(() => {
       expect(mockedUpsertFilPolicy).toHaveBeenCalledWith({
@@ -813,6 +832,8 @@ describe('Admin policy action states', () => {
         filPercentage: '3',
       })
     })
+    expect(await screen.findByText('Fee in lieu policy updated')).toBeInTheDocument()
+    expect(screen.queryByText('Policy update')).not.toBeInTheDocument()
   })
 
   it.each([
@@ -909,7 +930,7 @@ describe('Admin policy action states', () => {
     }
 
     await userEvent.type(within(dialog).getByLabelText('Fee in lieu percentage'), value)
-    await userEvent.click(within(dialog).getByRole('button', { name: 'Add fee in lieu policy' }))
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Save fee in lieu policy' }))
     await waitFor(() => {
       expect(mockedUpsertFilPolicy).toHaveBeenCalledWith({
         id: null,
@@ -967,7 +988,7 @@ describe('Admin policy action states', () => {
       expect(mockedUpsertFeePolicy).not.toHaveBeenCalled()
     } else {
       await userEvent.type(within(dialog).getByLabelText('Fee in lieu percentage'), value)
-      await userEvent.click(within(dialog).getByRole('button', { name: 'Add fee in lieu policy' }))
+      await userEvent.click(within(dialog).getByRole('button', { name: 'Save fee in lieu policy' }))
       expect(mockedUpsertFilPolicy).not.toHaveBeenCalled()
     }
 
@@ -1149,13 +1170,13 @@ describe('Admin policy action states', () => {
       expect(screen.getByText('220 results found')).toBeInTheDocument()
 
       const rowsPerPage = screen.getByLabelText('Items per page:')
-      const smallerPageSize = area === 'fee' ? 25 : 20
+      const smallerPageSize = area === 'schedule' ? 20 : 25
       expect(rowsPerPage).toHaveValue('100')
       expect(
         within(rowsPerPage)
           .getAllByRole('option')
           .map((option) => (option as HTMLOptionElement).value),
-      ).toEqual(area === 'fee' ? ['10', '25', '50', '100', '200'] : ['20', '50', '100', '200'])
+      ).toEqual(area === 'schedule' ? ['20', '50', '100', '200'] : ['10', '25', '50', '100', '200'])
 
       fireEvent.change(rowsPerPage, { target: { value: String(smallerPageSize) } })
 
@@ -2026,9 +2047,118 @@ describe('Admin policy action states', () => {
       target: { value: 'not-a-date' },
     })
     await userEvent.type(within(filDialog).getByLabelText('Fee in lieu percentage'), '2')
-    await userEvent.click(within(filDialog).getByRole('button', { name: 'Add fee in lieu policy' }))
+    await userEvent.click(
+      within(filDialog).getByRole('button', { name: 'Save fee in lieu policy' }),
+    )
 
     expect(await within(filDialog).findByText('Date must be YYYY-MM-DD')).toBeInTheDocument()
     expect(mockedUpsertFilPolicy).not.toHaveBeenCalled()
+  })
+
+  it('shows the fee in lieu policy deletion as a titled notice with its text in bold', async () => {
+    renderPage('fil')
+    const policyRow = (await screen.findByText('Jan 1, 2099')).closest('tr') as HTMLElement
+    const deleteButton = within(policyRow).getByRole('button', {
+      name: 'Delete fee in lieu policy Jan 1, 2099',
+    })
+    await userEvent.click(deleteButton)
+
+    const dialogName = 'Are you sure you want to delete this fee in lieu policy?'
+    const dialog = screen.getByRole('dialog', { name: dialogName })
+    expect(
+      within(dialog).getByText('The fee in lieu policy effective Jan 1, 2099 (2%)').tagName,
+    ).toBe('STRONG')
+    expect(dialog).toHaveAccessibleDescription(
+      'The fee in lieu policy effective Jan 1, 2099 (2%) will be deleted. This action cannot be undone.',
+    )
+    expect(within(dialog).getByRole('button', { name: 'Cancel' })).toHaveFocus()
+    await userEvent.keyboard('{Escape}')
+    await waitFor(() => expect(deleteButton).toHaveFocus())
+    expect(mockedDeleteFilPolicy).not.toHaveBeenCalled()
+
+    await userEvent.click(deleteButton)
+    await userEvent.click(
+      within(screen.getByRole('dialog', { name: dialogName })).getByRole('button', {
+        name: 'Delete',
+      }),
+    )
+    const notice = (await screen.findByText('Fee in lieu policy deleted')).closest(
+      'div.app-notification-container',
+    ) as HTMLElement
+    expect(notice).toHaveTextContent(/Fee in lieu policy deleted$/)
+    expect(notice).not.toHaveTextContent('Policy update')
+  })
+
+  it('shows incomplete fee in lieu policy errors only on save and focuses the first', async () => {
+    renderPage('fil')
+
+    const dialog = await openAddPolicyDialog('fil')
+    expect(within(dialog).getByText('Whole numbers from 1 to 99')).toBeInTheDocument()
+    for (const label of ['Policy effective date', 'Fee in lieu percentage']) {
+      fireEvent.focus(within(dialog).getByLabelText(label))
+      fireEvent.blur(within(dialog).getByLabelText(label))
+    }
+    expect(within(dialog).queryByText(/is required$/)).not.toBeInTheDocument()
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Save fee in lieu policy' }))
+
+    await waitFor(() =>
+      expect(within(dialog).getByLabelText('Policy effective date')).toHaveFocus(),
+    )
+    expect(within(dialog).getByText('Policy effective date is required')).toBeInTheDocument()
+    expect(within(dialog).getByText('Fee in lieu percentage is required')).toBeInTheDocument()
+    expect(mockedUpsertFilPolicy).not.toHaveBeenCalled()
+  })
+
+  it('offers fee in lieu policy dates from tomorrow in the calendar', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] })
+    vi.setSystemTime(new Date('2026-10-23T19:00:00Z'))
+    try {
+      renderPage('fil')
+      const dialog = await openAddPolicyDialog('fil')
+      const effectiveDate = within(dialog).getByLabelText(
+        'Policy effective date',
+      ) as HTMLInputElement & { _flatpickr: { config: { minDate?: Date } } }
+
+      const minDate = effectiveDate._flatpickr.config.minDate
+      expect(minDate && [minDate.getFullYear(), minDate.getMonth(), minDate.getDate()]).toEqual([
+        2026, 9, 24,
+      ])
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('labels the fee in lieu policy columns with user IDs and dates in words', async () => {
+    mockedFetchFilPolicyPage.mockResolvedValue({
+      rows: [
+        {
+          ...filPolicyRow('fil-legacy', '2023-09-15'),
+          entryTimestamp: '2023-09-14',
+          updateTimestamp: '2023-09-14',
+        },
+      ],
+      total: 1,
+      page: 0,
+      size: 100,
+    })
+    renderPage('fil')
+
+    const table = (await screen.findByText('Sep 15, 2023')).closest('table') as HTMLTableElement
+    expect(
+      within(table)
+        .getAllByRole('columnheader')
+        .map((header) => (header.querySelector('.cds--table-header-label') ?? header).textContent),
+    ).toEqual([
+      'Policy effective date',
+      'Fee in lieu %',
+      'Entry user ID',
+      'Entry timestamp',
+      'Update user ID',
+      'Update timestamp',
+      'Actions',
+    ])
+    const row = within(table).getAllByRole('row')[1]
+    expect(within(row).getAllByText('Sep 14, 2023')).toHaveLength(2)
+    expect(row).not.toHaveTextContent('2023-09-14')
   })
 })

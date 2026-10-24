@@ -1646,22 +1646,27 @@ $notification-types: 'error', 'info', 'success', 'warning';
   text-align: right;
 }
 
-// Headers wrap between words and the user ID columns keep room for the longest legacy ID, so all
-// eight columns fit at 1440px; a long user ID wraps at an underscore rather than widen the table.
-.legacy-search-table-frame .cds--data-table.admin-fee-policy-table {
+// Headers wrap between words and the user ID columns keep room for the longest legacy ID, so the
+// policy tables fit at 1440px; a long user ID wraps at an underscore rather than widen the table.
+.legacy-search-table-frame .cds--data-table:is(.admin-fee-policy-table, .admin-fil-policy-table) {
   thead th .cds--table-header-label {
     white-space: normal;
   }
 
-  th.admin-fee-policy-table__user-id {
+  th.admin-policy-table__user-id {
     inline-size: 12.5rem;
+  }
+
+  // Date headers break before their last word even where the table has room for one line.
+  th.admin-policy-table__date .cds--table-header-label {
+    max-inline-size: 7rem;
   }
 
   tbody td {
     vertical-align: middle;
   }
 
-  tbody td.admin-fee-policy-table__user-id {
+  tbody td.admin-policy-table__user-id {
     white-space: normal;
     overflow-wrap: break-word;
   }
@@ -1703,13 +1708,9 @@ $notification-types: 'error', 'info', 'success', 'warning';
 
 .admin-policy-modal__fields {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: minmax(0, 1fr);
   align-items: start;
   gap: 1.25rem;
-}
-
-.admin-policy-modal__fields--fee {
-  grid-template-columns: minmax(0, 1fr);
 }
 
 .admin-policy-modal__fields > *,
@@ -1727,13 +1728,6 @@ $notification-types: 'error', 'info', 'success', 'warning';
   inline-size: 100%;
   max-inline-size: 100%;
   min-inline-size: 0;
-}
-
-@media (max-width: 671px) {
-  .admin-policy-modal__fields,
-  .admin-policy-modal__fields--fee {
-    grid-template-columns: minmax(0, 1fr);
-  }
 }
 
 .user-details-json {
