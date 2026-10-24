@@ -459,6 +459,7 @@ export default function NotificationsPage() {
         headingId="notifications-page-title"
         title="Notifications"
         subtitle={pageDescription}
+        focusTitle="whenFocusLost"
         actions={
           isAdmin ? (
             <Button

@@ -2158,6 +2158,11 @@ $notification-types: 'error', 'info', 'success', 'warning';
   }
 }
 
+// A text area takes its column's width instead of Carbon's 10rem minimum.
+.offer-form-card .cds--text-area {
+  min-inline-size: 0;
+}
+
 .offer-form-card > .legacy-search-actions {
   gap: 1rem;
   margin-block-start: 2rem;
@@ -2180,20 +2185,15 @@ $notification-types: 'error', 'info', 'success', 'warning';
   align-items: flex-start;
 }
 
+// On the record it sits level with the package number's value, which is a text line rather than an
+// input below a label.
 @media (min-width: 1056px) {
   .offer-scale-detail-cell {
     padding-block-start: 1.375rem;
   }
-}
 
-// On the record it follows the package number, centred on the value's line.
-.offer-package-value {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-
-  > .cds--btn {
-    margin-block: -0.5rem;
+  .provincial-offer-detail-page .offer-scale-detail-cell {
+    padding-block-start: 0.8125rem;
   }
 }
 
@@ -2787,8 +2787,14 @@ $notification-types: 'error', 'info', 'success', 'warning';
   margin-inline-end: 0.8125rem;
 }
 
-// A result that lists records shows its message and then the list below the title.
-.app-inline-notification .cds--actionable-notification__subtitle,
+// A result that lists records shows its message and then the list below the title. A notice with
+// no list keeps its message on the title's line.
+.app-inline-notification
+  .cds--actionable-notification__content:has(
+    > .action-result-notification__records,
+    > .action-result-notification__items
+  )
+  > .cds--actionable-notification__subtitle,
 .action-result-notification__records,
 .action-result-notification__items {
   flex-basis: 100%;
@@ -3957,7 +3963,7 @@ $notification-types: 'error', 'info', 'success', 'warning';
   min-block-size: 5rem;
 }
 
-.admin-upload-drop-zone--fspts .admin-upload-drop-zone__copy p {
+.admin-upload-drop-zone--fspts:not(.is-disabled) .admin-upload-drop-zone__copy p:only-child {
   color: var(--fds-interactive, var(--cds-link-primary));
 }
 
@@ -5355,6 +5361,28 @@ $notification-types: 'error', 'info', 'success', 'warning';
 
   > :not(.cds--pagination__items-count) {
     display: none;
+  }
+}
+
+// On a phone the pager's count takes its own line above the page buttons, and a section's Search
+// button wraps its label rather than running past the card.
+@media (max-width: 671px) {
+  .provincial-summary-section .cds--pagination {
+    flex-wrap: wrap;
+  }
+
+  .provincial-summary-section .cds--pagination__left {
+    flex-basis: 100%;
+  }
+
+  .provincial-summary-section .cds--pagination__right {
+    margin-inline-start: auto;
+  }
+
+  .provincial-summary-section__actions .cds--btn {
+    inline-size: auto;
+    max-inline-size: 100%;
+    white-space: normal;
   }
 }
 

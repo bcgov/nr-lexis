@@ -152,6 +152,20 @@ describe('Offer record', () => {
     expect(screen.getByRole('button', { name: 'See scale detail' })).toBeInTheDocument()
   })
 
+  it('puts See scale detail in its own column of the row after Package number', async () => {
+    renderRecord()
+
+    await screen.findByRole('heading', { name: 'Offer 455' })
+    const packageField = screen.getByText('Package number', { selector: 'dt' }).closest('dl')
+    const action = screen.getByRole('button', { name: 'See scale detail' })
+    expect(packageField).not.toContainElement(action)
+    expect(recordValue('Package number')).toBe('T1020-1654-13')
+    expect(action.closest('.record-field-grid__row')).toBe(
+      packageField?.closest('.record-field-grid__row'),
+    )
+    expect(packageField?.nextElementSibling).toBe(action.closest('.record-field'))
+  })
+
   it('says an offer without a package has no packages', async () => {
     mockedFetchDetail.mockResolvedValue({ ...staffOffer, packageNumber: null })
     renderRecord()

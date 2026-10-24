@@ -248,6 +248,8 @@ function SummarySection<T>({
         <>
           {renderTable(data.results)}
           <Pagination
+            backwardText={`Previous page of ${title}`}
+            forwardText={`Next page of ${title}`}
             page={data.page + 1}
             pageSize={data.size}
             pageSizes={[SUMMARY_PAGE_SIZE]}
@@ -354,6 +356,7 @@ const ProvincialSummaryPage = () => {
         <PageHeader
           title="Summary"
           subtitle="View applications, offers, exemptions, permits, and fees for your active forest client."
+          focusTitle="whenFocusLost"
         />
       </Column>
 

@@ -650,6 +650,24 @@ class OracleRtmEmsLogAmvServiceTest {
   }
 
   @Test
+  void shouldRejectWorkbookWithoutNumericValues() throws IOException {
+    OracleRtmEmsLogAmvRepository repository = mock(OracleRtmEmsLogAmvRepository.class);
+    OracleRtmEmsLogAmvService service =
+        new OracleRtmEmsLogAmvService(repository, JUNE_2026_CLOCK);
+
+    var preview = service.previewUpload(noNumericValuesWorkbook(), "2026-07-01");
+    var upload = service.upload(noNumericValuesWorkbook(), "2026-07-01");
+
+    assertThat(preview.status()).isEqualTo("validation_failed");
+    assertThat(preview.errors())
+        .contains("The file has no numeric values. Please check your file and try again.");
+    assertThat(upload.status()).isEqualTo("validation_failed");
+    assertThat(upload.errors())
+        .contains("The file has no numeric values. Please check your file and try again.");
+    verify(repository, never()).upsertAtomically(any());
+  }
+
+  @Test
   void shouldPropagatePreviewTargetVerificationFailure() throws IOException {
     OracleRtmEmsLogAmvRepository repository = mock(OracleRtmEmsLogAmvRepository.class);
     when(repository.existsExact(anyString(), anyString(), anyString(), any(LocalDate.class)))
@@ -1316,6 +1334,14 @@ class OracleRtmEmsLogAmvServiceTest {
         "optional-cedar-grade.xlsx",
         "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         RtmEmsLogAmvWorkbookTestFixtures.optionalCedarGradeWorkbook());
+  }
+
+  private MultipartFile noNumericValuesWorkbook() throws IOException {
+    return new MockMultipartFile(
+        "file",
+        "no-numeric-values.xlsx",
+        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        RtmEmsLogAmvWorkbookTestFixtures.noNumericValuesWorkbook());
   }
 
   private MultipartFile precisionErrorsWorkbook() throws IOException {

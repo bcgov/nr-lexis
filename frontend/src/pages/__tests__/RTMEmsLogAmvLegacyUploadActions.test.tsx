@@ -812,7 +812,7 @@ describe('RTM EMS Log AMV spreadsheet upload actions', () => {
       rowCount: 0,
       retrievalDate: comparisonMonth,
       updateDate: nextMonth,
-      errors: ['The file has no numeric values.'],
+      errors: ['The file has no numeric values. Please check your file and try again.'],
       warnings: [],
       rows: [],
     })
@@ -952,7 +952,7 @@ describe('RTM EMS Log AMV spreadsheet upload actions', () => {
       rowCount: 0,
       retrievalDate: comparisonMonth,
       updateDate: nextMonth,
-      errors: ['The file has no numeric values.'],
+      errors: ['The file has no numeric values. Please check your file and try again.'],
       warnings: [],
       rows: [],
     })
@@ -1192,7 +1192,7 @@ describe('RTM EMS Log AMV spreadsheet upload actions', () => {
         fileSize: 1,
         message: "This file couldn't be used.",
         rowCount: 0,
-        errors: ['The file has no numeric values.'],
+        errors: ['The file has no numeric values. Please check your file and try again.'],
         warnings: [],
         rows: [],
       })
@@ -1222,7 +1222,11 @@ describe('RTM EMS Log AMV spreadsheet upload actions', () => {
     await userEvent.upload(screen.getByLabelText('Average market values spreadsheet'), workbook)
 
     expect(mockedPreviewUpload).toHaveBeenCalledTimes(2)
-    expect(await screen.findByText('The file has no numeric values.')).toBeVisible()
+    expect(
+      await screen.findByText(
+        'The file has no numeric values. Please check your file and try again.',
+      ),
+    ).toBeVisible()
     expect(screen.queryByText('Upload could not be completed')).not.toBeInTheDocument()
     consoleError.mockRestore()
   })
@@ -1318,7 +1322,7 @@ describe('RTM EMS Log AMV spreadsheet upload actions', () => {
 
     await userEvent.upload(screen.getByLabelText('Average market values spreadsheet'), workbook)
 
-    expect(await screen.findByText('3 cells need a look before you save')).toBeVisible()
+    expect(await screen.findByText('Check 3 cells before you save')).toBeVisible()
     expect(
       screen.getByText('In Hemlock and Cedar, highlighted below. You can save either way.'),
     ).toBeVisible()
@@ -1373,7 +1377,7 @@ describe('RTM EMS Log AMV spreadsheet upload actions', () => {
     await userEvent.type(newHemlockCombination, '0')
     await userEvent.type(missingHemlockValue, '81.43')
 
-    expect(await screen.findByText('1 cell needs a look before you save')).toBeVisible()
+    expect(await screen.findByText('Check 1 cell before you save')).toBeVisible()
     expect(screen.getByText('In Cedar, highlighted below. You can save either way.')).toBeVisible()
     expect(document.querySelectorAll('.rtm-amv-species-tab__status--warning')).toHaveLength(1)
     expect(
@@ -1591,7 +1595,7 @@ describe('RTM EMS Log AMV spreadsheet upload actions', () => {
     await userEvent.upload(screen.getByLabelText('Average market values spreadsheet'), workbook)
 
     expect(await screen.findByRole('tab', { name: /Cedar/ })).toBeVisible()
-    expect(screen.queryByText(/cells? need a look before you save/)).not.toBeInTheDocument()
+    expect(screen.queryByText(/Check \d+ cells? before you save/)).not.toBeInTheDocument()
     expect(document.querySelectorAll('.rtm-amv-species-tab__status--warning')).toHaveLength(0)
     expect(document.querySelectorAll('.rtm-amv-species-tab__status--complete')).toHaveLength(7)
 

@@ -39,6 +39,7 @@ const LANDING_PAGE_TITLES: Record<string, string> = {
   '/provincial/review': 'Application review',
   '/provincial/application': 'Application search',
   '/provincial/exemption': 'Exemption search',
+  '/provincial/summary': 'Summary',
 }
 
 /** A back link to the role's landing page, named after that page when it is known. */

@@ -5,15 +5,18 @@ import { useRef, useState, type ReactNode } from 'react'
 import { afterEach, vi } from 'vitest'
 
 import DetailSidePanel from '@/components/DetailSidePanel'
+import IsoDatePicker from '@/components/IsoDatePicker'
 
 const RemarkPanel = ({
   onClose,
   children,
   busy = false,
+  initialFocusSelector = '#remark',
 }: {
   onClose?: () => void
   children?: ReactNode
   busy?: boolean
+  initialFocusSelector?: string
 }) => {
   const launcherRef = useRef<HTMLButtonElement>(null)
   const [open, setOpen] = useState(false)
@@ -27,7 +30,7 @@ const RemarkPanel = ({
         open={open}
         title="Add remark"
         contentSelector=".detail-page"
-        initialFocusSelector="#remark"
+        initialFocusSelector={initialFocusSelector}
         launcherRef={launcherRef}
         busy={busy}
         fallbackFocusSelector=".detail-page button"
@@ -84,6 +87,51 @@ describe('DetailSidePanel', () => {
     expect(panel).not.toContainElement(document.activeElement as HTMLElement)
     screen.getByRole('button', { name: 'Page action' }).focus()
     expect(screen.getByRole('button', { name: 'Page action' })).toHaveFocus()
+  })
+
+  describe('with a date as the first field', () => {
+    type DateInput = HTMLInputElement & { _flatpickr: { isOpen: boolean } }
+
+    const openDatePanel = async (): Promise<DateInput> => {
+      render(
+        <RemarkPanel initialFocusSelector="#effectiveDate">
+          <IsoDatePicker
+            id="effectiveDate"
+            labelText="Effective date"
+            value=""
+            onChange={vi.fn()}
+          />
+        </RemarkPanel>,
+      )
+      await userEvent.click(screen.getByRole('button', { name: 'Add remark' }))
+      const date = (await screen.findByLabelText('Effective date')) as DateInput
+      await waitFor(() => expect(date).toHaveFocus())
+      return date
+    }
+
+    it('focuses the date without leaving its calendar open over the next fields', async () => {
+      const date = await openDatePanel()
+
+      expect(date._flatpickr.isOpen).toBe(false)
+      expect(document.querySelector('.flatpickr-calendar.open')).toBeNull()
+    })
+
+    it('opens the calendar from a click on the focused date', async () => {
+      const date = await openDatePanel()
+
+      await userEvent.click(date)
+
+      expect(date._flatpickr.isOpen).toBe(true)
+      expect(document.querySelector('.flatpickr-calendar.open')).not.toBeNull()
+    })
+
+    it('opens the calendar from the keyboard on the focused date', async () => {
+      await openDatePanel()
+
+      await userEvent.tab()
+
+      expect(document.querySelector('.flatpickr-calendar.open')).not.toBeNull()
+    })
   })
 
   it('closes on Escape or × and returns focus to the launcher', async () => {

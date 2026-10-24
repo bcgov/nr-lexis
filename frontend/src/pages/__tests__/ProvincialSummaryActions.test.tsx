@@ -221,6 +221,33 @@ describe('Provincial Summary', () => {
     ).toBeInTheDocument()
   })
 
+  it('starts focus on the page title when nothing has focus', async () => {
+    renderPage()
+
+    await screen.findByText('SYNTHETIC FOREST CLIENT')
+    expect(screen.getByRole('heading', { level: 1, name: 'Summary' })).toHaveFocus()
+  })
+
+  it('names each section pager after its table', async () => {
+    renderPage()
+
+    const applications = await screen.findByRole('region', { name: 'My applications' })
+    await within(applications).findByRole('table')
+    const offers = screen.getByRole('region', { name: 'My offers' })
+    await within(offers).findByRole('table')
+
+    expect(
+      within(applications).getByRole('button', { name: 'Previous page of My applications' }),
+    ).toBeInTheDocument()
+    expect(
+      within(applications).getByRole('button', { name: 'Next page of My applications' }),
+    ).toBeInTheDocument()
+    expect(
+      within(offers).getByRole('button', { name: 'Next page of My offers' }),
+    ).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Next page' })).not.toBeInTheDocument()
+  })
+
   it('links each section to its search, except Offers placed', async () => {
     renderPage()
     await screen.findByText('SYNTHETIC FOREST CLIENT')
@@ -418,7 +445,9 @@ describe('Provincial Summary', () => {
     })
     expect(within(applicationTable).getByRole('link', { name: '12345' })).toBeInTheDocument()
     await userEvent.click(
-      within(screen.getByRole('region', { name: 'My applications' })).getByLabelText('Next page'),
+      within(screen.getByRole('region', { name: 'My applications' })).getByLabelText(
+        'Next page of My applications',
+      ),
     )
 
     await waitFor(() =>
@@ -558,8 +587,10 @@ describe('Provincial Summary', () => {
     const permits = screen.getByRole('region', { name: 'My permits' })
     await within(applications).findByRole('table')
     await within(permits).findByRole('table')
-    await userEvent.click(within(applications).getByRole('button', { name: 'Next page' }))
-    await userEvent.click(within(permits).getByRole('button', { name: 'Next page' }))
+    await userEvent.click(
+      within(applications).getByRole('button', { name: 'Next page of My applications' }),
+    )
+    await userEvent.click(within(permits).getByRole('button', { name: 'Next page of My permits' }))
     expect(mockedFetchSummaryApplications).toHaveBeenLastCalledWith(1, 10, 'applicationNumber DESC')
     expect(mockedFetchSummaryPermits).toHaveBeenLastCalledWith(1, 10, 'permitNumber DESC')
     const permitCalls = mockedFetchSummaryPermits.mock.calls.length
@@ -573,7 +604,9 @@ describe('Provincial Summary', () => {
     expect(
       within(applications).getByRole('columnheader', { name: /Received date$/ }),
     ).toHaveAttribute('aria-sort', 'ascending')
-    await userEvent.click(within(applications).getByRole('button', { name: 'Next page' }))
+    await userEvent.click(
+      within(applications).getByRole('button', { name: 'Next page of My applications' }),
+    )
     expect(mockedFetchSummaryApplications).toHaveBeenLastCalledWith(1, 10, 'receivedDate ASC')
     expect(mockedFetchSummaryPermits).toHaveBeenCalledTimes(permitCalls)
     expect(mockedFetchSummaryPermits).toHaveBeenLastCalledWith(1, 10, 'permitNumber DESC')

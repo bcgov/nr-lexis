@@ -1,4 +1,9 @@
-import { RecordField, RecordFieldGrid, RecordFieldRow } from '@/pages/shared/RecordFieldGrid'
+import {
+  RecordField,
+  RecordFieldCell,
+  RecordFieldGrid,
+  RecordFieldRow,
+} from '@/pages/shared/RecordFieldGrid'
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { DataDefinition, Edit, Enterprise, Result, Stamp, Undo } from '@carbon/icons-react'
 import {
@@ -180,7 +185,8 @@ const ProvincialOfferDetailsPage = () => {
   const isEditing = editingSection === 'offer'
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [errorMessage, setErrorMessage] = useState('')
-  // A save result stays until it is closed or the next save replaces it, and belongs to its offer.
+  // A save result stays until it is closed, Edit offer opens the form again or the next save
+  // replaces it, and belongs to its offer.
   const [savedOfferNotice, setSavedOfferNotice] = useState<{
     offerNumber: string | undefined
     notice: OfferSaveNotice
@@ -608,7 +614,12 @@ const ProvincialOfferDetailsPage = () => {
                 kind="tertiary"
                 size="md"
                 renderIcon={Edit}
-                onClick={() => sections.startEditing('offer')}
+                onClick={() =>
+                  sections.startEditing('offer', () => {
+                    // A new edit replaces the notice from the last save.
+                    setSavedOfferNotice(null)
+                  })
+                }
               >
                 Edit offer
               </Button>
@@ -707,18 +718,19 @@ const ProvincialOfferDetailsPage = () => {
                   <RecordField
                     label="Package number"
                     value={
-                      currentDetail.packageNumber?.trim() ? (
-                        <span className="offer-package-value">
-                          {currentDetail.packageNumber}
-                          <OfferScaleDetailAction
-                            target={{ offerNumber: String(currentDetail.offerNumber) }}
-                          />
-                        </span>
-                      ) : (
-                        'No packages'
-                      )
+                      currentDetail.packageNumber?.trim()
+                        ? currentDetail.packageNumber
+                        : 'No packages'
                     }
                   />
+                  <RecordFieldCell
+                    hidden={!currentDetail.packageNumber?.trim()}
+                    className="offer-scale-detail-cell"
+                  >
+                    <OfferScaleDetailAction
+                      target={{ offerNumber: String(currentDetail.offerNumber) }}
+                    />
+                  </RecordFieldCell>
                 </RecordFieldRow>
               </RecordFieldGrid>
             </OfferFormSection>

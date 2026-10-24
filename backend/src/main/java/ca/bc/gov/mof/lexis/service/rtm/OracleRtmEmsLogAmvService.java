@@ -403,7 +403,7 @@ public class OracleRtmEmsLogAmvService implements RtmEmsLogAmvService {
         errors.add("The uploaded file contains no data rows.");
       }
       if (parseResult.numericCellCount() == 0) {
-        errors.add("The uploaded file does not contain any numeric AMV values.");
+        errors.add("The file has no numeric values. Please check your file and try again.");
       }
       if (!parseResult.headerDetected()) {
         errors.add("The template header is not recognized as an RTM EMS AMV sheet.");
@@ -571,7 +571,7 @@ public class OracleRtmEmsLogAmvService implements RtmEmsLogAmvService {
         errors.add("The uploaded file contains no data rows.");
       }
       if (parseResult.numericCellCount() == 0) {
-        errors.add("The uploaded file does not contain any numeric AMV values.");
+        errors.add("The file has no numeric values. Please check your file and try again.");
       }
       if (!parseResult.headerDetected()) {
         errors.add("The template header is not recognized as an RTM EMS AMV sheet.");

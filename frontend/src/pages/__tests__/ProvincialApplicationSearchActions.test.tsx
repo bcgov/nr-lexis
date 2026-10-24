@@ -1594,6 +1594,50 @@ describe('Provincial Application Search Actions', () => {
     expect(screen.getByRole('button', { name: 'Search' })).not.toHaveAttribute('aria-disabled')
   })
 
+  it('keeps Clear all enabled during a search and ignores the response that lands after it', async () => {
+    renderPage()
+    await screen.findByText('321')
+    mockedSearchProvincialApplications.mockReset()
+
+    let resolveSearch: (value: Awaited<ReturnType<typeof searchProvincialApplications>>) => void
+    mockedSearchProvincialApplications.mockReturnValueOnce(
+      new Promise((resolve) => {
+        resolveSearch = resolve
+      }),
+    )
+
+    const applicationNumberInput = screen.getByLabelText('Application number')
+    await userEvent.type(applicationNumberInput, '1')
+    await userEvent.click(screen.getByRole('button', { name: 'Search' }))
+    await waitFor(() => {
+      expect(mockedSearchProvincialApplications).toHaveBeenCalledTimes(1)
+    })
+    expect(screen.getByRole('button', { name: 'Search' })).toHaveAttribute('aria-disabled', 'true')
+
+    const clearAll = screen.getByRole('button', { name: 'Clear all' })
+    expect(clearAll).toBeEnabled()
+    await userEvent.click(clearAll)
+
+    expect(applicationNumberInput).toHaveValue('')
+    expect(appliedSearch()).toBe('')
+    expect(screen.getByRole('button', { name: 'Search' })).not.toHaveAttribute('aria-disabled')
+
+    await act(async () => {
+      resolveSearch!({
+        content: [{ ...searchRowsWithMixedEligibility[0], applicationNumber: '111' }],
+        page: { number: 0, size: 10, totalElements: 1, totalPages: 1 },
+      })
+    })
+
+    expect(screen.queryByText('111')).not.toBeInTheDocument()
+    expect(screen.queryByText('321')).not.toBeInTheDocument()
+    expect(applicationNumberInput).toHaveValue('')
+    expect(appliedSearch()).toBe('')
+    expect(screen.queryByRole('region', { name: 'Search results' })).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Search' })).not.toHaveAttribute('aria-disabled')
+    expect(mockedSearchProvincialApplications).toHaveBeenCalledTimes(1)
+  })
+
   it('shows a request failure instead of a no-results state', async () => {
     mockedSearchProvincialApplications.mockRejectedValue(new Error('Oracle unavailable'))
 
