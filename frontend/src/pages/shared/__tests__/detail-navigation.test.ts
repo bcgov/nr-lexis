@@ -190,8 +190,12 @@ describe('landingPageReturnTo', () => {
     ['/provincial/review', 'Application review'],
     ['/provincial/application', 'Application search'],
     ['/provincial/exemption', 'Exemption search'],
-    ['/provincial/summary', 'Your landing page'],
+    ['/provincial/summary', 'Summary'],
   ])('names the %s landing page', (route, label) => {
     expect(landingPageReturnTo(route)).toEqual({ label, to: route })
+  })
+
+  it('names a route without a known page title generically', () => {
+    expect(landingPageReturnTo('/reports')).toEqual({ label: 'Your landing page', to: '/reports' })
   })
 })

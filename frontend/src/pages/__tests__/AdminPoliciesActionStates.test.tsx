@@ -829,6 +829,8 @@ describe('Admin policy action states', () => {
       await waitFor(() =>
         expect(within(panel).getByLabelText('Policy effective date')).toHaveFocus(),
       )
+      // The calendar stays closed so it doesn't cover the fields under the date.
+      expect(document.querySelector('.flatpickr-calendar.open')).toBeNull()
       expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
       expect(launcher).toBeDisabled()
       expect(screen.getByRole('button', { name: /^Edit / })).toBeDisabled()

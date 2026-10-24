@@ -3,6 +3,7 @@ import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import DetailDocumentUploadPanel from '../DetailDocumentUploadPanel'
 import { submitAdminUpload, validateAdminUpload } from '@/service/admin-upload-service'
+import { DOCUMENT_UPLOAD_GUIDANCE } from '../uploadQueueHelpers'
 
 vi.mock('@/service/admin-upload-service', () => ({
   submitAdminUpload: vi.fn(),
@@ -339,13 +340,70 @@ describe('DetailDocumentUploadPanel', () => {
 
     const fileInput = screen.getByLabelText('Document File')
     await waitFor(() => expect(fileInput).toBeDisabled())
-    expect(screen.getByText('Upload is submitting.')).toBeVisible()
+    // The accepted-types line stays; the saving state is announced without replacing it.
+    expect(screen.getByText(DOCUMENT_UPLOAD_GUIDANCE)).toBeVisible()
+    expect(screen.getByText('Upload is submitting.')).toHaveAttribute('aria-live', 'polite')
+    expect(
+      within(screen.getByRole('complementary', { name: 'Add documents' })).getByRole('button', {
+        name: 'Cancel',
+      }),
+    ).toBeDisabled()
 
     await act(async () => {
       resolveUpload({ message: 'Document uploaded.' })
     })
     await waitFor(() => expect(onClose).toHaveBeenCalledTimes(1))
     expect(mockedSubmitAdminUpload).toHaveBeenCalledTimes(1)
+  })
+
+  it('shows only the file row while a side-panel file is still being checked', async () => {
+    let resolveValidation!: (value: Awaited<ReturnType<typeof validateAdminUpload>>) => void
+    mockedValidateAdminUpload.mockReturnValueOnce(
+      new Promise((resolve) => {
+        resolveValidation = resolve
+      }),
+    )
+    render(
+      <DetailDocumentUploadPanel
+        workflowType="application"
+        targetNumber="321"
+        inputId="applicationDocuments"
+        presentation="side-panel"
+        drawer={applicationDrawer}
+        initiallyOpen
+      />,
+    )
+    const panel = screen.getByRole('complementary', { name: 'Add documents' })
+
+    await userEvent.upload(
+      screen.getByLabelText('Document File'),
+      new File(['checking'], 'checking.pdf', { type: 'application/pdf' }),
+    )
+
+    expect(within(panel).getByRole('list', { name: 'Selected files' })).toBeVisible()
+    expect(within(panel).getByText('checking.pdf')).toBeVisible()
+    expect(within(panel).queryByLabelText(/Document description/)).not.toBeInTheDocument()
+    expect(within(panel).queryByText('Description')).not.toBeInTheDocument()
+    expect(
+      within(panel).queryByText(
+        "Say what the document is, if the file name doesn't make it clear.",
+      ),
+    ).not.toBeInTheDocument()
+    expect(within(panel).getByRole('button', { name: 'Save documents' })).toBeDisabled()
+
+    await act(async () => {
+      resolveValidation({
+        status: 'validated',
+        message: 'File passed validation and virus scanning.',
+      })
+    })
+
+    expect(
+      await within(panel).findByLabelText(/Document description for checking.pdf/),
+    ).toBeEnabled()
+    expect(
+      within(panel).getByText("Say what the document is, if the file name doesn't make it clear."),
+    ).toBeVisible()
   })
 
   it('keeps an application document draft until side-panel discard is confirmed', async () => {

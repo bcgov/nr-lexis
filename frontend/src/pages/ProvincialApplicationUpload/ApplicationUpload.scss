@@ -15,9 +15,10 @@
   --application-upload-row-alt-bg: var(--csp-table-row-alt-bg);
 }
 
-// The page's actions are 15rem wide with their icon at the far end.
+// The page's actions are 15rem wide with their icon at the far end, or the row's width when the
+// row is narrower.
 .application-upload-page .admin-upload-fspts-button-row .cds--btn {
-  min-inline-size: 15rem;
+  min-inline-size: min(15rem, 100%);
   justify-content: space-between;
 }
 
@@ -257,10 +258,16 @@
 
 .application-upload-result__summary {
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
   justify-items: center;
   gap: 1rem;
   padding-block-start: 1rem;
   text-align: center;
+}
+
+// A narrow screen wraps the button's label instead of pushing the button past the page.
+.application-upload-result__summary .cds--btn {
+  max-inline-size: 100%;
 }
 
 .application-upload-result__icon--success {

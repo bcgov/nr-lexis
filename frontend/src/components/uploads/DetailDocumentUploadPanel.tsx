@@ -945,11 +945,15 @@ const DetailDocumentUploadPanel = ({
             accept={DOCUMENT_UPLOAD_ACCEPT}
             invalidText={uploadInvalidText}
             disabled={disabled || isSubmitting}
-            disabledDescription={isSubmitting ? 'Upload is submitting.' : disabledReason}
+            disabledDescription={disabled ? disabledReason : DOCUMENT_UPLOAD_GUIDANCE}
             renderAsPanel={false}
             variant="fspts"
             onFilesSelected={addFilesToQueue}
           />
+          {/* The file rows and the Save button show the saving state; this announces it. */}
+          <div className="cds--visually-hidden" aria-live="polite" aria-atomic="true">
+            {isSubmitting ? 'Upload is submitting.' : ''}
+          </div>
         </div>
       )}
 
@@ -959,6 +963,14 @@ const DetailDocumentUploadPanel = ({
             const description = item.fileDescription ?? ''
             const descriptionError = validateDocumentUploadDescription(description)
             const needsAttention = item.status === 'invalid' || item.status === 'failed'
+            // A file that is still being checked or failed its check can't be saved, so it
+            // has no description.
+            const showDescription = !(
+              item.status === 'queued' ||
+              item.status === 'validating' ||
+              item.status === 'invalid' ||
+              (item.status === 'failed' && !item.submitted)
+            )
             const [errorSubject, errorBody] = splitFileErrorMessage(
               item.message || GENERIC_UPLOAD_FAILURE_MESSAGE,
             )
@@ -976,8 +988,7 @@ const DetailDocumentUploadPanel = ({
                   disabled={isSubmitting}
                   onDelete={() => removeQueuedFile(item.id)}
                 />
-                {/* A file that failed its check can't be saved, so it has no description. */}
-                {!(item.status === 'invalid' || (item.status === 'failed' && !item.submitted)) && (
+                {showDescription && (
                   <TextInput
                     id={`${inputId}Description-${encodeURIComponent(item.id)}`}
                     labelText="Description"

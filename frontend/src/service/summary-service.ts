@@ -62,11 +62,12 @@ const fetchSummaryPage = <T>(
   page = 0,
   size = 10,
   sortField?: string,
+  ttlMs?: number,
 ): Promise<SummaryPage<T>> =>
   apiService.getCachedData<SummaryPage<T>>(
     `/lexis/summary/${section}`,
     { params: { page, size, ...(sortField ? { sortField } : {}) } },
-    { cacheKey: `summary:${section}:${page}:${size}${sortField ? `:${sortField}` : ''}` },
+    { cacheKey: `summary:${section}:${page}:${size}${sortField ? `:${sortField}` : ''}`, ttlMs },
   )
 
 export const fetchSummaryApplications = (page = 0, size = 10, sortField?: string) =>
@@ -81,8 +82,9 @@ export const fetchSummaryExemptions = (page = 0, size = 10, sortField?: string) 
 export const fetchSummaryPermits = (page = 0, size = 10, sortField?: string) =>
   fetchSummaryPage<SummaryPermit>('permits', page, size, sortField)
 
+// Fee totals are calculated on request, so every load asks the server.
 export const fetchSummaryFees = (page = 0, size = 10, sortField?: string) =>
-  fetchSummaryPage<SummaryFee>('fees', page, size, sortField)
+  fetchSummaryPage<SummaryFee>('fees', page, size, sortField, 0)
 
 export const fetchSummaryOffersPlaced = (page = 0, size = 10, sortField?: string) =>
   fetchSummaryPage<SummaryOffer>('offers-placed', page, size, sortField)

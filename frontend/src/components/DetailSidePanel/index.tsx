@@ -8,6 +8,7 @@ import {
   type RefObject,
 } from 'react'
 import { SidePanel, type SidePanelProps } from '@carbon/ibm-products'
+import { closeDateCalendar } from '@/utils/focus'
 import './DetailSidePanel.scss'
 
 const BESIDE_PAGE_QUERY = '(min-width: 1312px)'
@@ -67,9 +68,13 @@ export default function DetailSidePanel({
   // Own entry focus so Carbon's animation cannot reclaim it after a dialog closes.
   useEffect(() => {
     if (!open || loading) return
-    const frame = requestAnimationFrame(() =>
-      panelRef.current?.querySelector<HTMLElement>(initialFocusSelector)?.focus(),
-    )
+    const frame = requestAnimationFrame(() => {
+      const field = panelRef.current?.querySelector<HTMLElement>(initialFocusSelector)
+      if (!field) return
+      field.focus()
+      // A date field opens its calendar on focus, which would cover the fields under it.
+      closeDateCalendar(field)
+    })
     return () => cancelAnimationFrame(frame)
   }, [open, loading, initialFocusSelector])
 

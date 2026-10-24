@@ -623,6 +623,10 @@ const ProvincialApplicationPage = () => {
 
   const onClearFilters = () => {
     clearSelection()
+    // A search still running no longer applies; its response is ignored and the results empty.
+    beginSearchRequest()
+    setLoading(false)
+    setSearchResult({ results: EMPTY_RESULTS, totalStatus: 'exact', searched: false })
     setClientSearchResetKey((current) => current + 1)
     const defaultFilters = {
       ...INITIAL_FILTERS,
@@ -927,13 +931,7 @@ const ProvincialApplicationPage = () => {
                 </div>
               )}
               <div className="legacy-search-actions">
-                <Button
-                  type="button"
-                  kind="tertiary"
-                  onClick={onClearFilters}
-                  disabled={loading}
-                  size="md"
-                >
+                <Button type="button" kind="tertiary" onClick={onClearFilters} size="md">
                   Clear all
                 </Button>
                 <SearchSubmitButton loading={loading} invalid={hasDateValidationError} />
