@@ -1566,18 +1566,21 @@ const AdminPoliciesPage = ({ area }: AdminPoliciesPageProps) => {
                               : 'NONE'
                           }
                           onClick={() => onFilSort(column.id)}
+                          className={
+                            column.id === 'effective_date' ? 'admin-policy-table__date' : undefined
+                          }
                         >
                           {column.label}
                         </TableHeader>
                       ))}
-                      <TableHeader className="admin-policy-table__user-id">
-                        Entry user ID
+                      <TableHeader>Entry user ID</TableHeader>
+                      <TableHeader className="admin-policy-table__date">
+                        Entry timestamp
                       </TableHeader>
-                      <TableHeader>Entry timestamp</TableHeader>
-                      <TableHeader className="admin-policy-table__user-id">
-                        Update user ID
+                      <TableHeader>Update user ID</TableHeader>
+                      <TableHeader className="admin-policy-table__date">
+                        Update timestamp
                       </TableHeader>
-                      <TableHeader>Update timestamp</TableHeader>
                       <TableHeader>Actions</TableHeader>
                     </TableRow>
                   </TableHead>

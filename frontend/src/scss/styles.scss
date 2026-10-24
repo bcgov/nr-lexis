@@ -1657,6 +1657,11 @@ $notification-types: 'error', 'info', 'success', 'warning';
     inline-size: 12.5rem;
   }
 
+  // Date headers break before their last word even where the table has room for one line.
+  th.admin-policy-table__date .cds--table-header-label {
+    max-inline-size: 7rem;
+  }
+
   tbody td {
     vertical-align: middle;
   }
