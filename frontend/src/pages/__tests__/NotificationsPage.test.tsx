@@ -87,6 +87,18 @@ const mockedFetchNotificationAudienceRoles = vi.mocked(fetchNotificationAudience
 const mockedFetchNotifications = vi.mocked(fetchNotifications)
 
 describe('Notifications page', () => {
+  it('starts focus on the page title when nothing has focus', async () => {
+    mockedUseAuth.mockReturnValue(
+      createTestAuthContext({
+        capabilities: createTestCapabilities({ roles: ['LEXIS_ADMIN'] }),
+      }),
+    )
+    render(<NotificationsPage />)
+
+    await screen.findByRole('button', { name: 'Edit notification Winter service update' })
+    expect(screen.getByRole('heading', { level: 1, name: 'Notifications' })).toHaveFocus()
+  })
+
   it('names each administrator row action after its notification', async () => {
     mockedUseAuth.mockReturnValue(
       createTestAuthContext({

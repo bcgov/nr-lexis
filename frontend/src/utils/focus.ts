@@ -61,8 +61,8 @@ export const focusFirstEditableFieldAfterPanelChange = (
 
 type DateInput = HTMLInputElement & { _flatpickr?: { isOpen: boolean; close: () => void } }
 
-// Focusing a date field opens its calendar, which would cover the error under the field.
-const closeDateCalendar = (control: HTMLElement): void => {
+// Focusing a date field opens its calendar, which would cover what is under the field.
+export const closeDateCalendar = (control: HTMLElement): void => {
   control
     .closest('.cds--date-picker')
     ?.querySelectorAll<DateInput>('input')

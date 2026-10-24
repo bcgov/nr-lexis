@@ -332,6 +332,32 @@ describe('Provincial Offer Detail Actions', () => {
     expect(screen.queryByText('Offer saved.')).not.toBeInTheDocument()
   })
 
+  it('clears the save notice when Edit offer opens the form again', async () => {
+    mockedSubmitProvincialOfferUpdate.mockResolvedValue({
+      success: true,
+      message: 'The purchase offer was updated successfully.',
+      createdId: '81001',
+      errors: [],
+      warnings: [],
+      emailRequired: false,
+      applicantEmailFound: true,
+    })
+    renderPage()
+
+    await screen.findByRole('heading', { name: 'Offer 81001' })
+    await userEvent.click(await screen.findByRole('button', { name: 'Edit offer' }))
+    const amountInput = screen.getByLabelText('Offer amount ($/m³)')
+    await userEvent.clear(amountInput)
+    await userEvent.type(amountInput, '13000')
+    await userEvent.click(screen.getByRole('button', { name: 'Save changes' }))
+    expect(await screen.findByText('Offer saved.')).toBeInTheDocument()
+
+    await userEvent.click(await screen.findByRole('button', { name: 'Edit offer' }))
+
+    expect(await screen.findByRole('button', { name: 'Save changes' })).toBeInTheDocument()
+    expect(screen.queryByText('Offer saved.')).not.toBeInTheDocument()
+  })
+
   const renderCarriedNotice = (offerCreationNotice: unknown) =>
     render(
       <MemoryRouter

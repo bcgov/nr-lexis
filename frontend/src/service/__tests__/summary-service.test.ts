@@ -42,8 +42,16 @@ describe('summary-service', () => {
     expect(getCachedDataMock).toHaveBeenCalledWith(
       `/lexis/summary/${section}`,
       { params: { page: 2, size: 25 } },
-      { cacheKey: `summary:${section}:2:25` },
+      { cacheKey: `summary:${section}:2:25`, ...(section === 'fees' ? { ttlMs: 0 } : {}) },
     )
+  })
+
+  it('always asks the server for fees and keeps the default cache time for the other sections', async () => {
+    await fetchSummaryFees(0, 10)
+    await fetchSummaryPermits(0, 10)
+
+    expect(getCachedDataMock.mock.calls[0][2]).toEqual({ cacheKey: 'summary:fees:0:10', ttlMs: 0 })
+    expect(getCachedDataMock.mock.calls[1][2]).toEqual({ cacheKey: 'summary:permits:0:10' })
   })
 
   it.each([
@@ -61,7 +69,10 @@ describe('summary-service', () => {
       expect(getCachedDataMock).toHaveBeenCalledWith(
         `/lexis/summary/${section}`,
         { params: { page: 1, size: 10, sortField } },
-        { cacheKey: `summary:${section}:1:10:${sortField}` },
+        {
+          cacheKey: `summary:${section}:1:10:${sortField}`,
+          ...(section === 'fees' ? { ttlMs: 0 } : {}),
+        },
       )
     },
   )

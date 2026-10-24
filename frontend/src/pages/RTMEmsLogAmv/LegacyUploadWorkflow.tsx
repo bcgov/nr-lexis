@@ -758,7 +758,6 @@ const ReviewUploadContent = ({
   )
   const warningCount = warningCellCount || previewResult.warnings.length
   const warningLabel = warningCellCount > 0 ? 'cell' : 'upload warning'
-  const warningVerb = warningCount === 1 ? 'needs' : 'need'
   const currentMonthLabel = formatUploadMonth(previewResult.retrievalDate) ?? 'Current values'
   const nextMonthLabel = formatUploadMonth(previewResult.updateDate) ?? 'New values'
   const warningSpeciesText = formatSpeciesList(warnedSpecies.map((column) => column.label))
@@ -771,7 +770,7 @@ const ReviewUploadContent = ({
           kind="warning"
           lowContrast
           hideCloseButton
-          title={`${warningCount} ${warningLabel}${warningCount === 1 ? '' : 's'} ${warningVerb} a look before you save`}
+          title={`Check ${warningCount} ${warningLabel}${warningCount === 1 ? '' : 's'} before you save`}
           subtitle={
             warningSpeciesText
               ? `In ${warningSpeciesText}, highlighted below. You can save either way.`
