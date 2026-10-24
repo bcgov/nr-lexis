@@ -37,6 +37,12 @@
   line-height: 1.25rem;
 }
 
+/* A line of the description set apart below it, still read as part of the dialog's description. */
+.lexis-confirmation-modal__description-note {
+  display: block;
+  margin-block-start: 1rem;
+}
+
 .lexis-confirmation-modal__actions {
   display: flex;
   justify-content: flex-end;

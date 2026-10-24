@@ -396,6 +396,9 @@ describe('Admin policy action states', () => {
       within(dialog).getByText('The RCO fee policy effective Jan 1, 2099 (4% increase)').tagName,
     ).toBe('STRONG')
     expect(within(dialog).getByText('This action cannot be undone.')).toBeInTheDocument()
+    expect(dialog).toHaveAccessibleDescription(
+      'The RCO fee policy effective Jan 1, 2099 (4% increase) will be deleted. This action cannot be undone.',
+    )
     expect(within(dialog).getByRole('button', { name: 'Cancel' })).toHaveFocus()
     await userEvent.keyboard('{Escape}')
     await waitFor(() => expect(deleteButton).toHaveFocus())

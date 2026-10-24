@@ -1304,7 +1304,10 @@ const AdminPoliciesPage = ({ area }: AdminPoliciesPageProps) => {
                   {formatIsoDateLabel(pendingDeletion.effectiveDate)} ({pendingDeletion.percentage}%
                   increase)
                 </strong>{' '}
-                will be deleted.
+                will be deleted.{' '}
+                <span className="lexis-confirmation-modal__description-note">
+                  This action cannot be undone.
+                </span>
               </>
             ) : pendingDeletion.area === 'fil' ? (
               `This permanently deletes the fee in lieu policy effective ${pendingDeletion.effectiveDate} (${pendingDeletion.percentage}%). This cannot be undone.`
@@ -1332,11 +1335,7 @@ const AdminPoliciesPage = ({ area }: AdminPoliciesPageProps) => {
               handlePolicyDeleteError(error, pendingDeletion.area)
             }
           }}
-        >
-          {pendingDeletion.area === 'fee' && (
-            <p className="lexis-confirmation-modal__description">This action cannot be undone.</p>
-          )}
-        </ConfirmationModal>
+        />
       )}
 
       {area === 'fee' && (
