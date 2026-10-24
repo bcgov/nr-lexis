@@ -536,6 +536,29 @@ describe('Admin policy action states', () => {
     expect(within(reopened).queryByText('Effective date already exists')).not.toBeInTheDocument()
   })
 
+  it('shows a taken fee in lieu effective date on its field when an edit is refused', async () => {
+    mockedUpsertFilPolicy.mockRejectedValue(
+      new AdminPolicyMutationError(['Effective date already exists.']),
+    )
+    renderPage('fil')
+
+    const policyRow = (await screen.findByText('Jan 1, 2099')).closest('tr') as HTMLElement
+    await userEvent.click(within(policyRow).getByRole('button', { name: /^Edit / }))
+    const dialog = screen.getByRole('complementary', { name: 'Edit fee in lieu policy' })
+    const effectiveDate = within(dialog).getByLabelText('Policy effective date')
+    fireEvent.change(effectiveDate, { target: { value: '2099-02-01' } })
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Save fee in lieu policy' }))
+
+    expect(await within(dialog).findByText('Effective date already exists')).toBeInTheDocument()
+    expect(effectiveDate).toHaveAttribute('aria-invalid', 'true')
+    await waitFor(() => expect(effectiveDate).toHaveFocus())
+    expect(mockedUpsertFilPolicy).toHaveBeenCalledWith({
+      id: 'fil-1',
+      effectiveDate: '2099-02-01',
+      filPercentage: '2',
+    })
+  })
+
   it('surfaces backend delete guard errors after confirmation', async () => {
     mockedDeleteFeePolicy.mockRejectedValue(
       new AdminPolicyMutationError(['Only future-dated fee policies can be deleted.']),
