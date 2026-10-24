@@ -1961,7 +1961,7 @@ describe('Admin policy action states', () => {
     expect(within(row).getByText('Jun 29, 2014')).toBeInTheDocument()
     expect(within(row).getByText('Jun 30, 2014')).toBeInTheDocument()
     expect(row).toHaveTextContent('ORG_BOUNDARY_SCRIPT')
-    expect(row.querySelectorAll('wbr')).toHaveLength(3)
+    expect(row.querySelectorAll('wbr')).toHaveLength(2)
   })
 
   it('blocks typed policy dates that are not valid ISO dates', async () => {

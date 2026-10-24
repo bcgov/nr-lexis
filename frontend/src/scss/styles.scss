@@ -1646,15 +1646,15 @@ $notification-types: 'error', 'info', 'success', 'warning';
   text-align: right;
 }
 
-// Headers wrap between words and the user ID columns take the width left over, so all eight
-// columns fit at 1440px; a long user ID wraps at its separators rather than widening the table.
+// Headers wrap between words and the user ID columns keep room for the longest legacy ID, so all
+// eight columns fit at 1440px; a long user ID wraps at an underscore rather than widen the table.
 .legacy-search-table-frame .cds--data-table.admin-fee-policy-table {
   thead th .cds--table-header-label {
     white-space: normal;
   }
 
   th.admin-fee-policy-table__user-id {
-    inline-size: 16%;
+    inline-size: 12.5rem;
   }
 
   tbody td {

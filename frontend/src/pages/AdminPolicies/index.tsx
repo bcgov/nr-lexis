@@ -136,9 +136,9 @@ const firstFutureBusinessIsoDate = (): string => {
   return formatLocalIsoDate(new Date(year, month - 1, day + 1))
 }
 
-// Long user IDs, such as ORG_BOUNDARY_SCRIPT, wrap after a backslash or underscore.
+// Long user IDs, such as ORG_BOUNDARY_SCRIPT, wrap after an underscore when the table is narrow.
 const breakableUserId = (userId: string): ReactNode =>
-  userId.split(/(?<=[\\_])/).map((part, index, parts) => (
+  userId.split(/(?<=_)/).map((part, index, parts) => (
     <Fragment key={parts.slice(0, index + 1).join('')}>
       {index > 0 && <wbr />}
       {part}
