@@ -3214,7 +3214,7 @@ const ProvincialExemptionDetailsPage = () => {
                             variant={emptyBlanketOicPermits ? 'tab' : undefined}
                             className={
                               detail.blanketOic
-                                ? undefined
+                                ? 'exemption-permits-empty--blanket-oic'
                                 : 'exemption-permits-empty--after-totals'
                             }
                           />

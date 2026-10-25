@@ -22,6 +22,11 @@
   justify-content: space-between;
 }
 
+// The field title is bold, as on the Documents panel.
+.application-upload-page .admin-upload-field-label {
+  font-weight: 700;
+}
+
 // The helper text holds two sentences on their own lines.
 .application-upload-page .admin-upload-field-helper {
   white-space: pre-line;
