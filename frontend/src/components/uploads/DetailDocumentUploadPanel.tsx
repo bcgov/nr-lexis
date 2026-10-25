@@ -534,8 +534,6 @@ const DetailDocumentUploadPanel = ({
     setUploadQueue((current) => current.filter((item) => item.id !== id))
     setErrorMessage('')
     setSuccessMessage('')
-    // uploadInvalidText checks the final queue length after batched removals.
-    setShowFileValidationError(true)
   }
 
   // After a removal commits, focus moves to the file that took the removed

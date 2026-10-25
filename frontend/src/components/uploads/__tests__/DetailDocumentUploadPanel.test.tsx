@@ -188,7 +188,11 @@ describe('DetailDocumentUploadPanel', () => {
     expect(screen.getByRole('button', { name: 'Remove - first.pdf' })).toHaveFocus()
     await userEvent.click(screen.getByRole('button', { name: 'Remove - first.pdf' }))
     expect(screen.getByRole('button', { name: 'Choose files for Files' })).toHaveFocus()
+    // The empty Files error waits for Save.
+    expect(screen.queryByText('Choose at least one file to upload')).not.toBeInTheDocument()
+    await userEvent.click(screen.getByRole('button', { name: 'Save documents' }))
     expect(screen.getByText('Choose at least one file to upload')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Choose files for Files' })).toHaveFocus()
     expect(mockedSubmitAdminUpload).not.toHaveBeenCalled()
   })
 
@@ -221,7 +225,7 @@ describe('DetailDocumentUploadPanel', () => {
     })
 
     expect(screen.getByRole('button', { name: 'Choose files for Files' })).toHaveFocus()
-    expect(screen.getByText('Choose at least one file to upload')).toBeInTheDocument()
+    expect(screen.queryByText('Choose at least one file to upload')).not.toBeInTheDocument()
   })
 
   it('shows a failed side panel file check on the file item', async () => {
@@ -1099,7 +1103,7 @@ describe('DetailDocumentUploadPanel', () => {
     expect(mockedSubmitAdminUpload).not.toHaveBeenCalled()
   })
 
-  it('clears the queue attention error and shows the empty queue error after removing the last invalid file', async () => {
+  it('clears the queue attention error after removing the last invalid file and shows the empty queue error on review', async () => {
     const file = new File(['infected document upload'], 'eicar-application-upload.pdf', {
       type: 'application/pdf',
     })
@@ -1131,10 +1135,12 @@ describe('DetailDocumentUploadPanel', () => {
     expect(
       screen.queryByText('1 queued file needs attention before review.'),
     ).not.toBeInTheDocument()
+    expect(screen.queryByText('Choose at least one file to upload')).not.toBeInTheDocument()
+    await userEvent.click(screen.getByRole('button', { name: 'Review upload' }))
     expect(screen.getByText('Choose at least one file to upload')).toBeInTheDocument()
   })
 
-  it('shows the empty queue error when file removals are batched', async () => {
+  it('shows the empty queue error on review after batched file removals', async () => {
     const files = ['first.pdf', 'second.pdf'].map(
       (name) => new File(['document upload'], name, { type: 'application/pdf' }),
     )
@@ -1160,6 +1166,8 @@ describe('DetailDocumentUploadPanel', () => {
     })
 
     expect(screen.queryByRole('button', { name: 'Remove' })).not.toBeInTheDocument()
+    expect(screen.queryByText('Choose at least one file to upload')).not.toBeInTheDocument()
+    await userEvent.click(screen.getByRole('button', { name: 'Review upload' }))
     expect(screen.getByText('Choose at least one file to upload')).toBeInTheDocument()
     expect(mockedSubmitAdminUpload).not.toHaveBeenCalled()
 
