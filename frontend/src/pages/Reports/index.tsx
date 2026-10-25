@@ -1602,9 +1602,10 @@ export const ReportsPageContent = () => {
                   }
 
                   if (field.type === 'date') {
+                    // Clear all remounts the picker so it also empties text it could not select.
                     return (
                       <IsoDatePicker
-                        key={field.key}
+                        key={`${field.key}:${clientSearchResetKey}`}
                         id={`${selectedReport.id}-${field.key}`}
                         labelText={field.label}
                         value={resolvedCurrentValue}

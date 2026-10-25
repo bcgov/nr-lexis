@@ -327,6 +327,16 @@
     max-inline-size: 100%;
   }
 
+  // The panel trims its side padding and the notice's text takes the margin Carbon keeps for a close
+  // button the notice does not have, so the notice's words stay whole.
+  .application-upload-page .admin-upload-panel {
+    padding-inline: 1rem;
+  }
+
+  .application-upload-notice .cds--inline-notification__details {
+    margin-inline-end: 0.8125rem;
+  }
+
   // The name takes the first line; the status and remove button share the second.
   .application-upload-file {
     flex-wrap: wrap;

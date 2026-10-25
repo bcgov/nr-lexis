@@ -2157,6 +2157,19 @@ $notification-types: 'error', 'info', 'success', 'warning';
   min-inline-size: 0;
 }
 
+// A counter with no room beside its label's longest word moves below the label, at the field's end.
+.offer-form-card .cds--text-area__label-wrapper {
+  flex-wrap: wrap;
+}
+
+.offer-form-card .cds--text-area__label-wrapper > label {
+  flex: 1 1 0;
+}
+
+.offer-form-card .cds--text-area__label-counter {
+  margin-inline-start: auto;
+}
+
 .offer-form-card > .legacy-search-actions {
   gap: 1rem;
   margin-block-start: 2rem;
@@ -3182,6 +3195,11 @@ $notification-types: 'error', 'info', 'success', 'warning';
 .rtm-amv-template-link:focus-visible {
   outline: 2px solid var(--fds-interactive);
   outline-offset: 2px;
+}
+
+// The field title is bold, as on Upload applications.
+.rtm-amv-upload-page .admin-upload-field-label {
+  font-weight: 700;
 }
 
 .rtm-amv-upload-page .rtm-amv-upload-card .admin-upload-drop-zone,
