@@ -1,4 +1,4 @@
-import { useEffect, useEffectEvent, useMemo, useRef, useState, type RefObject } from 'react'
+import { useEffect, useMemo, useRef, useState, type RefObject } from 'react'
 import { Button, FileUploaderItem, TextArea, TextInput } from '@carbon/react'
 import { Add, ArrowRight } from '@carbon/icons-react'
 import { ActionResultNotifications } from '../ActionResultNotification'
@@ -171,7 +171,6 @@ const DetailDocumentUploadPanel = ({
   const [showFileValidationError, setShowFileValidationError] = useState(false)
   const [showInvoiceValidationErrors, setShowInvoiceValidationErrors] = useState(false)
   const [isSubmitting, setIsSubmitting] = useState(false)
-  const [isSaveWaitingForChecks, setIsSaveWaitingForChecks] = useState(false)
   const [isUploadModalOpen, setIsUploadModalOpen] = useState(initiallyOpen && !disabled)
   const [isDiscardConfirmationOpen, setIsDiscardConfirmationOpen] = useState(false)
   const discardFocusReturnRef = useRef<HTMLElement | null>(null)
@@ -653,13 +652,8 @@ const DetailDocumentUploadPanel = ({
     document.getElementById(`${inputId}File-drop-zone`)?.focus()
   }
 
-  const onSubmitUpload = async (afterFileChecks = false): Promise<void> => {
-    if (isSubmitting && !afterFileChecks) return
-    if (afterFileChecks) {
-      // The saving state shown while the files were checked ends unless the save goes ahead.
-      setIsSaveWaitingForChecks(false)
-      setIsSubmitting(false)
-    }
+  const onSubmitUpload = async (): Promise<void> => {
+    if (isSubmitting) return
     if (isDrawerPanel) setShowFileValidationError(uploadQueue.length === 0)
     setErrorMessage('')
     setSuccessMessage('')
@@ -686,13 +680,11 @@ const DetailDocumentUploadPanel = ({
     }
 
     if (pendingValidationCount > 0) {
-      if (isDrawerPanel) {
-        // The panel shows its saving state now and saves once every file check has ended.
-        setIsSubmitting(true)
-        setIsSaveWaitingForChecks(true)
-        return
-      }
-      setErrorMessage('Wait for file validation to finish before reviewing the upload.')
+      setErrorMessage(
+        isDrawerPanel
+          ? 'Wait for file validation to finish before saving documents.'
+          : 'Wait for file validation to finish before reviewing the upload.',
+      )
       return
     }
 
@@ -769,13 +761,6 @@ const DetailDocumentUploadPanel = ({
 
     setIsSubmitting(false)
   }
-
-  // A Save clicked while files were being checked runs once the checks end, with the files
-  // that passed.
-  const saveAfterFileChecks = useEffectEvent(() => void onSubmitUpload(true))
-  useEffect(() => {
-    if (isSaveWaitingForChecks && pendingValidationCount === 0) saveAfterFileChecks()
-  }, [isSaveWaitingForChecks, pendingValidationCount])
 
   const onReviewUpload = (): void => {
     setErrorMessage('')
@@ -1176,7 +1161,7 @@ const DetailDocumentUploadPanel = ({
             {
               label: isSubmitting ? 'Saving documents' : 'Save documents',
               kind: 'primary',
-              disabled: disabled || isSubmitting,
+              disabled: disabled || isSubmitting || pendingValidationCount > 0,
               renderIcon: isSubmitting ? PendingIcon : undefined,
               onClick: () => void onSubmitUpload(),
             },

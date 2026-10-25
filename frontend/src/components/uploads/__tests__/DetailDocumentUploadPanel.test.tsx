@@ -393,7 +393,7 @@ describe('DetailDocumentUploadPanel', () => {
         "Say what the document is, if the file name doesn't make it clear.",
       ),
     ).not.toBeInTheDocument()
-    expect(within(panel).getByRole('button', { name: 'Save documents' })).toBeEnabled()
+    expect(within(panel).getByRole('button', { name: 'Save documents' })).toBeDisabled()
 
     await act(async () => {
       resolveValidation({
@@ -408,119 +408,6 @@ describe('DetailDocumentUploadPanel', () => {
     expect(
       within(panel).getByText("Say what the document is, if the file name doesn't make it clear."),
     ).toBeVisible()
-  })
-
-  it('saves the checked files once the checks end when Save is clicked during a check', async () => {
-    let resolveValidation!: (value: Awaited<ReturnType<typeof validateAdminUpload>>) => void
-    mockedValidateAdminUpload
-      .mockResolvedValueOnce({ status: 'validated', message: 'File passed validation.' })
-      .mockReturnValueOnce(
-        new Promise((resolve) => {
-          resolveValidation = resolve
-        }),
-      )
-    mockedSubmitAdminUpload.mockResolvedValue({ message: 'Document uploaded.' })
-    const onClose = vi.fn()
-    const onBusyChange = vi.fn()
-    const ready = new File(['ready'], 'test-2026-10-24-ready.pdf', { type: 'application/pdf' })
-    const checking = new File(['checking'], 'test-2026-10-24-checking.pdf', {
-      type: 'application/pdf',
-    })
-    render(
-      <DetailDocumentUploadPanel
-        workflowType="application"
-        targetNumber="321"
-        inputId="applicationDocuments"
-        presentation="side-panel"
-        drawer={applicationDrawer}
-        initiallyOpen
-        onClose={onClose}
-        onBusyChange={onBusyChange}
-      />,
-    )
-    const panel = screen.getByRole('complementary', { name: 'Add documents' })
-
-    await userEvent.upload(screen.getByLabelText('Document File'), [ready, checking])
-    await userEvent.type(
-      await within(panel).findByLabelText(/Document description for test-2026-10-24-ready.pdf/),
-      'Ready',
-    )
-    await userEvent.click(within(panel).getByRole('button', { name: 'Save documents' }))
-
-    expect(within(panel).getByRole('button', { name: 'Saving documents' })).toBeDisabled()
-    expect(within(panel).getByRole('button', { name: 'Cancel' })).toBeDisabled()
-    expect(screen.getByLabelText('Document File')).toBeDisabled()
-    expect(onBusyChange).toHaveBeenLastCalledWith(true)
-    expect(screen.queryByText(/Wait for file validation/)).not.toBeInTheDocument()
-    expect(mockedSubmitAdminUpload).not.toHaveBeenCalled()
-
-    await act(async () => {
-      resolveValidation({ status: 'validated', message: 'File passed validation.' })
-    })
-
-    await waitFor(() => expect(onClose).toHaveBeenCalledTimes(1))
-    expect(mockedSubmitAdminUpload).toHaveBeenCalledTimes(2)
-    expect(mockedSubmitAdminUpload).toHaveBeenCalledWith(
-      'application',
-      expect.objectContaining({ file: ready, fileDescription: 'Ready' }),
-    )
-    expect(mockedSubmitAdminUpload).toHaveBeenCalledWith(
-      'application',
-      expect.objectContaining({ file: checking, fileDescription: '' }),
-    )
-  })
-
-  it('ends the saving state without saving when the only file fails its check after Save', async () => {
-    let rejectValidation!: (reason: unknown) => void
-    mockedValidateAdminUpload.mockReturnValueOnce(
-      new Promise((_, reject) => {
-        rejectValidation = reject
-      }),
-    )
-    const onClose = vi.fn()
-    render(
-      <DetailDocumentUploadPanel
-        workflowType="application"
-        targetNumber="321"
-        inputId="applicationDocuments"
-        presentation="side-panel"
-        drawer={applicationDrawer}
-        initiallyOpen
-        onClose={onClose}
-      />,
-    )
-    const panel = screen.getByRole('complementary', { name: 'Add documents' })
-
-    await userEvent.upload(
-      screen.getByLabelText('Document File'),
-      new File(['unsafe'], 'test-2026-10-24-unsafe.pdf', { type: 'application/pdf' }),
-    )
-    await userEvent.click(within(panel).getByRole('button', { name: 'Save documents' }))
-    expect(within(panel).getByRole('button', { name: 'Saving documents' })).toBeDisabled()
-
-    await act(async () => {
-      rejectValidation(
-        Object.assign(new Error('Upload rejected'), {
-          response: {
-            status: 400,
-            data: {
-              message:
-                'File did not pass the security scan. Check it with your own antivirus software, or upload a different copy.',
-            },
-          },
-        }),
-      )
-    })
-
-    expect(await within(panel).findByText('File did not pass the security scan.')).toBeVisible()
-    expect(within(panel).getByRole('button', { name: 'Save documents' })).toBeEnabled()
-    expect(within(panel).getByRole('button', { name: 'Cancel' })).toBeEnabled()
-    expect(
-      within(panel).getByRole('button', { name: 'Remove - test-2026-10-24-unsafe.pdf' }),
-    ).toBeEnabled()
-    expect(screen.getByText('1 queued file needs attention before saving documents.')).toBeVisible()
-    expect(mockedSubmitAdminUpload).not.toHaveBeenCalled()
-    expect(onClose).not.toHaveBeenCalled()
   })
 
   it('keeps an application document draft until side-panel discard is confirmed', async () => {
