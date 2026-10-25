@@ -1071,6 +1071,48 @@ describe('Reports Page Actions', () => {
     expect(mockedRunReport.mock.calls[0][0].values).not.toHaveProperty('destinationCountry')
   })
 
+  it('empties a typed invalid report date when clearing all fields', async () => {
+    mockReportPermissions()
+    mockedFetchReportOptions.mockResolvedValueOnce(emptyReportOptions())
+
+    render(
+      <MemoryRouter initialEntries={['/reports?report=transportReport']}>
+        <Routes>
+          <Route path="/reports" element={<ReportsPage />} />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    await screen.findByRole('heading', { name: 'Transport report' })
+    await userEvent.type(screen.getByLabelText('Permit issued from date'), '2026-02-30')
+    await userEvent.tab()
+
+    await waitFor(() => {
+      expect(screen.getByLabelText('Permit issued from date')).toHaveAttribute(
+        'aria-invalid',
+        'true',
+      )
+    })
+    expect(screen.getByText('Date must be YYYY-MM-DD')).toBeVisible()
+    expect(screen.getByRole('button', { name: 'Generate report' })).toBeDisabled()
+
+    await userEvent.click(screen.getByRole('button', { name: 'Clear all' }))
+
+    await waitFor(() => {
+      expect(screen.getByLabelText('Permit issued from date')).toHaveValue('')
+    })
+    expect(screen.getByLabelText('Permit issued from date')).not.toHaveAttribute(
+      'aria-invalid',
+      'true',
+    )
+    expect(screen.queryByText('Date must be YYYY-MM-DD')).not.toBeInTheDocument()
+    await userEvent.click(screen.getByRole('button', { name: 'Generate report' }))
+    await waitFor(() => {
+      expect(mockedRunReport).toHaveBeenCalled()
+    })
+    expect(mockedRunReport.mock.calls[0][0].values).not.toHaveProperty('fromDate')
+  })
+
   it('defaults tenure analysis dates like legacy Struts', async () => {
     mockReportPermissions()
     const defaultDates = legacyTenureDefaultDates()
