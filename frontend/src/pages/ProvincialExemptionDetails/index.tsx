@@ -2957,7 +2957,10 @@ const ProvincialExemptionDetailsPage = () => {
                               role="alert"
                             />
                           ) : applications.length > 0 ? (
-                            <TableFrame ariaLabel="Associated exemption applications">
+                            <TableFrame
+                              ariaLabel="Associated exemption applications"
+                              className="exemption-applications-table"
+                            >
                               <Table size="md" useZebraStyles>
                                 <TableHead>
                                   <TableRow>

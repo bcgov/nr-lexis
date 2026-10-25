@@ -11,6 +11,12 @@
   .exemption-table-totals ~ .lexis-table-frame {
     margin-block-start: 1.5rem;
   }
+
+  // With an Actions column, Application and its volume take equal shares and Actions keeps the
+  // narrow rest, so Remove sits near the table's right edge.
+  .exemption-applications-table:has(th:nth-child(3)) th:nth-child(-n + 2) {
+    inline-size: 43%;
+  }
 }
 
 @media (max-width: 671px) {
