@@ -64,7 +64,7 @@ type HeaderAccessors = {
 const RESPONSE_CACHE_MAX_ENTRIES = 150
 const CONFLICT_CHANGED_FIELD_LIMIT = 5
 const CONFLICT_ENRICHMENT_TIMEOUT_MS = 10_000
-// Plus the backend's 60 s clock allowance, this covers the 300 s route timeout.
+// With the backend's 60 s clock allowance, an upload has at least 300 s to arrive.
 const UPLOAD_TOKEN_MINIMUM_SECONDS_REMAINING = 240
 const CACHE_INVALIDATING_METHODS = new Set(['post', 'put', 'patch', 'delete'])
 const CONFLICT_DIFF_IGNORED_FIELDS = new Set([

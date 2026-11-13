@@ -214,6 +214,23 @@ class ProvincialAuthorizationServiceTest {
   }
 
   @Test
+  void exemptionApplicationAccessLoadsAccessDataOnceWhenTheFirstApplicationIsChecked() {
+    Authentication authentication = submitter("00012345");
+    when(applicationServiceProvider.getIfAvailable()).thenReturn(applicationService);
+    when(applicationService.findAccessByExemptionNumber("EX-205"))
+        .thenReturn(
+            accessByApplicationNumber(
+                List.of(applicationAccess(1L, "00012345", "00099999", 1903L, "P"))));
+
+    Predicate<Long> applicationAccess =
+        service.exemptionApplicationAccess(authentication, "EX-205");
+
+    verify(applicationService, never()).findAccessByExemptionNumber("EX-205");
+    assertThat(accessFor(applicationAccess)).containsExactly(true, false, false, false, false);
+    verify(applicationService).findAccessByExemptionNumber("EX-205");
+  }
+
+  @Test
   void exemptionApplicationAccessForAdministratorAllowsEveryApplicationWithoutLookup() {
     Authentication administrator =
         new TestingAuthenticationToken("admin", "n/a", "LEXIS_ADMIN");

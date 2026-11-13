@@ -26,6 +26,7 @@ import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.core.Authentication;
 import org.springframework.stereotype.Service;
+import org.springframework.util.function.SingletonSupplier;
 
 /** Centralizes provincial object, forest-client, BOIC, and staff access rules. */
 @Service
@@ -94,10 +95,12 @@ public class ProvincialAuthorizationService {
     if (service == null) {
       return applicationNumber -> false;
     }
-    Map<Long, ApplicationAccessContextDto> accessByApplicationNumber =
-        service.findAccessByExemptionNumber(exemptionNumber);
+    // Loaded at the first check, so the access data is never older than the rows it decides.
+    Supplier<Map<Long, ApplicationAccessContextDto>> accessByApplicationNumber =
+        SingletonSupplier.of(() -> service.findAccessByExemptionNumber(exemptionNumber));
     return applicationNumber ->
-        canAccessApplication(authentication, accessByApplicationNumber.get(applicationNumber));
+        canAccessApplication(
+            authentication, accessByApplicationNumber.get().get(applicationNumber));
   }
 
   /** Authorizes a preloaded application projection without another application lookup. */

@@ -756,7 +756,7 @@ public class PermitDetailsRpcController {
       PermitDetailsRpcService service, PermitMutationRequestDto mutationRequest) {
     String exemptionNumber = requiredExemptionNumber(mutationRequest.exemptionNumber());
     java.util.SortedSet<Long> applicationNumbers = new java.util.TreeSet<>();
-    // A Blanket OIC permit uses none of the exemption's applications, so they stay unlocked.
+    // A Blanket OIC permit takes no values from the exemption's applications, so none are locked.
     if (!service.isBlanketOicExemption(exemptionNumber)) {
       applicationNumbers.addAll(
           service.getApplicationNumbersForExemptionMutation(exemptionNumber));
