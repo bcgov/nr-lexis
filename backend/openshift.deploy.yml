@@ -71,7 +71,7 @@ parameters:
     value: "100"
   - name: LEXIS_REPORT_MAX_CONCURRENT_GENERATIONS
     description: Maximum active report generations per backend pod
-    value: "6"
+    value: "3"
   - name: LEXIS_DATABASE_MAX_POOL_SIZE
     description: Maximum Oracle connections per backend pod
     value: "6"
