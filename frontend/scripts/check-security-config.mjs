@@ -52,7 +52,7 @@ const listen = async (server) => {
 try {
   console.log(execFileSync(caddy, ['version'], { encoding: 'utf8' }).trim())
   const modules = execFileSync(caddy, ['list-modules', '--versions'], { encoding: 'utf8' })
-  assert.match(modules, /http\.handlers\.waf v2\.5\.0/)
+  assert.match(modules, /http\.handlers\.waf v2\.6\.2/)
   const backendPort = await listen(backend)
   const reserved = [createServer(), createServer(), createServer()]
   const [appPort, healthPort, adminPort] = await Promise.all(reserved.map(listen))
