@@ -3,6 +3,7 @@ package ca.bc.gov.mof.lexis.service.session;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.never;
@@ -24,7 +25,11 @@ import ca.bc.gov.mof.lexis.service.permit.PermitService;
 import ca.bc.gov.mof.lexis.service.session.ProvincialAuthorizationService.ApplicationItemMutation;
 import java.util.Arrays;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
+import java.util.function.Predicate;
+import java.util.stream.Collectors;
+import java.util.stream.LongStream;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -158,6 +163,90 @@ class ProvincialAuthorizationServiceTest {
     assertThat(service.canAccessApplication(authentication, owned)).isTrue();
     assertThat(service.canAccessApplication(authentication, unrelated)).isFalse();
     verifyNoInteractions(applicationServiceProvider);
+  }
+
+  @Test
+  void exemptionApplicationAccessForSubmitterMatchesPerApplicationAccessFromOneLoad() {
+    Authentication authentication = submitter("00012345");
+    List<ApplicationAccessContextDto> linkedApplications =
+        List.of(
+            applicationAccess(1L, "00012345", "00099999", 1903L, "P"),
+            applicationAccess(2L, "00088888", "00099999", 1903L, "P"),
+            applicationAccess(3L, "00088888", "00012345", 1904L, "P"),
+            applicationAccess(4L, "00012345", null, 1903L, "F"));
+    when(applicationServiceProvider.getIfAvailable()).thenReturn(applicationService);
+    when(applicationService.findAccessByExemptionNumber("EX-205"))
+        .thenReturn(accessByApplicationNumber(linkedApplications));
+
+    List<Boolean> listedAccess =
+        accessFor(service.exemptionApplicationAccess(authentication, "EX-205"));
+
+    assertThat(listedAccess).containsExactly(true, false, true, false, false);
+    verify(applicationService, never()).findAccessByApplicationNumber(anyLong());
+    assertThat(listedAccess).isEqualTo(perApplicationAccess(authentication, linkedApplications));
+  }
+
+  @Test
+  void exemptionApplicationAccessForRegionStaffMatchesPerApplicationAccessFromOneLoad() {
+    Authentication caribooApprover = staff("LEXIS_APPLICATION_APPROVER_REGION_REGION-CARIBOO");
+    Authentication caribooReadOnly = staff("LEXIS_READ_ONLY_REGION_REGION-CARIBOO");
+    List<ApplicationAccessContextDto> linkedApplications =
+        List.of(
+            applicationAccess(1L, "00012345", null, 1903L, "P"),
+            applicationAccess(2L, "00012345", null, 1904L, "P"),
+            applicationAccess(3L, "00088888", null, 1903L, "P"),
+            applicationAccess(4L, "00088888", null, null, "P"));
+    when(applicationServiceProvider.getIfAvailable()).thenReturn(applicationService);
+    when(applicationService.findAccessByExemptionNumber("EX-205"))
+        .thenReturn(accessByApplicationNumber(linkedApplications));
+
+    List<Boolean> approverListedAccess =
+        accessFor(service.exemptionApplicationAccess(caribooApprover, "EX-205"));
+    List<Boolean> readOnlyListedAccess =
+        accessFor(service.exemptionApplicationAccess(caribooReadOnly, "EX-205"));
+
+    assertThat(approverListedAccess).containsExactly(true, false, true, false, false);
+    verify(applicationService, never()).findAccessByApplicationNumber(anyLong());
+    assertThat(approverListedAccess)
+        .isEqualTo(perApplicationAccess(caribooApprover, linkedApplications));
+    assertThat(readOnlyListedAccess)
+        .isEqualTo(perApplicationAccess(caribooReadOnly, linkedApplications));
+  }
+
+  @Test
+  void exemptionApplicationAccessForAdministratorAllowsEveryApplicationWithoutLookup() {
+    Authentication administrator =
+        new TestingAuthenticationToken("admin", "n/a", "LEXIS_ADMIN");
+
+    assertThat(accessFor(service.exemptionApplicationAccess(administrator, "EX-205")))
+        .containsExactly(true, true, true, true, true);
+    verifyNoInteractions(applicationServiceProvider, applicationService);
+  }
+
+  // Applications 1 to 4 are linked to the exemption; application 5 is not.
+  private static List<Boolean> accessFor(Predicate<Long> applicationAccess) {
+    return LongStream.rangeClosed(1, 5).mapToObj(applicationAccess::test).toList();
+  }
+
+  private List<Boolean> perApplicationAccess(
+      Authentication authentication, List<ApplicationAccessContextDto> linkedApplications) {
+    for (ApplicationAccessContextDto application : linkedApplications) {
+      when(applicationService.findAccessByApplicationNumber(application.applicationNumber()))
+          .thenReturn(Optional.of(application));
+    }
+    when(applicationService.findAccessByApplicationNumber(5L)).thenReturn(Optional.empty());
+    return LongStream.rangeClosed(1, 5)
+        .mapToObj(
+            applicationNumber -> service.canAccessApplication(authentication, applicationNumber))
+        .toList();
+  }
+
+  private static Map<Long, ApplicationAccessContextDto> accessByApplicationNumber(
+      List<ApplicationAccessContextDto> applications) {
+    return applications.stream()
+        .collect(
+            Collectors.toMap(
+                ApplicationAccessContextDto::applicationNumber, application -> application));
   }
 
   @Test

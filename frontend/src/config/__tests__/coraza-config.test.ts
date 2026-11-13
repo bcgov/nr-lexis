@@ -51,6 +51,42 @@ describe('Coraza WAF config', () => {
     })
   })
 
+  describe('SQL keyword rule', () => {
+    const keywordRule = (): RegExpMatchArray | null =>
+      readCorazaConfig().match(/^SecRule\s+(\S+)\s+"@rx ([^\n]*)"\s*\\\n\s*"id:1005,/m)
+
+    const keywordPattern = (): RegExp => {
+      const pattern = keywordRule()?.[2]
+
+      expect(pattern).toBeDefined()
+      return new RegExp((pattern ?? '').replace(/^\(\?i\)/, ''), 'i')
+    }
+
+    it('applies to the query string only', () => {
+      expect(keywordRule()?.[1]).toBe('ARGS_GET')
+    })
+
+    it('allows ordinary file names and text', () => {
+      const pattern = keywordPattern()
+
+      for (const value of [
+        'SP_scale.pdf',
+        'Notes -- final.pdf',
+        '2026-sp_list.xlsx',
+        'a /* b */ c',
+      ]) {
+        expect(pattern.test(value), value).toBe(false)
+      }
+    })
+
+    it('still refuses multi-word SQL statements', () => {
+      const pattern = keywordPattern()
+
+      expect(pattern.test('1 union select 2')).toBe(true)
+      expect(pattern.test('delete from x')).toBe(true)
+    })
+  })
+
   it('keeps the Caddy admin and metrics endpoint on loopback', () => {
     const config = readCaddyConfig()
 

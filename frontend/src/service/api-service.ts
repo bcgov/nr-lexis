@@ -64,6 +64,8 @@ type HeaderAccessors = {
 const RESPONSE_CACHE_MAX_ENTRIES = 150
 const CONFLICT_CHANGED_FIELD_LIMIT = 5
 const CONFLICT_ENRICHMENT_TIMEOUT_MS = 10_000
+// Plus the backend's 60 s clock allowance, this covers the 300 s route timeout.
+const UPLOAD_TOKEN_MINIMUM_SECONDS_REMAINING = 240
 const CACHE_INVALIDATING_METHODS = new Set(['post', 'put', 'patch', 'delete'])
 const CONFLICT_DIFF_IGNORED_FIELDS = new Set([
   'createTimestamp',
@@ -143,7 +145,12 @@ class APIService {
 
       if (!this.hasHeader(requestConfig.headers, 'authorization')) {
         try {
-          const user = await getOidcUser()
+          // The backend checks the token only after the whole upload arrives.
+          const user = await getOidcUser(
+            requestConfig.data instanceof FormData
+              ? { minimumSecondsRemaining: UPLOAD_TOKEN_MINIMUM_SECONDS_REMAINING }
+              : undefined,
+          )
           const accessToken = user?.access_token
           if (accessToken) {
             this.setHeader(requestConfig.headers, 'Authorization', `Bearer ${accessToken}`)

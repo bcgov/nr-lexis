@@ -20,6 +20,7 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.function.Predicate;
 import java.util.function.Supplier;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.security.access.AccessDeniedException;
@@ -81,6 +82,22 @@ public class ProvincialAuthorizationService {
             .findAccessByApplicationNumber(applicationNumber)
             .map(application -> canAccessApplication(authentication, application))
             .orElse(false);
+  }
+
+  /** Authorizes an exemption's applications from one load of their access data. */
+  public Predicate<Long> exemptionApplicationAccess(
+      Authentication authentication, String exemptionNumber) {
+    if (roles(authentication).contains(ROLE_ADMIN)) {
+      return applicationNumber -> applicationNumber != null && applicationNumber > 0;
+    }
+    LexisApplicationService service = applicationServiceProvider.getIfAvailable();
+    if (service == null) {
+      return applicationNumber -> false;
+    }
+    Map<Long, ApplicationAccessContextDto> accessByApplicationNumber =
+        service.findAccessByExemptionNumber(exemptionNumber);
+    return applicationNumber ->
+        canAccessApplication(authentication, accessByApplicationNumber.get(applicationNumber));
   }
 
   /** Authorizes a preloaded application projection without another application lookup. */

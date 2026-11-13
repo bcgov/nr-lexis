@@ -1,5 +1,7 @@
 package ca.bc.gov.mof.lexis.service.permit;
 
+import ca.bc.gov.mof.lexis.service.coordination.DistributedLockBusyException;
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
@@ -8,6 +10,7 @@ import java.util.NavigableSet;
 import java.util.Objects;
 import java.util.TreeSet;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.locks.ReentrantLock;
 import java.util.function.Supplier;
 import org.springframework.beans.factory.ObjectProvider;
@@ -18,12 +21,24 @@ import org.springframework.stereotype.Service;
 @Service
 public final class PermitOperationMutex {
 
+  // Just above the 30-second Oracle row-lock wait.
+  private static final Duration DEFAULT_LOCAL_LOCK_WAIT_TIMEOUT = Duration.ofSeconds(35);
+  private static final String LOCAL_LOCK_BUSY_MESSAGE =
+      "Another LEXIS operation is updating the same record. Try again shortly.";
+
   private final ConcurrentHashMap<OperationKey, Entry> entries = new ConcurrentHashMap<>();
   private final ThreadLocal<NavigableSet<OperationKey>> heldKeys = new ThreadLocal<>();
   private final OracleAggregateRowLockService oracleRowLocks;
+  private final Duration localLockWaitTimeout;
 
   public PermitOperationMutex() {
+    this(DEFAULT_LOCAL_LOCK_WAIT_TIMEOUT);
+  }
+
+  PermitOperationMutex(Duration localLockWaitTimeout) {
     this.oracleRowLocks = null;
+    this.localLockWaitTimeout =
+        Objects.requireNonNull(localLockWaitTimeout, "localLockWaitTimeout");
   }
 
   @Autowired
@@ -31,6 +46,7 @@ public final class PermitOperationMutex {
       ObjectProvider<OracleAggregateRowLockService> oracleRowLockProvider) {
     this.oracleRowLocks =
         oracleRowLockProvider == null ? null : oracleRowLockProvider.getIfAvailable();
+    this.localLockWaitTimeout = DEFAULT_LOCAL_LOCK_WAIT_TIMEOUT;
   }
 
   public <T> T execute(Long permitNumber, Supplier<T> operation) {
@@ -190,8 +206,7 @@ public final class PermitOperationMutex {
 
     boolean acquired = false;
     try {
-      entry.lock.lock();
-      acquired = true;
+      acquired = acquireLocalLock(entry);
       NavigableSet<OperationKey> updatedHeldKeys = heldKeys.get();
       if (updatedHeldKeys == null) {
         updatedHeldKeys = new TreeSet<>();
@@ -212,6 +227,18 @@ public final class PermitOperationMutex {
       }
       releaseEntry(key, entry);
     }
+  }
+
+  private boolean acquireLocalLock(Entry entry) {
+    try {
+      if (entry.lock.tryLock(localLockWaitTimeout.toMillis(), TimeUnit.MILLISECONDS)) {
+        return true;
+      }
+    } catch (InterruptedException exception) {
+      Thread.currentThread().interrupt();
+      throw new DistributedLockBusyException(LOCAL_LOCK_BUSY_MESSAGE, exception);
+    }
+    throw new DistributedLockBusyException(LOCAL_LOCK_BUSY_MESSAGE);
   }
 
   int trackedPermitCount() {

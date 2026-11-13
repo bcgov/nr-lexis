@@ -5,9 +5,12 @@ import static java.util.concurrent.TimeUnit.SECONDS;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
+import ca.bc.gov.mof.lexis.service.coordination.DistributedLockBusyException;
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
@@ -383,6 +386,95 @@ class PermitOperationMutexTest {
 
     assertThat(result).isEqualTo("completed");
     assertThat(mutex.trackedPermitCount()).isZero();
+  }
+
+  @Test
+  void waitingForKeyHeldByAnotherThreadShouldGiveUpAsBusyAndCleanUp() throws Exception {
+    PermitOperationMutex shortWaitMutex = new PermitOperationMutex(Duration.ofMillis(100));
+    ExecutorService executor = Executors.newFixedThreadPool(2);
+    CountDownLatch firstEntered = new CountDownLatch(1);
+    CountDownLatch releaseFirst = new CountDownLatch(1);
+    AtomicInteger secondInvocations = new AtomicInteger();
+    try {
+      Future<String> first =
+          executor.submit(
+              () ->
+                  shortWaitMutex.execute(
+                      7000123L,
+                      () -> {
+                        firstEntered.countDown();
+                        await(releaseFirst);
+                        return "first";
+                      }));
+      assertThat(firstEntered.await(2, SECONDS)).isTrue();
+
+      Future<String> second =
+          executor.submit(
+              () ->
+                  shortWaitMutex.execute(
+                      7000123L,
+                      () -> {
+                        secondInvocations.incrementAndGet();
+                        return "second";
+                      }));
+      assertThatThrownBy(() -> second.get(2, SECONDS))
+          .isInstanceOf(ExecutionException.class)
+          .cause()
+          .isInstanceOf(DistributedLockBusyException.class)
+          .hasMessage("Another LEXIS operation is updating the same record. Try again shortly.");
+      assertThat(secondInvocations).hasValue(0);
+      assertThat(shortWaitMutex.trackedPermitCount()).isEqualTo(1);
+
+      releaseFirst.countDown();
+      assertThat(first.get(2, SECONDS)).isEqualTo("first");
+      assertThat(shortWaitMutex.trackedOperationCount()).isZero();
+      assertThat(shortWaitMutex.execute(7000123L, () -> "recovered")).isEqualTo("recovered");
+      assertThat(shortWaitMutex.trackedOperationCount()).isZero();
+    } finally {
+      releaseFirst.countDown();
+      executor.shutdownNow();
+    }
+  }
+
+  @Test
+  void interruptedWaitShouldGiveUpAsBusyKeepInterruptFlagAndCleanUp() throws Exception {
+    ExecutorService executor = Executors.newFixedThreadPool(2);
+    CountDownLatch firstEntered = new CountDownLatch(1);
+    CountDownLatch releaseFirst = new CountDownLatch(1);
+    try {
+      Future<String> first =
+          executor.submit(
+              () ->
+                  mutex.execute(
+                      7000123L,
+                      () -> {
+                        firstEntered.countDown();
+                        await(releaseFirst);
+                        return "first";
+                      }));
+      assertThat(firstEntered.await(2, SECONDS)).isTrue();
+
+      Future<Boolean> secondInterruptFlagAfterBusy =
+          executor.submit(
+              () -> {
+                Thread.currentThread().interrupt();
+                try {
+                  mutex.execute(7000123L, () -> "second");
+                  return false;
+                } catch (DistributedLockBusyException exception) {
+                  return Thread.currentThread().isInterrupted();
+                }
+              });
+      assertThat(secondInterruptFlagAfterBusy.get(2, SECONDS)).isTrue();
+      assertThat(mutex.trackedPermitCount()).isEqualTo(1);
+
+      releaseFirst.countDown();
+      assertThat(first.get(2, SECONDS)).isEqualTo("first");
+      assertThat(mutex.trackedOperationCount()).isZero();
+    } finally {
+      releaseFirst.countDown();
+      executor.shutdownNow();
+    }
   }
 
   @Test

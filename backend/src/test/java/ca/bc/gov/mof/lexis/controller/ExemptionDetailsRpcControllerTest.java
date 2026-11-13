@@ -264,9 +264,12 @@ class ExemptionDetailsRpcControllerTest {
   }
 
   @Test
-  void applicationsShouldReturnPayloadWhenServiceAvailable() {
+  void applicationsShouldReturnPayloadFilteredByOneExemptionWideAccessCheck() {
     when(serviceProvider.getIfAvailable()).thenReturn(service);
     controller.setProvincialAuthorizationService(provincialAuthorizationService);
+    Predicate<Long> exemptionApplicationAccess = applicationNumber -> true;
+    when(provincialAuthorizationService.exemptionApplicationAccess(null, "EX-205"))
+        .thenReturn(exemptionApplicationAccess);
     when(sessionService.parseRolesFromPrincipal(null)).thenReturn(List.of("LEXIS_READ_ONLY"));
     when(authorizationService.canPerformAction(List.of("LEXIS_READ_ONLY"), "viewFederalApplication"))
         .thenReturn(true);
@@ -319,17 +322,12 @@ class ExemptionDetailsRpcControllerTest {
                   .isEqualTo("SAMPLE AGENT LTD");
               assertThat(application.removable()).isTrue();
             });
-    @SuppressWarnings("unchecked")
-    ArgumentCaptor<Predicate<Long>> accessCaptor =
-        ArgumentCaptor.forClass(Predicate.class);
     verify(service).getApplications(
         org.mockito.ArgumentMatchers.eq("EX-205"),
         org.mockito.ArgumentMatchers.eq(true),
-        accessCaptor.capture());
-    when(provincialAuthorizationService.canAccessApplication(null, 1000456L))
-        .thenReturn(true);
-    assertThat(accessCaptor.getValue().test(1000456L)).isTrue();
-    verify(provincialAuthorizationService).canAccessApplication(null, 1000456L);
+        org.mockito.ArgumentMatchers.same(exemptionApplicationAccess));
+    verify(provincialAuthorizationService, never())
+        .canAccessApplication(any(), org.mockito.ArgumentMatchers.<Long>any());
   }
 
   @Test
@@ -412,19 +410,16 @@ class ExemptionDetailsRpcControllerTest {
         .thenReturn(
             new ExemptionDetailsRpcService.ExemptionApplicationsResponse(
                 List.of(), false, ""));
-    when(provincialAuthorizationService.canAccessApplication(authentication, 1000456L))
-        .thenReturn(true);
+    Predicate<Long> exemptionApplicationAccess = applicationNumber -> true;
+    when(provincialAuthorizationService.exemptionApplicationAccess(authentication, "EX-205"))
+        .thenReturn(exemptionApplicationAccess);
 
     controller.getApplications("EX-205", authentication);
 
-    @SuppressWarnings("unchecked")
-    ArgumentCaptor<Predicate<Long>> accessCaptor =
-        ArgumentCaptor.forClass(Predicate.class);
     verify(service).getApplications(
         org.mockito.ArgumentMatchers.eq("EX-205"),
         org.mockito.ArgumentMatchers.eq(false),
-        accessCaptor.capture());
-    assertThat(accessCaptor.getValue().test(1000456L)).isTrue();
+        org.mockito.ArgumentMatchers.same(exemptionApplicationAccess));
     verify(authorizationService, never())
         .canPerformAction(roles, "/applicationDetails");
   }

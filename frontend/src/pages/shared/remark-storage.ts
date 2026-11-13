@@ -10,3 +10,11 @@ export const storedRemarkLengthError = (remark: string): string | null =>
   storedRemarkLength(remark) > STORED_REMARK_MAX_LENGTH
     ? `Remark must not exceed ${STORED_REMARK_MAX_LENGTH} characters once saved. Each & counts as 5 characters, and each < or > as 4.`
     : null
+
+// The database stores 7-bit ASCII only.
+const ASCII_PATTERN = /^[\u0000-\u007f]*$/
+
+export const unsupportedRemarkCharactersError = (remark: string): string | null =>
+  ASCII_PATTERN.test(remark)
+    ? null
+    : 'Remark contains unsupported characters. Use unaccented letters, numbers, spaces, or standard punctuation.'

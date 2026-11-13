@@ -2342,6 +2342,19 @@ public class OraclePermitDetailsRpcService implements PermitDetailsRpcService {
                 normalizedExemptionNumber)));
   }
 
+  @Override
+  public boolean isBlanketOicExemption(String exemptionNumber) {
+    String normalizedExemptionNumber = trimToNull(exemptionNumber);
+    if (normalizedExemptionNumber == null) {
+      throw new DataRetrievalFailureException(
+          "A valid exemption relationship is required for permit mutation.");
+    }
+    return repository
+        .findExemptionTypeCode(normalizedExemptionNumber)
+        .filter(EXEMPTION_TYPE_BLANKET_OIC::equalsIgnoreCase)
+        .isPresent();
+  }
+
   private PermitMutationRow requiredPermitMutationRow(Long permitNumber) {
     if (permitNumber == null || permitNumber < 1) {
       throw new DataRetrievalFailureException(
@@ -5429,8 +5442,7 @@ public class OraclePermitDetailsRpcService implements PermitDetailsRpcService {
       return Set.of();
     }
 
-    return normalizedCsv.lines()
-        .flatMap(line -> java.util.Arrays.stream(line.split(",")))
+    return java.util.Arrays.stream(normalizedCsv.split(","))
         .map(String::trim)
         .filter(token -> !token.isEmpty())
         .collect(java.util.stream.Collectors.toCollection(java.util.LinkedHashSet::new));

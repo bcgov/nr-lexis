@@ -5,7 +5,16 @@ import static org.assertj.core.api.Assertions.assertThat;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.Map;
+import java.util.Properties;
 import org.junit.jupiter.api.Test;
+import org.springframework.boot.context.properties.bind.Binder;
+import org.springframework.boot.context.properties.bind.PropertySourcesPlaceholdersResolver;
+import org.springframework.boot.context.properties.source.ConfigurationPropertySources;
+import org.springframework.boot.env.YamlPropertySourceLoader;
+import org.springframework.core.env.MapPropertySource;
+import org.springframework.core.env.MutablePropertySources;
+import org.springframework.core.io.FileSystemResource;
 
 class BackendRuntimeConfigTest {
 
@@ -89,6 +98,35 @@ class BackendRuntimeConfigTest {
         .contains("path: /actuator/health/liveness")
         .contains("path: /actuator/health/readiness")
         .doesNotContain("tcpSocket:");
+  }
+
+  @Test
+  void oracleConnectionsShouldBoundThePoolAndEachReplyAndFetchRowsInBatches() throws IOException {
+    MutablePropertySources sources = new MutablePropertySources();
+    sources.addFirst(new MapPropertySource("deployment", Map.of("KEYSTORE_SECRET", "test")));
+    new YamlPropertySourceLoader()
+        .load(
+            "oracle",
+            new FileSystemResource(
+                resolve(Path.of("backend", "src", "main", "resources", "application-oracle.yml"))))
+        .forEach(sources::addLast);
+    Binder binder =
+        new Binder(
+            ConfigurationPropertySources.from(sources),
+            new PropertySourcesPlaceholdersResolver(sources));
+
+    Properties driverProperties =
+        binder.bind("spring.datasource.hikari.data-source-properties", Properties.class).get();
+
+    assertThat(binder.bind("spring.datasource.hikari.maximum-pool-size", Integer.class).get())
+        .isEqualTo(6);
+    assertThat(binder.bind("spring.datasource.hikari.connection-timeout", Long.class).get())
+        .isEqualTo(10_000L);
+    assertThat(driverProperties)
+        .containsEntry("oracle.jdbc.ReadTimeout", "300000")
+        .containsEntry("defaultRowPrefetch", "100")
+        .containsEntry("javax.net.ssl.trustStoreType", "JKS")
+        .doesNotContainKey("oracle.net.CONNECT_TIMEOUT");
   }
 
   @Test

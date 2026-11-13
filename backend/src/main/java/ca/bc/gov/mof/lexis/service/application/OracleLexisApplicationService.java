@@ -117,6 +117,12 @@ public class OracleLexisApplicationService implements LexisApplicationService {
   }
 
   @Override
+  public Map<Long, ApplicationAccessContextDto> findAccessByExemptionNumber(
+      String exemptionNumber) {
+    return repository.findAccessByExemptionNumber(exemptionNumber);
+  }
+
+  @Override
   public Optional<LexisPackageLookupDto> findPackageByPackageNumber(String packageNumber) {
     String persistedPackageNumber = preservePackageNumber(packageNumber);
     if (persistedPackageNumber == null) {

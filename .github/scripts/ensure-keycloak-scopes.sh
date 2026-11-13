@@ -27,9 +27,13 @@ if [[ "${nexcol_client_id}" == "${KC_SA_CLIENT_ID}" ]]; then
   exit 1
 fi
 
+# Reads and the token request are safe to repeat; writes are sent once.
+read_retry=(--retry 3 --retry-delay 2 --retry-all-errors)
+
 request_json() {
   local response status body
   if ! response="$(curl --silent --show-error --connect-timeout 10 --max-time 60 \
+      "${read_retry[@]}" \
       -H "Authorization: Bearer ${token}" -w $'\n%{http_code}' "$1")"; then
     echo "::error::Keycloak request failed before returning an HTTP status." >&2
     return 1
@@ -131,7 +135,7 @@ fetch_all_clients() {
 echo "Keycloak realm: ${realm}"
 
 token="$(curl --silent --show-error --fail-with-body \
-  --connect-timeout 10 --max-time 60 -X POST "${token_url}" \
+  --connect-timeout 10 --max-time 60 "${read_retry[@]}" -X POST "${token_url}" \
   -d grant_type=client_credentials \
   -d client_id="${KC_SA_CLIENT_ID}" \
   --data-urlencode "client_secret=${KC_SA_CLIENT_SECRET}" \
