@@ -86,7 +86,7 @@ const REVIEW_OUTPUT_SCHEMA = {
 };
 
 const SECRET_ENV_NAMES = ["GITHUB_TOKEN", "ANTHROPIC_REVIEWER_API_KEY", "OPENAI_API_REVIEWER_KEY"];
-const SECRET_OR_ACCOUNT_ID_PATTERN = /\b(?:sk-[\w*.-]{6,}|gh[opsu]_\w{20,}|github_pat_\w{20,}|org-[a-z0-9]{20,}|proj_[a-z0-9]{20,}|[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})/gi;
+const SECRET_OR_ACCOUNT_ID_PATTERN = /\b(?:sk-[\w*.-]{6,}|gh[opsu]_\w{20,}|github_pat_\w{20,}|org-[a-z0-9]{20,}|proj_[a-z0-9]{20,}|wrkspc_[a-z0-9]{20,}|[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})/gi;
 
 const repository = process.env.GITHUB_REPOSITORY;
 const pullRequestNumber = process.env.PULL_REQUEST_NUMBER;
