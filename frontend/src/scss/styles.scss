@@ -1646,6 +1646,11 @@ $notification-types: 'error', 'info', 'success', 'warning';
   @include carbon-type.type-style('heading-03');
 }
 
+// The heading starts at the content edge inside the tiles below it.
+.provincial-workflows-page .lexis-page-header {
+  padding-inline-start: 1.5rem;
+}
+
 .admin-policy-page {
   row-gap: 1.5rem;
 }
@@ -2059,6 +2064,12 @@ $notification-types: 'error', 'info', 'success', 'warning';
 
   .application-search-table--selectable th:last-child {
     inline-size: 10%;
+  }
+
+  // The status column holds the longest status tag with the normal cell padding.
+  .application-search-table--selectable th:nth-child(3),
+  .cds--data-table:not(.application-search-table--selectable) th:nth-child(2) {
+    inline-size: 10.25rem;
   }
 }
 

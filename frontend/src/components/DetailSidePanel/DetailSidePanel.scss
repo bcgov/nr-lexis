@@ -8,6 +8,11 @@
 
 // On a short screen a calendar with shorter rows fits under a field near the top of the panel.
 @media (max-height: 41rem) {
+  // A shorter menu stays above the panel's button bar.
+  .detail-side-panel.c4p--side-panel .cds--list-box--expanded .cds--list-box__menu {
+    max-block-size: 8.75rem;
+  }
+
   :root:has(.detail-side-panel) .flatpickr-calendar {
     block-size: auto;
 
