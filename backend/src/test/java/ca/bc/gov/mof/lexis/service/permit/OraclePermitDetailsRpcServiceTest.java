@@ -9069,6 +9069,16 @@ class OraclePermitDetailsRpcServiceTest {
   }
 
   @Test
+  void addApplicationsToPermitShouldReadOnlyCommaSeparatedApplicationNumbers() {
+    PermitPersistenceRpcResponseDto response =
+        service.addApplicationsToPermit(7000123L, "1000456\n1000457", "idir\\jsmith");
+
+    assertThat(response.success()).isFalse();
+    assertThat(response.errors()).containsExactly("Select at least one application.");
+    verify(repository, never()).updateScaleDetail(any(), any());
+  }
+
+  @Test
   void addApplicationsToPermitShouldTakeTheOwnerAndAgentFromTheFirstPackageApplication() {
     permitTotalsUpdateSucceeds();
     Timestamp entryTimestamp = Timestamp.valueOf("2026-01-01 10:00:00");

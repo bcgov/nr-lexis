@@ -74,6 +74,7 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.server.ResponseStatusException;
 import org.springframework.web.servlet.mvc.method.annotation.StreamingResponseBody;
 
 @RestController
@@ -754,9 +755,12 @@ public class PermitDetailsRpcController {
   private List<Long> applicationNumbersForExemptionMutation(
       PermitDetailsRpcService service, PermitMutationRequestDto mutationRequest) {
     String exemptionNumber = requiredExemptionNumber(mutationRequest.exemptionNumber());
-    java.util.SortedSet<Long> applicationNumbers =
-        new java.util.TreeSet<>(
-            service.getApplicationNumbersForExemptionMutation(exemptionNumber));
+    java.util.SortedSet<Long> applicationNumbers = new java.util.TreeSet<>();
+    // A Blanket OIC permit takes no values from the exemption's applications, so none are locked.
+    if (!service.isBlanketOicExemption(exemptionNumber)) {
+      applicationNumbers.addAll(
+          service.getApplicationNumbersForExemptionMutation(exemptionNumber));
+    }
     Long requestedOicApplicationNumber = requestedOicApplicationNumber(mutationRequest);
     if (requestedOicApplicationNumber != null) {
       applicationNumbers.add(requestedOicApplicationNumber);
@@ -1795,16 +1799,26 @@ public class PermitDetailsRpcController {
         .toList();
   }
 
+  // The service parses the same text, so an invalid token is refused, never skipped.
   private List<Long> parseApplicationNumbers(String csv) {
     if (csv == null || csv.isBlank()) {
       return List.of();
     }
     return java.util.Arrays.stream(csv.split(","))
-        .map(RequestParameterUtils::parsePositiveLong)
-        .filter(java.util.Objects::nonNull)
+        .filter(token -> !token.isBlank())
+        .map(PermitDetailsRpcController::requireApplicationNumber)
         .distinct()
         .sorted()
         .toList();
+  }
+
+  private static Long requireApplicationNumber(String token) {
+    Long applicationNumber = RequestParameterUtils.parsePositiveLong(token);
+    if (applicationNumber == null) {
+      throw new ResponseStatusException(
+          HttpStatus.BAD_REQUEST, "Application numbers must be whole numbers separated by commas.");
+    }
+    return applicationNumber;
   }
 
   private PermitDocumentItemRpcResponseDto requirePermitDocumentAccess(

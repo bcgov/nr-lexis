@@ -25,11 +25,11 @@ export const resolveBlanketOicRegionContext = (
   defaultRegionNumbers: string[],
 ): BlanketOicRegionContext => {
   const exemptionRegionNumbers = defaultRegionNumbers.map(normalizeRegionNumber)
-  const defaultRegionNumber = exemptionRegionNumbers.find((regionNumber) =>
+  const recognizedRegionNumbers = exemptionRegionNumbers.filter((regionNumber) =>
     REGION_GROUPS.some((group) => group.includes(regionNumber)),
   )
 
-  if (!defaultRegionNumber) {
+  if (recognizedRegionNumbers.length === 0) {
     return unavailableRegionContext('No recognized region is available for this exemption.')
   }
 
@@ -42,7 +42,12 @@ export const resolveBlanketOicRegionContext = (
     .map((option) => ({ ...option, id: normalizeRegionNumber(option.id) }))
     .filter((option) => allowedRegionNumbers.includes(option.id))
 
-  if (!options.some((option) => option.id === defaultRegionNumber)) {
+  // The default is the first exemption region in the user's options.
+  const defaultRegionNumber = recognizedRegionNumbers.find((regionNumber) =>
+    options.some((option) => option.id === regionNumber),
+  )
+
+  if (!defaultRegionNumber) {
     return unavailableRegionContext(
       "The exemption's region is unavailable. Reload before creating a permit.",
     )

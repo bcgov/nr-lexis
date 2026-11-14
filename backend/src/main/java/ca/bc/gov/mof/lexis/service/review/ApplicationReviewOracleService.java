@@ -277,6 +277,17 @@ public class ApplicationReviewOracleService implements ApplicationReviewService 
           null,
           "Remark is too long to save. Shorten it and try again.");
     }
+    // The database stores 7-bit ASCII only.
+    if (remark != null && !remark.chars().allMatch(character -> character <= 0x7f)) {
+      return statusUpdateResult(
+          false,
+          false,
+          statusCode,
+          request == null ? null : trimToNull(request.clientEmailAddress()),
+          remark,
+          null,
+          "Remark contains unsupported special characters. Remove them and try again.");
+    }
 
     String clientEmail = request == null ? null : trimToNull(request.clientEmailAddress());
     Optional<String> jurisdiction = authoritativeJurisdiction(applicationNumber);

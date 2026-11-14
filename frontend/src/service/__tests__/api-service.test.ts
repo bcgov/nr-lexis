@@ -1086,6 +1086,19 @@ describe('api-service cached GET support', () => {
     expect(getMock).toHaveBeenCalledTimes(2)
   })
 
+  it('asks for a longer-lived token only when the request body is a file upload', async () => {
+    const interceptor = registeredRequestInterceptor()
+
+    await interceptor({ method: 'post', headers: {}, data: new FormData() })
+    expect(getOidcUserMock).toHaveBeenLastCalledWith({ minimumSecondsRemaining: 240 })
+
+    await interceptor({ method: 'post', headers: {}, data: { name: 'value' } })
+    expect(getOidcUserMock).toHaveBeenLastCalledWith(undefined)
+
+    await interceptor({ method: 'get', headers: {} })
+    expect(getOidcUserMock).toHaveBeenLastCalledWith(undefined)
+  })
+
   it('emits a session-expired event when SSO has ended the session', async () => {
     const listener = vi.fn()
     window.addEventListener(SESSION_EXPIRED_EVENT, listener)

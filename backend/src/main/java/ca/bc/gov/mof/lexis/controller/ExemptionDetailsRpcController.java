@@ -199,8 +199,7 @@ public class ExemptionDetailsRpcController {
         service.getApplications(
             exemptionNumber,
             authorizationService.canPerformAction(roles, "viewFederalApplication"),
-            applicationNumber ->
-                authorization().canAccessApplication(authentication, applicationNumber));
+            authorization().exemptionApplicationAccess(authentication, exemptionNumber));
 
     return ResponseEntity.ok(toApplicationsResponse(payload));
   }

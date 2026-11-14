@@ -48,6 +48,8 @@ public interface LexisApplicationService {
 
   Optional<ApplicationAccessContextDto> findAccessByApplicationNumber(long applicationNumber);
 
+  Map<Long, ApplicationAccessContextDto> findAccessByExemptionNumber(String exemptionNumber);
+
   Optional<LexisPackageLookupDto> findPackageByPackageNumber(String packageNumber);
 
 }

@@ -12,9 +12,11 @@ import java.time.LocalDate;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.function.Predicate;
+import java.util.stream.Collectors;
 import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Service;
 
@@ -250,6 +252,23 @@ public class InMemoryLexisApplicationService implements LexisApplicationService 
                     app.orgUnitNumber(),
                     app.ownerClientNumber(),
                     app.agentClientNumber()));
+  }
+
+  @Override
+  public Map<Long, ApplicationAccessContextDto> findAccessByExemptionNumber(
+      String exemptionNumber) {
+    return APPLICATIONS.stream()
+        .filter(app -> exemptionNumber != null && exemptionNumber.equals(app.exemptionNumber()))
+        .collect(
+            Collectors.toMap(
+                ApplicationRecord::applicationNumber,
+                app ->
+                    new ApplicationAccessContextDto(
+                        app.applicationNumber(),
+                        "P",
+                        app.orgUnitNumber(),
+                        app.ownerClientNumber(),
+                        app.agentClientNumber())));
   }
 
   @Override

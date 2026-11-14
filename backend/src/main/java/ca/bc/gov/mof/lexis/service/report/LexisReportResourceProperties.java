@@ -14,9 +14,9 @@ public class LexisReportResourceProperties {
 
   static final int DEFAULT_QUERY_TIMEOUT_SECONDS = 120;
   static final int DEFAULT_JDBC_FETCH_SIZE = 100;
-  // The Oracle pool has 10 connections; reserve four for non-report application traffic.
+  // Each report holds a pooled connection; the default leaves half of a 6-connection pool free.
   static final int MAX_CONCURRENT_GENERATIONS = 6;
-  static final int DEFAULT_MAX_CONCURRENT_GENERATIONS = MAX_CONCURRENT_GENERATIONS;
+  static final int DEFAULT_MAX_CONCURRENT_GENERATIONS = 3;
 
   @NotBlank
   private String artifactDirectory = "/tmp/lexis-reports";

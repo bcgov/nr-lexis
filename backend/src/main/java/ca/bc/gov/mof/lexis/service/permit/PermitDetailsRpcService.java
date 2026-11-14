@@ -123,6 +123,8 @@ public interface PermitDetailsRpcService {
 
   List<Long> getApplicationNumbersForExemptionMutation(String exemptionNumber);
 
+  boolean isBlanketOicExemption(String exemptionNumber);
+
   Optional<Long> getApplicationNumberForScaleMutation(String scaleDetailId);
 
   PermitRequestEmailDefaults getRequestPermitEmailDefaults(Long permitNumber);

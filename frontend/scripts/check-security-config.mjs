@@ -52,7 +52,7 @@ const listen = async (server) => {
 try {
   console.log(execFileSync(caddy, ['version'], { encoding: 'utf8' }).trim())
   const modules = execFileSync(caddy, ['list-modules', '--versions'], { encoding: 'utf8' })
-  assert.match(modules, /http\.handlers\.waf v2\.5\.0/)
+  assert.match(modules, /http\.handlers\.waf v2\.6\.2/)
   const backendPort = await listen(backend)
   const reserved = [createServer(), createServer(), createServer()]
   const [appPort, healthPort, adminPort] = await Promise.all(reserved.map(listen))
@@ -152,6 +152,20 @@ SecRule REQUEST_URI "@beginsWith /waf-critical-probe" "id:990001,phase:1,deny,st
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ contentHtml: '<p>Timber permit notice</p>', volume: 123.45 }),
   })
+  // Free text in form bodies may read like SQL.
+  for (const remarkBody of [
+    'Rejected -- missing summary of scale',
+    'Please delete from the list and insert into the next list',
+    'Update set of scales per client request',
+  ]) {
+    await check('/api/fixture', 200, {
+      method: 'POST',
+      body: new URLSearchParams({ remarkId: 'new', remarkBody }),
+    })
+  }
+  await check('/api/fixture?fileName=SP_scale.pdf', 200)
+  await check('/api/fixture?fileName=' + encodeURIComponent('Notes -- final.pdf'), 200)
+  await check('/api/fixture?filter=' + encodeURIComponent('1 union select 2'), 403)
   for (const payload of ['<script>alert(1)</script>', '../private-file', '\u0000']) {
     await check('/api/fixture?filter=' + encodeURIComponent(payload), 403)
   }
