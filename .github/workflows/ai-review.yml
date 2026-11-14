@@ -1,0 +1,47 @@
+name: AI PR Review
+
+# Usage: /ai-review [light|standard|deep|security] [anthropic|openai|both]
+on:
+  issue_comment:
+    types: [created]
+
+permissions: {}
+
+jobs:
+  review:
+    if: >-
+      github.event.issue.pull_request
+      && startsWith(github.event.comment.body, '/ai-review')
+      && github.event.comment.user.login == 'alexmcdermid'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      pull-requests: write
+    concurrency:
+      group: ai-review-${{ github.event.issue.number }}
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          sparse-checkout: .github/ai-review
+          persist-credentials: false
+      - name: Use Node
+        uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: .github/ai-review/package-lock.json
+      - name: Install
+        run: npm ci --prefix .github/ai-review --ignore-scripts
+      - name: Review pull request
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ANTHROPIC_REVIEWER_API_KEY: ${{ secrets.ANTHROPIC_REVIEWER_API_KEY }}
+          OPENAI_API_REVIEWER_KEY: ${{ secrets.OPENAI_API_REVIEWER_KEY }}
+          PULL_REQUEST_NUMBER: ${{ github.event.issue.number }}
+          REVIEW_COMMAND: ${{ github.event.comment.body }}
+          REVIEW_COMMAND_COMMENT_ID: ${{ github.event.comment.id }}
+          DEFAULT_REVIEW_TIER: ${{ vars.AI_REVIEW_DEFAULT_TIER || 'standard' }}
+          DEFAULT_REVIEW_PROVIDERS: ${{ vars.AI_REVIEW_DEFAULT_PROVIDERS || 'both' }}
+        run: node .github/ai-review/review-pull-request.mjs
