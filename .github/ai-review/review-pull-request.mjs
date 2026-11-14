@@ -86,7 +86,7 @@ const REVIEW_OUTPUT_SCHEMA = {
 };
 
 const SECRET_ENV_NAMES = ["GITHUB_TOKEN", "ANTHROPIC_REVIEWER_API_KEY", "OPENAI_API_REVIEWER_KEY"];
-const KEY_SHAPED_PATTERN = /\b(?:sk-[\w*.-]{6,}|gh[opsu]_\w{20,}|github_pat_\w{20,})/g;
+const SECRET_OR_ACCOUNT_ID_PATTERN = /\b(?:sk-[\w*.-]{6,}|gh[opsu]_\w{20,}|github_pat_\w{20,}|org-[a-z0-9]{20,}|proj_[a-z0-9]{20,}|[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})/gi;
 
 const repository = process.env.GITHUB_REPOSITORY;
 const pullRequestNumber = process.env.PULL_REQUEST_NUMBER;
@@ -375,7 +375,7 @@ function redactSecrets(text) {
   for (const name of SECRET_ENV_NAMES) {
     if (process.env[name]) redacted = redacted.replaceAll(process.env[name], "[redacted]");
   }
-  return redacted.replace(KEY_SHAPED_PATTERN, "[redacted key]");
+  return redacted.replace(SECRET_OR_ACCOUNT_ID_PATTERN, "[redacted]");
 }
 
 function describeError(error) {
