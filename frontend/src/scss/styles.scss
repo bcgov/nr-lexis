@@ -2065,12 +2065,6 @@ $notification-types: 'error', 'info', 'success', 'warning';
   .application-search-table--selectable th:last-child {
     inline-size: 10%;
   }
-
-  // The status column holds the longest status tag with the normal cell padding.
-  .application-search-table--selectable th:nth-child(3),
-  .cds--data-table:not(.application-search-table--selectable) th:nth-child(2) {
-    inline-size: 10.25rem;
-  }
 }
 
 // Too narrow for equal columns: columns fit their content and the table scrolls in its frame.
