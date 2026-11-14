@@ -1158,6 +1158,7 @@ const BlanketOicPermitCreateForm = ({
                   <ClientDetailsRows
                     client={{
                       label: 'Client',
+                      className: 'record-field--client',
                       edit: () => (
                         <ForestClientComboBox
                           id="boic-permit-owner-client"

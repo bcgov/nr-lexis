@@ -717,6 +717,12 @@ a.csp-side-nav__link.cds--side-nav__link--active[aria-current='page'] {
   transition: transform 400ms cubic-bezier(0.4, 0.14, 0.3, 1);
 }
 
+@media (max-width: 671px) {
+  .profile-panel {
+    min-width: 100%;
+  }
+}
+
 .profile-panel.is-open {
   transform: translateX(0);
 }
@@ -2655,6 +2661,24 @@ $notification-types: 'error', 'info', 'success', 'warning';
   }
 }
 
+.provincial-permit-search-page .legacy-search-table-frame {
+  container-type: inline-size;
+}
+
+// Too narrow for one-line headers but wide enough for two: the table fits without scrolling.
+@container (min-width: 62rem) and (max-width: 71rem) {
+  .provincial-permit-search-page .legacy-search-table-frame {
+    .cds--data-table thead th,
+    .cds--data-table thead th .cds--table-header-label {
+      white-space: normal;
+    }
+
+    .cds--data-table tbody td {
+      white-space: nowrap;
+    }
+  }
+}
+
 .legacy-search-result-count {
   margin: 0;
   color: var(--csp-text-primary);
@@ -3049,7 +3073,7 @@ $notification-types: 'error', 'info', 'success', 'warning';
     'IBM Plex Sans',
     -apple-system,
     sans-serif;
-  min-block-size: calc(100vh - 3rem);
+  min-block-size: calc(100vh - var(--csp-header-height) - 1rem);
   align-content: start;
   row-gap: 0;
 }
@@ -3098,7 +3122,7 @@ $notification-types: 'error', 'info', 'success', 'warning';
   padding-inline: 0;
 }
 
-.cds--content.app-main:has(.rtm-amv-upload-page) {
+.cds--content.app-main:has(.rtm-amv-upload-page, .application-upload-page) {
   padding-block-end: 0;
 }
 
@@ -5487,6 +5511,12 @@ $notification-types: 'error', 'info', 'success', 'warning';
   min-inline-size: 48rem;
 }
 
+// Short values (dates, numbers with status) stay on one line so rows keep one height.
+.provincial-summary-section td,
+.gbms-invoice-table td {
+  white-space: nowrap;
+}
+
 // Every table pages by 10, so the pager shows the count and pages without Items per page.
 .provincial-summary-section .cds--pagination__left {
   padding-inline-start: 0;
@@ -6325,8 +6355,21 @@ $notification-types: 'error', 'info', 'success', 'warning';
 }
 
 @media (max-width: 671px) {
-  .default-grid:is(.detail-page-grid, .create-page-grid) {
+  .default-grid:is(
+    .detail-page-grid,
+    .create-page-grid,
+    .provincial-summary-page,
+    .provincial-workflows-page
+  ) {
     padding-inline: 0;
+  }
+
+  :is(.provincial-summary-page, .provincial-workflows-page) .cds--tile {
+    padding-inline: 1rem;
+  }
+
+  .provincial-workflows-page .lexis-page-header {
+    padding-inline-start: 1rem;
   }
 
   .detail-page-grid

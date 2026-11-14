@@ -145,7 +145,10 @@ const NAVIGATION_SECTIONS: NavigationSection[] = [
       {
         to: '/provincial/exemption',
         label: 'Exemption search',
-        activePathPatterns: ['/provincial/exemption/:exemptionNumber'],
+        activePathPatterns: [
+          '/provincial/exemption/:exemptionNumber',
+          '/provincial/exemption/:exemptionNumber/permit/new',
+        ],
         requiredActions: ['/exemptionSearch'],
       },
       {

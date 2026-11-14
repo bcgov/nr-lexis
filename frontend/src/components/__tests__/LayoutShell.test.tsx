@@ -392,6 +392,7 @@ describe('Layout shell', () => {
   it.each([
     ['/provincial/application/321', 'Application search', '/provincial/application'],
     ['/provincial/exemption/26-8801', 'Exemption search', '/provincial/exemption'],
+    ['/provincial/exemption/26-100/permit/new', 'Exemption search', '/provincial/exemption'],
     ['/provincial/offers/434', 'Offer search', '/provincial/offers'],
     ['/provincial/permit/9020955', 'Permit search', '/provincial/permit'],
     ['/federal/application/46244', 'Application search', '/federal'],

@@ -8712,7 +8712,7 @@ const ProvincialPermitDetailsPage = () => {
                             />
                           ) : (
                             <TableFrame ariaLabel="GBMS invoice history">
-                              <Table size="md" useZebraStyles>
+                              <Table size="md" useZebraStyles className="gbms-invoice-table">
                                 <TableHead>
                                   <TableRow>
                                     <TableHeader>GBMS invoice number</TableHeader>
