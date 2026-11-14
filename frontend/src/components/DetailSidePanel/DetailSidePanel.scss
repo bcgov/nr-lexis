@@ -6,6 +6,26 @@
   scrollbar-gutter: stable;
 }
 
+// On a short screen a calendar with shorter rows fits under a field near the top of the panel.
+@media (max-height: 41rem) {
+  :root:has(.detail-side-panel) .flatpickr-calendar {
+    block-size: auto;
+
+    .flatpickr-weekdays,
+    .flatpickr-weekday,
+    .flatpickr-day {
+      block-size: 2rem;
+      line-height: 2rem;
+    }
+
+    .flatpickr-days,
+    .dayContainer {
+      block-size: auto;
+      min-block-size: 0;
+    }
+  }
+}
+
 .detail-side-panel-host {
   display: contents;
 }

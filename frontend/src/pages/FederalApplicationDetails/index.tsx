@@ -1195,7 +1195,7 @@ const FederalApplicationDetailsPage = () => {
                               />
                             ) : remarkRows.length > 0 ? (
                               <TableFrame ariaLabel="Federal application remarks">
-                                <Table size="md" useZebraStyles>
+                                <Table size="md" useZebraStyles className="federal-remarks-table">
                                   <TableHead>
                                     <TableRow>
                                       <TableHeader>Date and time</TableHeader>

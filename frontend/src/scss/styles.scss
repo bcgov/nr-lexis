@@ -7,6 +7,7 @@
   $theme: themes.$white
 );
 @use '@carbon/react/scss/type' as carbon-type;
+@use '@carbon/styles/scss/layer/layer-tokens';
 @use '@carbon/react';
 // Load IBM SidePanel styles here, after Carbon. A component-level @use recompiles Carbon's grid
 // into a lazy chunk that loads after this file and overrides the page grid padding below.
@@ -233,6 +234,12 @@ body {
 // is ready to render.
 .app-shell .cds--loading-overlay {
   z-index: 9001;
+}
+
+// Calendars and menus attached to body sit outside the themed wrapper.
+:root[data-carbon-theme='g100'] {
+  @include theme.theme(themes.$g100);
+  @include layer-tokens.emit-layer-tokens(1);
 }
 
 :root[data-carbon-theme='g100'],
@@ -519,12 +526,12 @@ button.csp-side-nav__group.cds--side-nav__submenu {
   white-space: nowrap;
 }
 
-// Carbon sizes group items at 32px; every LEXIS navigation row is 48px. The narrower end padding
-// keeps the longest group label whole after Carbon's 72px item indent.
+// Carbon sizes group items at 32px; every LEXIS navigation row is 48px. No end padding keeps the
+// longest group label whole after Carbon's 72px item indent, even in the current page's bold.
 .csp-side-nav .cds--side-nav__menu a.cds--side-nav__link {
   block-size: 48px;
   min-block-size: 48px;
-  padding-inline-end: 8px;
+  padding-inline-end: 0;
 }
 
 .csp-side-nav__link:hover,
@@ -891,9 +898,8 @@ a.csp-side-nav__link.cds--side-nav__link--active[aria-current='page'] {
     margin-inline-start 320ms cubic-bezier(0.4, 0.14, 0.3, 1);
 }
 
-// Below 576px an expanded panel would leave the page less than 320px, so it opens over the page
-// and the page keeps its rail offset.
-@media (max-width: 575px) {
+// Below 1056px an expanded panel opens over the page, and the page keeps its rail offset.
+@media (max-width: 1055px) {
   .cds--content.app-main {
     margin-left: var(--csp-side-nav-collapsed-width);
     margin-inline-start: var(--csp-side-nav-collapsed-width);
@@ -1062,6 +1068,21 @@ legend.cds--label {
 .app-shell .cds--tile,
 .app-shell .cds--table-expand__button {
   border-radius: 4px;
+}
+
+// A menu option too long for its menu wraps to a second line instead of being cut.
+.app-shell .cds--list-box__menu-item {
+  block-size: auto;
+}
+
+.app-shell .cds--list-box__menu-item__option {
+  block-size: auto;
+  min-block-size: 2.5rem;
+  white-space: normal;
+}
+
+.app-shell .cds--list-box__menu-item__option .cds--checkbox-label-text {
+  white-space: normal;
 }
 
 .app-shell .cds--data-table-header {
@@ -1602,6 +1623,23 @@ $notification-types: 'error', 'info', 'success', 'warning';
   margin-top: 4rem;
 }
 
+// Inside the app shell the page fills the viewport below the header, with no scroll past it.
+@media (min-width: 672px) {
+  .cds--content.app-main:has(.forbidden-landing) {
+    padding-block-end: 0;
+  }
+
+  .forbidden-landing,
+  .forbidden-landing .landing-grid {
+    min-height: calc(100vh - var(--csp-header-height) - 1rem);
+  }
+
+  .forbidden-landing .landing-img-col {
+    height: calc(100vh - var(--csp-header-height) - 1rem);
+    min-height: 0;
+  }
+}
+
 .dashboard-title {
   margin-block: 0 1rem;
   @include carbon-type.type-style('heading-03');
@@ -1803,6 +1841,13 @@ $notification-types: 'error', 'info', 'success', 'warning';
   min-inline-size: 0;
 }
 
+// A from date that would end a row starts the next one, so its to date stays beside it.
+@media (min-width: 1057px) {
+  .report-parameter-grid > :nth-child(3n):has(input[id$='fromdate' i]) {
+    grid-column-start: 1;
+  }
+}
+
 @media (max-width: 1056px) {
   .report-parameter-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -1887,6 +1932,11 @@ $notification-types: 'error', 'info', 'success', 'warning';
   font-size: 0.875rem;
   line-height: 1.125rem;
   letter-spacing: 0.01rem;
+}
+
+// Dropdown labels sit on the same line as text field labels.
+.provincial-review-filters-panel .cds--list-box__wrapper > .cds--label {
+  display: block;
 }
 
 .provincial-application-search-filters
@@ -1977,6 +2027,8 @@ $notification-types: 'error', 'info', 'success', 'warning';
 }
 
 .provincial-application-search-page .legacy-search-table-frame {
+  container-type: inline-size;
+
   .cds--data-table {
     inline-size: 100%;
     min-inline-size: 0;
@@ -2006,6 +2058,26 @@ $notification-types: 'error', 'info', 'success', 'warning';
 
   .application-search-table--selectable th:last-child {
     inline-size: 10%;
+  }
+}
+
+// Too narrow for equal columns: columns fit their content and the table scrolls in its frame.
+@container (max-width: 68rem) {
+  .provincial-application-search-page .legacy-search-table-frame {
+    .cds--data-table {
+      min-inline-size: 50rem;
+      table-layout: auto;
+    }
+
+    .cds--data-table th,
+    .cds--data-table td,
+    .cds--data-table thead th .cds--table-header-label {
+      overflow-wrap: normal;
+    }
+
+    .cds--data-table td.legacy-search-table-date {
+      white-space: nowrap;
+    }
   }
 }
 
@@ -2480,7 +2552,11 @@ $notification-types: 'error', 'info', 'success', 'warning';
     white-space: normal;
   }
 
-  :is(.provincial-application-search-page, .provincial-exemption-search-page) {
+  :is(
+    .provincial-application-search-page,
+    .provincial-exemption-search-page,
+    .provincial-review-search-page
+  ) {
     .cds--batch-actions--active {
       position: relative;
       flex-direction: column;
@@ -2553,6 +2629,24 @@ $notification-types: 'error', 'info', 'success', 'warning';
 // Row action icons take the label's colour, including on hover and when disabled.
 .provincial-review-row-actions .cds--btn.cds--btn--ghost svg {
   fill: currentColor;
+}
+
+.provincial-review-search-page .legacy-search-table-frame {
+  container-type: inline-size;
+}
+
+// Too narrow for one-line headers: long headers wrap so the row actions stay on one line.
+@container (max-width: 71rem) {
+  .provincial-review-search-page .legacy-search-table-frame {
+    .cds--data-table thead th,
+    .cds--data-table thead th .cds--table-header-label {
+      white-space: normal;
+    }
+
+    .provincial-review-row-actions {
+      flex-wrap: nowrap;
+    }
+  }
 }
 
 .legacy-search-result-count {
@@ -2652,6 +2746,13 @@ $notification-types: 'error', 'info', 'success', 'warning';
   vertical-align: top;
 }
 
+@media (max-width: 1055px) {
+  // A 24px touch target without changing the row's layout.
+  .cds--data-table td a.cds--link {
+    padding-block: 0.15625rem;
+  }
+}
+
 .legacy-search-table-date {
   white-space: nowrap;
 }
@@ -2663,6 +2764,14 @@ $notification-types: 'error', 'info', 'success', 'warning';
   border-block-end: 1px solid var(--csp-border-subtle-01);
   color: var(--csp-text-secondary);
   font-size: 0.875rem;
+}
+
+@media (max-width: 1055px) {
+  // Stays in view while the table scrolls sideways.
+  .legacy-search-table-content > .cds--pagination {
+    position: sticky;
+    inset-inline-start: 0;
+  }
 }
 
 .legacy-search-table-frame .cds--pagination .cds--select__item-count,
@@ -3966,6 +4075,11 @@ $notification-types: 'error', 'info', 'success', 'warning';
   border: 1px dashed var(--fds-border-subtle, var(--cds-border-subtle));
   border-radius: 4px;
   cursor: pointer;
+}
+
+// The dark side panel is painted in the same grey as the subtle border.
+:root[data-carbon-theme='g100'] .detail-side-panel .admin-upload-drop-zone {
+  --cds-border-subtle: var(--cds-border-subtle-02);
 }
 
 .admin-upload-drop-zone--fspts {
@@ -5462,6 +5576,10 @@ $notification-types: 'error', 'info', 'success', 'warning';
   margin-block: 0.75rem 1rem;
 }
 
+.exemption-page-title-number {
+  white-space: nowrap;
+}
+
 // Exemption page banners sit outside a Column, so they span the grid (Figma 3456:34875).
 .provincial-exemption-detail > :is(.exemption-page-result, .detail-context-notification) {
   grid-column: 1 / -1;
@@ -5766,6 +5884,27 @@ $notification-types: 'error', 'info', 'success', 'warning';
   align-self: end;
 }
 
+.application-detail-remarks .legacy-search-actions + .lexis-table-frame {
+  margin-block-start: 2rem;
+}
+
+// Date and user keep one line; a long unbroken remark wraps inside its column.
+.federal-remarks-table {
+  td:nth-child(-n + 2) {
+    white-space: nowrap;
+  }
+
+  td:nth-child(3) {
+    overflow-wrap: anywhere;
+  }
+}
+
+@media (max-width: 1055px) {
+  .federal-remarks-table td:nth-child(3) {
+    min-inline-size: 16rem;
+  }
+}
+
 .application-items-panel {
   display: flex;
   flex-direction: column;
@@ -5947,21 +6086,6 @@ $notification-types: 'error', 'info', 'success', 'warning';
     grid-template-columns: 1fr;
   }
 
-  // The table scrolls in its frame here, so columns fit their content: headers wrap between
-  // words and status tags stay inside their cells.
-  .provincial-application-search-page .legacy-search-table-frame {
-    .cds--data-table {
-      min-inline-size: 50rem;
-      table-layout: auto;
-    }
-
-    .cds--data-table th,
-    .cds--data-table td,
-    .cds--data-table thead th .cds--table-header-label {
-      overflow-wrap: normal;
-    }
-  }
-
   .provincial-review-search-grid {
     grid-template-columns: 1fr;
   }
@@ -6011,7 +6135,7 @@ $notification-types: 'error', 'info', 'success', 'warning';
   --cds-field-hover: var(--csp-layer-hover);
   min-height: 100%;
   margin-bottom: 0;
-  padding: 1rem 1.5rem 1.5rem;
+  padding: 1rem 1rem 1.5rem;
   background-color: var(--csp-layer-01);
   border-radius: 0.5rem;
   box-shadow:
@@ -6020,7 +6144,7 @@ $notification-types: 'error', 'info', 'success', 'warning';
 }
 
 .application-detail-tab-panel .cds--tile.detail-section-card {
-  padding: 1rem 1.5rem 1.5rem;
+  padding: 1rem 1rem 1.5rem;
   background-color: var(--cds-layer-02);
   border: 1px solid #ececec;
   box-shadow: none;
@@ -6195,12 +6319,16 @@ $notification-types: 'error', 'info', 'success', 'warning';
 }
 
 @media (max-width: 671px) {
+  .default-grid:is(.detail-page-grid, .create-page-grid) {
+    padding-inline: 0;
+  }
+
   .detail-page-grid
     .application-detail-tabs-column
     > .application-detail-tab-panel.cds--tab-content {
-    inline-size: calc(100% + 5rem);
-    margin-inline: -2.5rem;
-    padding-inline: 2.5rem;
+    inline-size: calc(100% + 3rem);
+    margin-inline: -1.5rem;
+    padding-inline: 1.5rem;
   }
 
   .cds--content.app-main:has(.fullbleed-table-page) {

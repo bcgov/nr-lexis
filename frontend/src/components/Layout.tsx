@@ -83,7 +83,7 @@ const ROLE_DISPLAY_PRIORITY = [
 // INTENTIONAL_LEGACY_DIVERGENCE(RESPONSIVE_SIDE_NAVIGATION):
 // Keep an accessible collapsed icon rail at narrow widths and treat its temporary expansion
 // separately from the persisted desktop collapsed preference.
-const NARROW_NAVIGATION_MEDIA_QUERY = '(max-width: 671px)'
+const NARROW_NAVIGATION_MEDIA_QUERY = '(max-width: 1055px)'
 
 const isNarrowNavigationViewport = (): boolean =>
   typeof window !== 'undefined' &&
@@ -559,6 +559,13 @@ function Layout({ children }: LayoutProps) {
   useEffect(() => {
     writeUiPreference(UI_PREFERENCE_KEYS.sideNavCollapsed, String(isSideNavCollapsedPreference))
   }, [isSideNavCollapsedPreference])
+
+  // On a short screen the current page can load below the fold of the scrolling navigation list.
+  useEffect(() => {
+    document
+      .querySelector<HTMLElement>('#side-navigation [aria-current]')
+      ?.scrollIntoView?.({ block: 'nearest' })
+  }, [activeNavigationLink?.to])
 
   const renderNavigationLink = (link: NavigationLink, LinkIcon: CarbonIconType) => {
     const isActive = link.to === activeNavigationLink?.to

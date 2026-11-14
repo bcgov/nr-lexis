@@ -5,6 +5,15 @@
     gap: 0.5rem;
     align-items: center;
     justify-content: flex-end;
+
+    // Wide screens keep the helper on the button's row, ending beside it.
+    @media (min-width: 1584px) {
+      > .cds--form__helper-text {
+        flex: 1 1 0;
+        margin: 0;
+        text-align: end;
+      }
+    }
   }
 
   // The package selector on the left and Create package on the right, or Create package alone.
