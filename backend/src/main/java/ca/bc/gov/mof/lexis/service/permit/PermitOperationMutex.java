@@ -166,27 +166,28 @@ public final class PermitOperationMutex {
       MutationMode mutationMode,
       Supplier<T> operation) {
     Objects.requireNonNull(operation, "operation");
-    return executeInOrder(keys, exemptionNumbers, 0, mutationMode, operation);
-  }
-
-  private <T> T executeInOrder(
-      List<OperationKey> keys,
-      List<String> exemptionNumbers,
-      int index,
-      MutationMode mutationMode,
-      Supplier<T> operation) {
-    if (index >= keys.size()) {
+    // A loop, not recursion, so stack depth stays flat however many records an aggregate has.
+    List<HeldKey> acquiredKeys = new ArrayList<>(keys.size());
+    try {
+      for (OperationKey key : keys) {
+        HeldKey heldKey = acquireKey(key);
+        if (heldKey != null) {
+          acquiredKeys.add(heldKey);
+        }
+      }
       return executeWithOracleRowLocks(keys, exemptionNumbers, mutationMode, operation);
+    } finally {
+      for (int index = acquiredKeys.size() - 1; index >= 0; index--) {
+        releaseKey(acquiredKeys.get(index));
+      }
     }
-    return executeKey(
-        keys.get(index),
-        () -> executeInOrder(keys, exemptionNumbers, index + 1, mutationMode, operation));
   }
 
-  private <T> T executeKey(OperationKey key, Supplier<T> operation) {
+  /** Returns null when this thread already holds the key. */
+  private HeldKey acquireKey(OperationKey key) {
     NavigableSet<OperationKey> currentHeldKeys = heldKeys.get();
     if (currentHeldKeys != null && currentHeldKeys.contains(key)) {
-      return operation.get();
+      return null;
     }
     if (currentHeldKeys != null
         && !currentHeldKeys.isEmpty()
@@ -207,26 +208,26 @@ public final class PermitOperationMutex {
     boolean acquired = false;
     try {
       acquired = acquireLocalLock(entry);
-      NavigableSet<OperationKey> updatedHeldKeys = heldKeys.get();
-      if (updatedHeldKeys == null) {
-        updatedHeldKeys = new TreeSet<>();
-        heldKeys.set(updatedHeldKeys);
-      }
-      updatedHeldKeys.add(key);
-      try {
-        return operation.get();
-      } finally {
-        updatedHeldKeys.remove(key);
-        if (updatedHeldKeys.isEmpty()) {
-          heldKeys.remove();
-        }
-      }
     } finally {
-      if (acquired) {
-        entry.lock.unlock();
+      if (!acquired) {
+        releaseEntry(key, entry);
       }
-      releaseEntry(key, entry);
     }
+    if (currentHeldKeys == null) {
+      currentHeldKeys = new TreeSet<>();
+      heldKeys.set(currentHeldKeys);
+    }
+    currentHeldKeys.add(key);
+    return new HeldKey(key, entry, currentHeldKeys);
+  }
+
+  private void releaseKey(HeldKey heldKey) {
+    heldKey.heldKeySet().remove(heldKey.key());
+    if (heldKey.heldKeySet().isEmpty()) {
+      heldKeys.remove();
+    }
+    heldKey.entry().lock.unlock();
+    releaseEntry(heldKey.key(), heldKey.entry());
   }
 
   private boolean acquireLocalLock(Entry entry) {
@@ -348,6 +349,9 @@ public final class PermitOperationMutex {
     // Accessed only while ConcurrentHashMap.compute holds this permit key.
     private int references;
   }
+
+  private record HeldKey(
+      OperationKey key, Entry entry, NavigableSet<OperationKey> heldKeySet) {}
 
   private enum OperationType {
     EXEMPTION,

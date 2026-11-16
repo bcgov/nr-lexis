@@ -15,6 +15,8 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicReference;
+import java.util.stream.LongStream;
 import org.junit.jupiter.api.Test;
 
 class PermitOperationMutexTest {
@@ -475,6 +477,34 @@ class PermitOperationMutexTest {
       releaseFirst.countDown();
       executor.shutdownNow();
     }
+  }
+
+  @Test
+  void largeAggregateShouldLockWithoutDeepeningTheStack() throws Exception {
+    List<Long> applicationNumbers = LongStream.rangeClosed(1, 5_000).boxed().toList();
+    List<Long> permitNumbers = LongStream.rangeClosed(9_000_001, 9_005_000).boxed().toList();
+    AtomicReference<Object> outcome = new AtomicReference<>();
+    Thread smallStackThread =
+        new Thread(
+            null,
+            () -> {
+              try {
+                outcome.set(
+                    mutex.executeAggregate(
+                        applicationNumbers,
+                        permitNumbers,
+                        () -> mutex.trackedOperationCount()));
+              } catch (Throwable throwable) {
+                outcome.set(throwable);
+              }
+            },
+            "small-stack",
+            256 * 1024);
+    smallStackThread.start();
+    smallStackThread.join(SECONDS.toMillis(30));
+
+    assertThat(outcome.get()).isEqualTo(10_000);
+    assertThat(mutex.trackedOperationCount()).isZero();
   }
 
   @Test
