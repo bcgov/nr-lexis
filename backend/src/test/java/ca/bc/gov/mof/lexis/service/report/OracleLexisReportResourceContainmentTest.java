@@ -127,7 +127,7 @@ class OracleLexisReportResourceContainmentTest {
   }
 
   private LexisReportResourceManager resources() {
-    return resources(6);
+    return resources(3);
   }
 
   private LexisReportResourceManager resources(int maxConcurrentGenerations) {

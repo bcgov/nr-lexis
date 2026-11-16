@@ -56,7 +56,7 @@ class LexisReportResourcePropertiesTest {
   @Test
   void shouldBindTheMaximumSafeGenerationLimit() {
     contextRunner
-        .withPropertyValues("lexis.reports.max-concurrent-generations=6")
+        .withPropertyValues("lexis.reports.max-concurrent-generations=3")
         .run(
             context -> {
               assertThat(context).hasNotFailed();
@@ -64,14 +64,14 @@ class LexisReportResourcePropertiesTest {
                       context
                           .getBean(LexisReportResourceProperties.class)
                           .getMaxConcurrentGenerations())
-                  .isEqualTo(6);
+                  .isEqualTo(3);
             });
   }
 
   @Test
   void shouldRejectGenerationLimitsAboveTheDatabaseReserve() {
     contextRunner
-        .withPropertyValues("lexis.reports.max-concurrent-generations=7")
+        .withPropertyValues("lexis.reports.max-concurrent-generations=4")
         .run(context -> assertThat(context).hasFailed());
   }
 
