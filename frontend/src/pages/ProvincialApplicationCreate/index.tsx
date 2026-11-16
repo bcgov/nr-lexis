@@ -463,7 +463,7 @@ const ApplicationCreateClientSummary = ({
             value={displayValue(formatPhoneNumber(clientData.phone))}
           />
           <RecordField label="Fax number" value={displayValue(formatPhoneNumber(clientData.fax))} />
-          <RecordField label="Email address" value={displayValue(clientData.email)} />
+          <RecordField label="Email address" value={displayValue(clientData.email)} span="wide" />
         </RecordFieldRow>
       </RecordFieldGrid>
       {clientData.notfound && (
@@ -1882,7 +1882,7 @@ const ProvincialApplicationCreatePage = () => {
                     </RecordFieldCell>
                   </RecordFieldRow>
                   <RecordFieldRow>
-                    <RecordFieldCell span="wide">
+                    <RecordFieldCell span="wide" className="record-field--client">
                       {provincialSubmitterIdentityLocked && !submitterActsAsAgent ? (
                         <TextInput
                           id="ownerClientNumber"
@@ -2032,7 +2032,7 @@ const ProvincialApplicationCreatePage = () => {
                         </RecordFieldCell>
                       </RecordFieldRow>
                       <RecordFieldRow>
-                        <RecordFieldCell span="wide">
+                        <RecordFieldCell span="wide" className="record-field--client">
                           {submitterActsAsAgent ? (
                             <TextInput
                               id="agentClientNumber"

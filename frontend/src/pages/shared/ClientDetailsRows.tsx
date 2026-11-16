@@ -7,6 +7,7 @@ type ClientField = {
   label: ReactNode
   value?: ReactNode
   edit?: ReactNode | (() => ReactNode)
+  className?: string
 }
 
 type ClientDetailsRowsProps = {

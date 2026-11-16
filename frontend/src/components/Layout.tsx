@@ -145,7 +145,10 @@ const NAVIGATION_SECTIONS: NavigationSection[] = [
       {
         to: '/provincial/exemption',
         label: 'Exemption search',
-        activePathPatterns: ['/provincial/exemption/:exemptionNumber'],
+        activePathPatterns: [
+          '/provincial/exemption/:exemptionNumber',
+          '/provincial/exemption/:exemptionNumber/permit/new',
+        ],
         requiredActions: ['/exemptionSearch'],
       },
       {
@@ -559,6 +562,13 @@ function Layout({ children }: LayoutProps) {
   useEffect(() => {
     writeUiPreference(UI_PREFERENCE_KEYS.sideNavCollapsed, String(isSideNavCollapsedPreference))
   }, [isSideNavCollapsedPreference])
+
+  // On a short screen the current page can load below the fold of the scrolling navigation list.
+  useEffect(() => {
+    document
+      .querySelector<HTMLElement>('#side-navigation [aria-current]')
+      ?.scrollIntoView?.({ block: 'nearest' })
+  }, [activeNavigationLink?.to])
 
   const renderNavigationLink = (link: NavigationLink, LinkIcon: CarbonIconType) => {
     const isActive = link.to === activeNavigationLink?.to

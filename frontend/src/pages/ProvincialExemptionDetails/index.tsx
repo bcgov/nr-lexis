@@ -2291,7 +2291,14 @@ const ProvincialExemptionDetailsPage = () => {
       </Column>
       <Column sm={4} md={8} lg={16} className="detail-page-header">
         <PageHeader
-          title={exemptionPageTitle}
+          title={
+            <>
+              Exemption{' '}
+              <span className="exemption-page-title-number">
+                {currentDetail?.exemptionNumber ?? exemptionNumber}
+              </span>
+            </>
+          }
           focusTitle={focusCreatedExemptionTitle ? !!currentDetail : 'whenFocusLost'}
           subtitle={currentDetail ? `Author: ${displayValueText(currentDetail.author)}` : undefined}
           status={
@@ -2892,7 +2899,7 @@ const ProvincialExemptionDetailsPage = () => {
                             <DetailSidePanel
                               open={isAddingApplication}
                               title="Add application"
-                              contentSelector=".application-detail-tabs-column"
+                              contentSelector=".provincial-exemption-detail"
                               initialFocusSelector="#exemptionApplicationNumberToAdd"
                               launcherRef={addApplicationButtonRef}
                               fallbackFocusSelector=".application-detail-tab-list"
@@ -3394,7 +3401,7 @@ const ProvincialExemptionDetailsPage = () => {
                           resetKey: documentUploadResetKey,
                           targetNumber: detail.exemptionNumber,
                           inputId: 'exemptionDocumentUpload',
-                          contentSelector: '.application-detail-tabs-column',
+                          contentSelector: '.provincial-exemption-detail',
                           busy: documentUploadBusy,
                           onOpen: () => setIsAddingDocuments(true),
                           onClose: onCancelDocumentEditing,
