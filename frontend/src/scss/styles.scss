@@ -492,11 +492,13 @@ body {
 
 // The list scrolls independently; Carbon auto-aligned tooltips use fixed positioning
 // so they can extend outside this clipping area without disabling vertical scrolling.
+// No scrollbar: it would take the room the longest label needs.
 .csp-side-nav .csp-side-nav__items {
   flex: 1 1 auto;
   min-block-size: 0;
   overflow-x: hidden;
   overflow-y: auto;
+  scrollbar-width: none;
 }
 
 .csp-side-nav__tooltip,
