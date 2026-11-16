@@ -35,7 +35,7 @@ const REVIEW_TIERS = {
     maxOutputTokens: 64_000,
     effort: "xhigh",
     models: {
-      anthropic: { model: "claude-opus-5-5", displayName: "Claude Opus 5.5", usdPerMillionInputTokens: 4, usdPerMillionOutputTokens: 20, supportsRefusalFallback: true },
+      anthropic: { model: "claude-fable-5-2", displayName: "Claude Fable 5.2", usdPerMillionInputTokens: 8, usdPerMillionOutputTokens: 40, supportsRefusalFallback: true },
       openai: { model: "gpt-6-astra", displayName: "GPT-6 Astra", usdPerMillionInputTokens: 10, usdPerMillionOutputTokens: 50 },
     },
   },
@@ -47,7 +47,7 @@ const REVIEW_TIERS = {
     effort: "high",
     models: {
       anthropic: { model: "claude-opus-5-5", displayName: "Claude Opus 5.5", usdPerMillionInputTokens: 4, usdPerMillionOutputTokens: 20, supportsRefusalFallback: true },
-      openai: { model: "gpt-6-sol", displayName: "GPT-6 Sol (Daybreak Blue)", usdPerMillionInputTokens: 2, usdPerMillionOutputTokens: 10, cyberAccessProgram: "daybreak_blue" },
+      openai: { model: "gpt-6.1-sol", displayName: "GPT-6.1 Sol", usdPerMillionInputTokens: 2, usdPerMillionOutputTokens: 10 },
     },
   },
 };
@@ -267,7 +267,6 @@ async function reviewWithOpenAI(tier, modelConfig, systemPrompt, prompt) {
     max_output_tokens: tier.maxOutputTokens,
     store: false,
     text: { format: { type: "json_schema", name: "pull_request_review", strict: true, schema: REVIEW_OUTPUT_SCHEMA } },
-    ...(modelConfig.cyberAccessProgram && { access_programs: { cyber: modelConfig.cyberAccessProgram } }),
   });
 
   if (response.status === "incomplete") throw new Error(`${response.model} stopped early: ${response.incomplete_details?.reason ?? "unknown reason"}.`);
