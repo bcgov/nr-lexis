@@ -345,6 +345,43 @@ class ApplicationReviewOracleServiceTest {
   }
 
   @Test
+  void updateStatusShouldRejectRemarkWithCharactersOutsideAsciiBeforeMutation() {
+    ApplicationReviewStatusUpdateResultDto response = service.updateStatus(
+        1000456L,
+        new ApplicationReviewStatusUpdateRequestDto("REJ", "We can’t accept this", null),
+        "idir\\reviewer");
+
+    assertThat(response.updated()).isFalse();
+    assertThat(response.valid()).isFalse();
+    assertThat(response.message())
+        .isEqualTo("Remark contains unsupported special characters. Remove them and try again.");
+    verifyNoInteractions(repository, emailSender, federalApplicationService);
+  }
+
+  @Test
+  void updateStatusShouldSaveAsciiRemarkWithApostrophe() {
+    when(repository.updateStatusWithRemarkFromAllowedSources(
+            1000456L, "REJ", "We can't accept this", "idir\\reviewer", List.of("NEW", "PND", "APP")))
+        .thenReturn(
+            new ApplicationStatusTransitionRow(
+                true,
+                true,
+                true,
+                "NEW",
+                new ReviewRemarkRow(
+                    99L, "We can't accept this", "idir\\reviewer", Instant.EPOCH)));
+
+    ApplicationReviewStatusUpdateResultDto result = service.updateStatus(
+        1000456L,
+        new ApplicationReviewStatusUpdateRequestDto("REJ", "We can't accept this", null),
+        "idir\\reviewer");
+
+    assertThat(result.valid()).isTrue();
+    assertThat(result.updated()).isTrue();
+    assertThat(result.remark()).isEqualTo("We can't accept this");
+  }
+
+  @Test
   void updateStatusShouldNormalizeValuesBeforeRepositoryCall() {
     ApplicationReviewStatusUpdateRequestDto request =
         new ApplicationReviewStatusUpdateRequestDto(" REJ ", " Missing docs ", " client@gov.bc.ca ");

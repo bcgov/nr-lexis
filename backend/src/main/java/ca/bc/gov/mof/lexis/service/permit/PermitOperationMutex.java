@@ -1,5 +1,7 @@
 package ca.bc.gov.mof.lexis.service.permit;
 
+import ca.bc.gov.mof.lexis.service.coordination.DistributedLockBusyException;
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
@@ -8,6 +10,7 @@ import java.util.NavigableSet;
 import java.util.Objects;
 import java.util.TreeSet;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.locks.ReentrantLock;
 import java.util.function.Supplier;
 import org.springframework.beans.factory.ObjectProvider;
@@ -18,12 +21,24 @@ import org.springframework.stereotype.Service;
 @Service
 public final class PermitOperationMutex {
 
+  // Just above the 30-second Oracle row-lock wait.
+  private static final Duration DEFAULT_LOCAL_LOCK_WAIT_TIMEOUT = Duration.ofSeconds(35);
+  private static final String LOCAL_LOCK_BUSY_MESSAGE =
+      "Another LEXIS operation is updating the same record. Try again shortly.";
+
   private final ConcurrentHashMap<OperationKey, Entry> entries = new ConcurrentHashMap<>();
   private final ThreadLocal<NavigableSet<OperationKey>> heldKeys = new ThreadLocal<>();
   private final OracleAggregateRowLockService oracleRowLocks;
+  private final Duration localLockWaitTimeout;
 
   public PermitOperationMutex() {
+    this(DEFAULT_LOCAL_LOCK_WAIT_TIMEOUT);
+  }
+
+  PermitOperationMutex(Duration localLockWaitTimeout) {
     this.oracleRowLocks = null;
+    this.localLockWaitTimeout =
+        Objects.requireNonNull(localLockWaitTimeout, "localLockWaitTimeout");
   }
 
   @Autowired
@@ -31,6 +46,7 @@ public final class PermitOperationMutex {
       ObjectProvider<OracleAggregateRowLockService> oracleRowLockProvider) {
     this.oracleRowLocks =
         oracleRowLockProvider == null ? null : oracleRowLockProvider.getIfAvailable();
+    this.localLockWaitTimeout = DEFAULT_LOCAL_LOCK_WAIT_TIMEOUT;
   }
 
   public <T> T execute(Long permitNumber, Supplier<T> operation) {
@@ -150,27 +166,28 @@ public final class PermitOperationMutex {
       MutationMode mutationMode,
       Supplier<T> operation) {
     Objects.requireNonNull(operation, "operation");
-    return executeInOrder(keys, exemptionNumbers, 0, mutationMode, operation);
-  }
-
-  private <T> T executeInOrder(
-      List<OperationKey> keys,
-      List<String> exemptionNumbers,
-      int index,
-      MutationMode mutationMode,
-      Supplier<T> operation) {
-    if (index >= keys.size()) {
+    // A loop, not recursion, so stack depth stays flat however many records an aggregate has.
+    List<HeldKey> acquiredKeys = new ArrayList<>(keys.size());
+    try {
+      for (OperationKey key : keys) {
+        HeldKey heldKey = acquireKey(key);
+        if (heldKey != null) {
+          acquiredKeys.add(heldKey);
+        }
+      }
       return executeWithOracleRowLocks(keys, exemptionNumbers, mutationMode, operation);
+    } finally {
+      for (int index = acquiredKeys.size() - 1; index >= 0; index--) {
+        releaseKey(acquiredKeys.get(index));
+      }
     }
-    return executeKey(
-        keys.get(index),
-        () -> executeInOrder(keys, exemptionNumbers, index + 1, mutationMode, operation));
   }
 
-  private <T> T executeKey(OperationKey key, Supplier<T> operation) {
+  /** Returns null when this thread already holds the key. */
+  private HeldKey acquireKey(OperationKey key) {
     NavigableSet<OperationKey> currentHeldKeys = heldKeys.get();
     if (currentHeldKeys != null && currentHeldKeys.contains(key)) {
-      return operation.get();
+      return null;
     }
     if (currentHeldKeys != null
         && !currentHeldKeys.isEmpty()
@@ -190,28 +207,39 @@ public final class PermitOperationMutex {
 
     boolean acquired = false;
     try {
-      entry.lock.lock();
-      acquired = true;
-      NavigableSet<OperationKey> updatedHeldKeys = heldKeys.get();
-      if (updatedHeldKeys == null) {
-        updatedHeldKeys = new TreeSet<>();
-        heldKeys.set(updatedHeldKeys);
-      }
-      updatedHeldKeys.add(key);
-      try {
-        return operation.get();
-      } finally {
-        updatedHeldKeys.remove(key);
-        if (updatedHeldKeys.isEmpty()) {
-          heldKeys.remove();
-        }
-      }
+      acquired = acquireLocalLock(entry);
     } finally {
-      if (acquired) {
-        entry.lock.unlock();
+      if (!acquired) {
+        releaseEntry(key, entry);
       }
-      releaseEntry(key, entry);
     }
+    if (currentHeldKeys == null) {
+      currentHeldKeys = new TreeSet<>();
+      heldKeys.set(currentHeldKeys);
+    }
+    currentHeldKeys.add(key);
+    return new HeldKey(key, entry, currentHeldKeys);
+  }
+
+  private void releaseKey(HeldKey heldKey) {
+    heldKey.heldKeySet().remove(heldKey.key());
+    if (heldKey.heldKeySet().isEmpty()) {
+      heldKeys.remove();
+    }
+    heldKey.entry().lock.unlock();
+    releaseEntry(heldKey.key(), heldKey.entry());
+  }
+
+  private boolean acquireLocalLock(Entry entry) {
+    try {
+      if (entry.lock.tryLock(localLockWaitTimeout.toMillis(), TimeUnit.MILLISECONDS)) {
+        return true;
+      }
+    } catch (InterruptedException exception) {
+      Thread.currentThread().interrupt();
+      throw new DistributedLockBusyException(LOCAL_LOCK_BUSY_MESSAGE, exception);
+    }
+    throw new DistributedLockBusyException(LOCAL_LOCK_BUSY_MESSAGE);
   }
 
   int trackedPermitCount() {
@@ -321,6 +349,9 @@ public final class PermitOperationMutex {
     // Accessed only while ConcurrentHashMap.compute holds this permit key.
     private int references;
   }
+
+  private record HeldKey(
+      OperationKey key, Entry entry, NavigableSet<OperationKey> heldKeySet) {}
 
   private enum OperationType {
     EXEMPTION,

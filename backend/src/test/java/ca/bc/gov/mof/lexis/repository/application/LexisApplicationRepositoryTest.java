@@ -232,6 +232,42 @@ class LexisApplicationRepositoryTest {
 
   @Test
   @SuppressWarnings("unchecked")
+  void exemptionAccessLookupShouldLoadEveryLinkedApplicationInOneQuery() throws Exception {
+    JdbcTemplate jdbcTemplate = mock(JdbcTemplate.class);
+    when(jdbcTemplate.query(any(String.class), any(RowMapper.class), eq("20-8562")))
+        .thenAnswer(
+            invocation -> {
+              RowMapper<ApplicationAccessContextDto> rowMapper = invocation.getArgument(1);
+              ResultSet resultSet = mock(ResultSet.class);
+              when(resultSet.getLong("APPLICATION_NUMBER")).thenReturn(900123L, 900124L);
+              when(resultSet.getString("EXPORT_JURISDICTION_CODE")).thenReturn("P", "F");
+              when(resultSet.getLong("ORG_UNIT_NO")).thenReturn(1904L, 1903L);
+              when(resultSet.getString("OWNER_CLIENT_NUMBER")).thenReturn("00077881", "00011111");
+              when(resultSet.getString("AGENT_CLIENT_NUMBER")).thenReturn("00055667", null);
+              return List.of(rowMapper.mapRow(resultSet, 0), rowMapper.mapRow(resultSet, 1));
+            });
+    LexisApplicationRepository repository = new LexisApplicationRepository(jdbcTemplate);
+
+    assertThat(repository.findAccessByExemptionNumber(" 20-8562 "))
+        .containsOnly(
+            org.assertj.core.api.Assertions.entry(
+                900123L,
+                new ApplicationAccessContextDto(900123L, "P", 1904L, "00077881", "00055667")),
+            org.assertj.core.api.Assertions.entry(
+                900124L, new ApplicationAccessContextDto(900124L, "F", 1903L, "00011111", null)));
+
+    verify(jdbcTemplate)
+        .query(
+            argThat(
+                sql ->
+                    sql.contains("FROM EXPORT_EXEMPTION_APPLICATION")
+                        && sql.contains("WHERE EXEMPTION_NUMBER = ?")),
+            any(RowMapper.class),
+            eq("20-8562"));
+  }
+
+  @Test
+  @SuppressWarnings("unchecked")
   void exemptionStatusLookupShouldUseOneNarrowQuery() throws Exception {
     JdbcTemplate jdbcTemplate = mock(JdbcTemplate.class);
     when(jdbcTemplate.query(any(String.class), any(RowMapper.class), eq("20-8562")))

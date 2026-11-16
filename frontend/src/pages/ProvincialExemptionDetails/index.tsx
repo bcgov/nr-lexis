@@ -1382,6 +1382,7 @@ const ProvincialExemptionDetailsPage = () => {
     [currentTypeCode, exemptionStatusOptions, persistedStatusCode, reactivatesCancelledOic],
   )
   const requiredExemptionOptionsMissing =
+    hasExemptionEditPermission &&
     optionsAvailability === 'available' &&
     (exemptionTypeOptions.length === 0 ||
       exemptionStatusOptions.length === 0 ||

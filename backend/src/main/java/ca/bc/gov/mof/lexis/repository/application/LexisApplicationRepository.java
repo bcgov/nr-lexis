@@ -161,6 +161,16 @@ public class LexisApplicationRepository extends OracleRepositorySupport {
       FROM EXPORT_EXEMPTION_APPLICATION
       WHERE APPLICATION_NUMBER = ?
       """;
+  private static final String FIND_APPLICATION_ACCESS_BY_EXEMPTION =
+      """
+      SELECT APPLICATION_NUMBER,
+             EXPORT_JURISDICTION_CODE,
+             ORG_UNIT_NO,
+             OWNER_CLIENT_NUMBER,
+             AGENT_CLIENT_NUMBER
+      FROM EXPORT_EXEMPTION_APPLICATION
+      WHERE EXEMPTION_NUMBER = ?
+      """;
   private static final String FIND_EXEMPTION_STATUS_BY_NUMBER =
       """
       SELECT EXPORT_EXEMPTION_STATUS_CODE
@@ -453,16 +463,38 @@ public class LexisApplicationRepository extends OracleRepositorySupport {
     return jdbcTemplate
         .query(
             FIND_APPLICATION_ACCESS,
-            (rs, rowNumber) ->
-                new ApplicationAccessContextDto(
-                    getLong(rs, "APPLICATION_NUMBER"),
-                    getString(rs, "EXPORT_JURISDICTION_CODE"),
-                    getLong(rs, "ORG_UNIT_NO"),
-                    getString(rs, "OWNER_CLIENT_NUMBER"),
-                    getString(rs, "AGENT_CLIENT_NUMBER")),
+            (rs, rowNumber) -> mapApplicationAccess(rs),
             applicationNumber)
         .stream()
         .findFirst();
+  }
+
+  public Map<Long, ApplicationAccessContextDto> findAccessByExemptionNumber(
+      String exemptionNumber) {
+    String normalized = trim(exemptionNumber);
+    if (normalized == null) {
+      return Map.of();
+    }
+    Map<Long, ApplicationAccessContextDto> accessByApplicationNumber = new HashMap<>();
+    for (ApplicationAccessContextDto access :
+        jdbcTemplate.query(
+            FIND_APPLICATION_ACCESS_BY_EXEMPTION,
+            (rs, rowNumber) -> mapApplicationAccess(rs),
+            normalized)) {
+      if (access.applicationNumber() != null) {
+        accessByApplicationNumber.put(access.applicationNumber(), access);
+      }
+    }
+    return Map.copyOf(accessByApplicationNumber);
+  }
+
+  private ApplicationAccessContextDto mapApplicationAccess(ResultSet rs) throws SQLException {
+    return new ApplicationAccessContextDto(
+        getLong(rs, "APPLICATION_NUMBER"),
+        getString(rs, "EXPORT_JURISDICTION_CODE"),
+        getLong(rs, "ORG_UNIT_NO"),
+        getString(rs, "OWNER_CLIENT_NUMBER"),
+        getString(rs, "AGENT_CLIENT_NUMBER"));
   }
 
   public Optional<LexisPackageLookupDto> findPackageByPackageNumber(String packageNumber) {

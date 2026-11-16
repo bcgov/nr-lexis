@@ -54,13 +54,16 @@ export const isSessionEnded = (error: unknown): boolean =>
 // renewal. A rotating refresh token must never be spent by competing callers.
 export const getOidcUser = async ({
   forceRefresh = false,
-}: { forceRefresh?: boolean } = {}): Promise<User | null> => {
+  minimumSecondsRemaining = 60,
+}: { forceRefresh?: boolean; minimumSecondsRemaining?: number } = {}): Promise<User | null> => {
   if (!isOidcConfigured || signedOut) return null
   const started = generation
   if (renewal) return renewal
   const user = await getUserManager().getUser()
   if (started !== generation || signedOut || !user) return null
-  if (!forceRefresh && user.expires_in !== undefined && user.expires_in > 60) return user
+  if (!forceRefresh && user.expires_in !== undefined && user.expires_in > minimumSecondsRemaining) {
+    return user
+  }
   if (renewal) return renewal
 
   const attempt = (async () => {

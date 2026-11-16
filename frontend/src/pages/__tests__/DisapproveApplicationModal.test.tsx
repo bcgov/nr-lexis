@@ -212,4 +212,43 @@ describe('DisapproveApplicationModal', () => {
       for (const input of [owner, agent]) expect(input).not.toHaveAttribute('aria-invalid')
     })
   })
+
+  it('refuses a remark with a character outside ASCII and does not save it', async () => {
+    renderModal()
+    const dialog = await screen.findByRole('dialog', { name: 'Disapprove application 1000123' })
+    await within(dialog).findByRole('textbox', { name: 'Owner email' })
+    const remark = within(dialog).getByRole('textbox', { name: 'Remark' })
+    await userEvent.type(remark, 'Applicant can\u2019t proceed')
+    await userEvent.type(
+      within(dialog).getByRole('textbox', { name: 'Owner email' }),
+      'owner@example.com',
+    )
+
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Disapprove and send email' }))
+
+    expect(
+      within(dialog).getByText(
+        'Remark contains unsupported characters. Use unaccented letters, numbers, spaces, or standard punctuation.',
+      ),
+    ).toBeInTheDocument()
+    expect(updateApplicationReviewStatus).not.toHaveBeenCalled()
+  })
+
+  it('saves a plain ASCII remark', async () => {
+    vi.mocked(updateApplicationReviewStatus).mockResolvedValue({
+      valid: true,
+      updated: true,
+    } as Awaited<ReturnType<typeof updateApplicationReviewStatus>>)
+    renderModal()
+    const dialog = await screen.findByRole('dialog', { name: 'Disapprove application 1000123' })
+    await userEvent.type(
+      await within(dialog).findByRole('textbox', { name: 'Owner email' }),
+      'owner@example.com',
+    )
+    await userEvent.type(within(dialog).getByRole('textbox', { name: 'Remark' }), "Can't proceed")
+
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Disapprove and send email' }))
+
+    await waitFor(() => expect(updateApplicationReviewStatus).toHaveBeenCalledTimes(1))
+  })
 })

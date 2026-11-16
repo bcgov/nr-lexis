@@ -22,6 +22,7 @@ import org.springframework.http.MediaType;
 import org.springframework.http.ProblemDetail;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
+import org.springframework.transaction.CannotCreateTransactionException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 
@@ -114,9 +115,10 @@ class LexisApiExceptionHandler {
         .body(problem);
   }
 
-  @ExceptionHandler(DataAccessException.class)
+  // A transaction that cannot get a pooled connection fails outside DataAccessException.
+  @ExceptionHandler({DataAccessException.class, CannotCreateTransactionException.class})
   ResponseEntity<ProblemDetail> handleDataAccessException(
-      DataAccessException exception, HttpServletRequest request) {
+      RuntimeException exception, HttpServletRequest request) {
     LOGGER.error(
         "event=lexis_database operation=request outcome=unavailable failureType={}",
         exceptionType(exception));
@@ -163,7 +165,7 @@ class LexisApiExceptionHandler {
   }
 
   private static void logDataAccessDiagnostic(
-      HttpServletRequest request, DataAccessException exception) {
+      HttpServletRequest request, RuntimeException exception) {
     if (!FAILURE_DIAGNOSTIC_LOGGER.isDebugEnabled()) {
       return;
     }

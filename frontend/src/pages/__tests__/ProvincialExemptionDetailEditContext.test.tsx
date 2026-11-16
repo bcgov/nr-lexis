@@ -1504,6 +1504,31 @@ describe('Provincial exemption edit context', () => {
     expect(vi.mocked(updateExemption)).not.toHaveBeenCalled()
   })
 
+  it('does not show the missing-options notice to a user without exemption edit permission', async () => {
+    vi.mocked(useAuth).mockReturnValue(
+      createTestAuthContext({ canPerform: (action: string) => action === 'approveExemption' }),
+    )
+    vi.mocked(fetchProvincialExemptionOptions).mockResolvedValueOnce({
+      exemptionTypes: [{ value: 'B', label: 'Blanket Order in Council' }],
+      exemptionStatuses: [{ value: 'ACT', label: 'Active' }],
+      regions: [],
+    })
+
+    render(
+      <MemoryRouter initialEntries={['/provincial/exemption/BOIC-205']}>
+        <Routes>
+          <Route
+            path="/provincial/exemption/:exemptionNumber"
+            element={<ProvincialExemptionDetailsPage />}
+          />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    expect(await screen.findByText('Blanket Order in Council')).toBeInTheDocument()
+    expect(screen.queryByText('Required exemption options not configured')).not.toBeInTheDocument()
+  })
+
   it('leaves edit mode when edit context refresh fails after a save', async () => {
     vi.mocked(fetchExemptionEditContext)
       .mockResolvedValueOnce({

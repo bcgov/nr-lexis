@@ -26,6 +26,16 @@ describe('resolveBlanketOicRegionContext', () => {
     })
   })
 
+  it('defaults to the first exemption region the user can use', () => {
+    const context = resolveBlanketOicRegionContext(
+      [{ id: '1909', text: 'Region 1909' }],
+      ['1908', '1909'],
+    )
+
+    expect(context.defaultRegionNumber).toBe('1909')
+    expect(context.errorMessage).toBe('')
+  })
+
   it('offers every group that holds one of the exemption regions and defaults to the first', () => {
     const context = resolveBlanketOicRegionContext(regionOptions, ['1903', '1909'])
 
@@ -65,6 +75,14 @@ describe('resolveBlanketOicRegionContext', () => {
       options: [],
       errorMessage: 'No recognized region is available for this exemption.',
     })
+
+    expect(resolveBlanketOicRegionContext([{ id: '1909', text: 'Region 1909' }], ['1908'])).toEqual(
+      {
+        defaultRegionNumber: '',
+        options: [],
+        errorMessage: "The exemption's region is unavailable. Reload before creating a permit.",
+      },
+    )
 
     expect(resolveBlanketOicRegionContext([{ id: '1909', text: 'Region 1909' }], ['1910'])).toEqual(
       {

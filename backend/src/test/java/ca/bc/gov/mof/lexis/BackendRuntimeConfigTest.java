@@ -5,7 +5,16 @@ import static org.assertj.core.api.Assertions.assertThat;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.Map;
+import java.util.Properties;
 import org.junit.jupiter.api.Test;
+import org.springframework.boot.context.properties.bind.Binder;
+import org.springframework.boot.context.properties.bind.PropertySourcesPlaceholdersResolver;
+import org.springframework.boot.context.properties.source.ConfigurationPropertySources;
+import org.springframework.boot.env.YamlPropertySourceLoader;
+import org.springframework.core.env.MapPropertySource;
+import org.springframework.core.env.MutablePropertySources;
+import org.springframework.core.io.FileSystemResource;
 
 class BackendRuntimeConfigTest {
 
@@ -92,6 +101,35 @@ class BackendRuntimeConfigTest {
   }
 
   @Test
+  void oracleConnectionsShouldBoundThePoolAndEachReplyAndFetchRowsInBatches() throws IOException {
+    MutablePropertySources sources = new MutablePropertySources();
+    sources.addFirst(new MapPropertySource("deployment", Map.of("KEYSTORE_SECRET", "test")));
+    new YamlPropertySourceLoader()
+        .load(
+            "oracle",
+            new FileSystemResource(
+                resolve(Path.of("backend", "src", "main", "resources", "application-oracle.yml"))))
+        .forEach(sources::addLast);
+    Binder binder =
+        new Binder(
+            ConfigurationPropertySources.from(sources),
+            new PropertySourcesPlaceholdersResolver(sources));
+
+    Properties driverProperties =
+        binder.bind("spring.datasource.hikari.data-source-properties", Properties.class).get();
+
+    assertThat(binder.bind("spring.datasource.hikari.maximum-pool-size", Integer.class).get())
+        .isEqualTo(6);
+    assertThat(binder.bind("spring.datasource.hikari.connection-timeout", Long.class).get())
+        .isEqualTo(10_000L);
+    assertThat(driverProperties)
+        .containsEntry("oracle.jdbc.ReadTimeout", "300000")
+        .containsEntry("defaultRowPrefetch", "100")
+        .containsEntry("javax.net.ssl.trustStoreType", "JKS")
+        .doesNotContainKey("oracle.net.CONNECT_TIMEOUT");
+  }
+
+  @Test
   void streamingAndPodShutdownShouldBeBounded() throws IOException {
     String applicationConfig =
         Files.readString(resolve(Path.of("backend", "src", "main", "resources", "application.yml")));
@@ -146,7 +184,7 @@ class BackendRuntimeConfigTest {
     assertThat(applicationConfig)
         .contains("query-timeout-seconds: ${LEXIS_REPORT_QUERY_TIMEOUT_SECONDS:120}")
         .contains("jdbc-fetch-size: ${LEXIS_REPORT_JDBC_FETCH_SIZE:100}")
-        .contains("max-concurrent-generations: ${LEXIS_REPORT_MAX_CONCURRENT_GENERATIONS:6}")
+        .contains("max-concurrent-generations: ${LEXIS_REPORT_MAX_CONCURRENT_GENERATIONS:3}")
         .doesNotContain("max-output-bytes", "LEXIS_REPORT_MAX_OUTPUT_BYTES");
     assertThat(deployment)
         .contains("- name: LEXIS_REPORT_QUERY_TIMEOUT_SECONDS")
@@ -164,7 +202,7 @@ class BackendRuntimeConfigTest {
                 + " ${{ vars.LEXIS_REPORT_JDBC_FETCH_SIZE || '100' }}")
         .contains(
             "LEXIS_REPORT_MAX_CONCURRENT_GENERATIONS:"
-                + " ${{ vars.LEXIS_REPORT_MAX_CONCURRENT_GENERATIONS || '6' }}")
+                + " ${{ vars.LEXIS_REPORT_MAX_CONCURRENT_GENERATIONS || '3' }}")
         .contains(
             "-p LEXIS_REPORT_QUERY_TIMEOUT_SECONDS=\"$LEXIS_REPORT_QUERY_TIMEOUT_SECONDS\"")
         .contains("-p LEXIS_REPORT_JDBC_FETCH_SIZE=\"$LEXIS_REPORT_JDBC_FETCH_SIZE\"")

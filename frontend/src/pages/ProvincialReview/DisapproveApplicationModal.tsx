@@ -18,6 +18,7 @@ import PendingIcon from '@/components/PendingIcon'
 import RequiredFieldsLegend from '@/components/RequiredFieldsLegend'
 import SearchableSelect from '@/components/SearchableSelect'
 import { isAgentApplicant } from '@/pages/shared/application-form-utils'
+import { unsupportedRemarkCharactersError } from '@/pages/shared/remark-storage'
 import { fetchApplicationClientData } from '@/service/application-client-lookup-service'
 import {
   sendApplicationReviewStatusEmail,
@@ -201,7 +202,12 @@ const DisapproveApplicationModal = ({
   const invalidEmail = fields.some((field) => !validAddress(recipients?.[field] ?? ''))
 
   const statusError = submitAttempted && !statusCode ? STATUS_REQUIRED : ''
-  const remarkError = submitAttempted && !remark.trim() ? REMARK_REQUIRED : ''
+  const remarkCharacterError = unsupportedRemarkCharactersError(remark.trim()) ?? ''
+  const remarkError = remarkCharacterError
+    ? remarkCharacterError
+    : submitAttempted && !remark.trim()
+      ? REMARK_REQUIRED
+      : ''
   const showEmailRequired = submitAttempted && sendEmail && missingEmail
   const emailRequiredId = `disapprove-email-required-${id}`
 
@@ -216,7 +222,7 @@ const DisapproveApplicationModal = ({
     setSubmitAttempted(true)
     setSaveError('')
     const emailProblem = sendEmail && (loading || loadError || missingEmail || invalidEmail)
-    if (!statusCode || !remark.trim() || emailProblem) {
+    if (!statusCode || !remark.trim() || remarkCharacterError || emailProblem) {
       if (sendEmail && invalidEmail) setEditing(true)
       requestAnimationFrame(() => {
         if (focusFirstInvalidField(modalRef.current)) return

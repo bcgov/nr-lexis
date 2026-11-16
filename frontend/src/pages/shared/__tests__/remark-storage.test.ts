@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest'
-import { storedRemarkLength, storedRemarkLengthError } from '@/pages/shared/remark-storage'
+import {
+  storedRemarkLength,
+  storedRemarkLengthError,
+  unsupportedRemarkCharactersError,
+} from '@/pages/shared/remark-storage'
 
 describe('remark storage', () => {
   it('counts &, < and > at their escaped length', () => {
@@ -17,6 +21,13 @@ describe('remark storage', () => {
     )
     expect(storedRemarkLengthError(`${'R'.repeat(247)}>`)).toBe(
       'Remark must not exceed 250 characters once saved. Each & counts as 5 characters, and each < or > as 4.',
+    )
+  })
+
+  it('refuses a remark with a character outside ASCII', () => {
+    expect(unsupportedRemarkCharactersError("can't")).toBeNull()
+    expect(unsupportedRemarkCharactersError('can\u2019t')).toBe(
+      'Remark contains unsupported characters. Use unaccented letters, numbers, spaces, or standard punctuation.',
     )
   })
 })

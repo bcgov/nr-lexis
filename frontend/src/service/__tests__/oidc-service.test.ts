@@ -127,6 +127,16 @@ describe('OIDC session service', () => {
     expect(mocks.manager.signinSilent).toHaveBeenCalledOnce()
   })
 
+  it('renews an access token that has less than the requested time left', async () => {
+    const { getOidcUser } = await import('../oidc-service')
+    await getOidcUser({ minimumSecondsRemaining: 240 })
+    expect(mocks.manager.signinSilent).not.toHaveBeenCalled()
+
+    mocks.manager.getUser.mockResolvedValue(storedUser(200))
+    await getOidcUser({ minimumSecondsRemaining: 240 })
+    expect(mocks.manager.signinSilent).toHaveBeenCalledOnce()
+  })
+
   it('rejects an unrenewable stored session without an iframe fallback', async () => {
     mocks.manager.getUser.mockResolvedValue({ ...storedUser(0), refresh_token: undefined })
     const { getOidcUser } = await import('../oidc-service')

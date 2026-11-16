@@ -33,6 +33,7 @@ import org.springframework.dao.DataAccessResourceFailureException;
 import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
+import org.springframework.transaction.CannotCreateTransactionException;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -72,6 +73,25 @@ class LexisApiExceptionHandlerTest {
             "event=lexis_database operation=request outcome=unavailable "
                 + "failureType=DataAccessResourceFailureException")
         .doesNotContain("THE.LEXIS_GROUP_5.FIND_APPLICATIONS", "ORA-01089");
+  }
+
+  @Test
+  void transactionThatCannotOpenShouldReturnServiceUnavailable(CapturedOutput output)
+      throws Exception {
+    mockMvc
+        .perform(get("/test/transaction-cannot-open"))
+        .andExpect(status().isServiceUnavailable())
+        .andExpect(jsonPath("$.title").value("Service temporarily unavailable"))
+        .andExpect(
+            jsonPath("$.detail")
+                .value("LEXIS could not complete the request. Please try again later."))
+        .andExpect(content().string(not(containsString("HikariPool"))));
+
+    assertThat(output)
+        .contains(
+            "event=lexis_database operation=request outcome=unavailable "
+                + "failureType=CannotCreateTransactionException")
+        .doesNotContain("HikariPool");
   }
 
   @Test
@@ -214,6 +234,13 @@ class LexisApiExceptionHandlerTest {
       throw new DataAccessResourceFailureException(
           "ORA-00942 while calling THE.LEXIS_GROUP_5.FIND_APPLICATIONS",
           new SQLException("ORA-00942", "42000", 942));
+    }
+
+    @GetMapping("/test/transaction-cannot-open")
+    String failToOpenTransaction() {
+      throw new CannotCreateTransactionException(
+          "Could not open JDBC Connection for transaction",
+          new SQLException("HikariPool-1 - Connection is not available, request timed out"));
     }
 
     @GetMapping("/test/task-rejected")

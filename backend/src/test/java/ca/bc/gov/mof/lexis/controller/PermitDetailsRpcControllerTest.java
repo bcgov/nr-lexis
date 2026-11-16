@@ -1524,6 +1524,89 @@ class PermitDetailsRpcControllerTest {
   }
 
   @Test
+  void blanketOicAddPermitShouldLockOnlyTheExemptionAndRequestedOicApplication() {
+    OracleAggregateRowLockService rowLocks = mock(OracleAggregateRowLockService.class);
+    PermitDetailsRpcController rowLockedController = addPermitControllerWithRowLocks(rowLocks);
+    when(request.getParameterMap())
+        .thenReturn(
+            Map.of(
+                "exemptionNumber", new String[] {"EX-700"},
+                "oicApplicationNumber", new String[] {"1000999"}));
+    when(service.isBlanketOicExemption("EX-700")).thenReturn(true);
+    lenient()
+        .when(service.getApplicationNumbersForExemptionMutation("EX-700"))
+        .thenReturn(List.of(1000456L, 1000457L, 1000999L));
+    when(service.addPermit(any(PermitMutationRequestDto.class), eq("idir\\jsmith")))
+        .thenReturn(
+            new PermitMutationRpcResponseDto(
+                true, "saved", List.of(), List.of(), 7000123L, "ACT", null,
+                false, false, null));
+
+    ResponseEntity<PermitMutationRpcResponseDto> response =
+        rowLockedController.addPermit(request, authorizedSavePermit());
+
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+    verify(rowLocks)
+        .executeRootCreateMutation(
+            eq(List.of("EX-700")),
+            eq(List.of(1000999L)),
+            eq(List.of()),
+            eq(List.of()),
+            any());
+  }
+
+  @Test
+  void ministerialAddPermitShouldLockEveryApplicationOfTheExemption() {
+    OracleAggregateRowLockService rowLocks = mock(OracleAggregateRowLockService.class);
+    PermitDetailsRpcController rowLockedController = addPermitControllerWithRowLocks(rowLocks);
+    when(request.getParameterMap())
+        .thenReturn(Map.of("exemptionNumber", new String[] {"EX-700"}));
+    when(service.isBlanketOicExemption("EX-700")).thenReturn(false);
+    when(service.getApplicationNumbersForExemptionMutation("EX-700"))
+        .thenReturn(List.of(1000456L, 1000457L));
+    when(service.addPermit(any(PermitMutationRequestDto.class), eq("idir\\jsmith")))
+        .thenReturn(
+            new PermitMutationRpcResponseDto(
+                true, "saved", List.of(), List.of(), 7000123L, "ACT", null,
+                false, false, null));
+
+    ResponseEntity<PermitMutationRpcResponseDto> response =
+        rowLockedController.addPermit(request, authorizedSavePermit());
+
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+    verify(rowLocks)
+        .executeRootCreateMutation(
+            eq(List.of("EX-700")),
+            eq(List.of(1000456L, 1000457L)),
+            eq(List.of()),
+            eq(List.of()),
+            any());
+  }
+
+  private PermitDetailsRpcController addPermitControllerWithRowLocks(
+      OracleAggregateRowLockService rowLocks) {
+    @SuppressWarnings("unchecked")
+    ObjectProvider<OracleAggregateRowLockService> rowLockProvider = mock(ObjectProvider.class);
+    when(rowLockProvider.getIfAvailable()).thenReturn(rowLocks);
+    when(rowLocks.executeRootCreateMutation(any(), any(), any(), any(), any()))
+        .thenAnswer(invocation -> invocation.<Supplier<?>>getArgument(4).get());
+    PermitOperationMutex rowLockedMutex = new PermitOperationMutex(rowLockProvider);
+    PermitDetailsRpcController rowLockedController =
+        new PermitDetailsRpcController(
+            serviceProvider,
+            sessionService,
+            authorizationService,
+            rowLockedMutex,
+            new ca.bc.gov.mof.lexis.service.permit.ApplicationPermitOperationCoordinator(
+                rowLockedMutex));
+    rowLockedController.setProvincialAuthorizationService(provincialAuthorizationService);
+    rowLockedController.setPermitService(permitService);
+    rowLockedController.setApplicationEditLockService(editLockService);
+    when(serviceProvider.getIfAvailable()).thenReturn(service);
+    return rowLockedController;
+  }
+
+  @Test
   void addPermitShouldFailClosedForMalformedRequestedOicApplication() {
     when(serviceProvider.getIfAvailable()).thenReturn(service);
     when(request.getParameterMap())
@@ -3174,6 +3257,43 @@ class PermitDetailsRpcControllerTest {
 
     assertThat(response.getStatusCode()).isEqualTo(HttpStatus.FORBIDDEN);
     verifyNoInteractions(service);
+  }
+
+  @ParameterizedTest
+  @ValueSource(
+      strings = {"1000456\n1000457", "1000456\r\n1000457", "1000456,abc", "1000456;1000457", "0"})
+  void addApplicationsToPermitShouldRefuseAListThatIsNotOnlyApplicationNumbers(
+      String selectedApplications) {
+    when(serviceProvider.getIfAvailable()).thenReturn(service);
+    TestingAuthenticationToken authentication = authorizedSavePermit();
+
+    assertThatThrownBy(
+            () -> controller.addApplicationsToPermit(7000123L, selectedApplications, authentication))
+        .isInstanceOfSatisfying(
+            org.springframework.web.server.ResponseStatusException.class,
+            exception -> assertThat(exception.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST));
+
+    verify(service, never()).addApplicationsToPermit(any(), any(), any());
+  }
+
+  @ParameterizedTest
+  @CsvSource(
+      value = {"'1000457\n1000458'|1000456", "1000457|'1000456\n1000458'", "1000457|abc"},
+      delimiter = '|')
+  void updatePermitApplicationsShouldRefuseAListThatIsNotOnlyApplicationNumbers(
+      String addedApplications, String removedApplications) {
+    when(serviceProvider.getIfAvailable()).thenReturn(service);
+    TestingAuthenticationToken authentication = authorizedSavePermit();
+
+    assertThatThrownBy(
+            () ->
+                controller.updatePermitApplications(
+                    7000123L, addedApplications, removedApplications, authentication))
+        .isInstanceOfSatisfying(
+            org.springframework.web.server.ResponseStatusException.class,
+            exception -> assertThat(exception.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST));
+
+    verify(service, never()).updatePermitApplications(any(), any(), any(), any());
   }
 
   @ParameterizedTest
