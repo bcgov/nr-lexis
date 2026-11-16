@@ -29,21 +29,23 @@ fi
 
 # Reads and the token request are safe to repeat; writes are sent once.
 read_retry=(--retry 3 --retry-delay 2 --retry-all-errors)
+# curl clears an -o file before each retry; captured stdout would keep the failed attempt's body.
+response_file="$(mktemp)"
+trap 'rm -f "${response_file}"' EXIT
 
 request_json() {
-  local response status body
-  if ! response="$(curl --silent --show-error --connect-timeout 10 --max-time 60 \
-      "${read_retry[@]}" \
-      -H "Authorization: Bearer ${token}" -w $'\n%{http_code}' "$1")"; then
+  local status body
+  if ! status="$(curl --silent --show-error --connect-timeout 10 --max-time 60 \
+      "${read_retry[@]}" -o "${response_file}" \
+      -H "Authorization: Bearer ${token}" -w '%{http_code}' "$1")"; then
     echo "::error::Keycloak request failed before returning an HTTP status." >&2
     return 1
   fi
-  status="${response##*$'\n'}"
-  body="${response%$'\n'*}"
   if [[ "${status}" != "200" ]]; then
     echo "::error::Keycloak request failed (HTTP ${status})." >&2
     return 1
   fi
+  body="$(< "${response_file}")"
   if ! jq -e -s 'length == 1' >/dev/null <<< "${body}"; then
     echo "::error::Keycloak returned invalid JSON." >&2
     return 1
@@ -134,12 +136,12 @@ fetch_all_clients() {
 
 echo "Keycloak realm: ${realm}"
 
-token="$(curl --silent --show-error --fail-with-body \
-  --connect-timeout 10 --max-time 60 "${read_retry[@]}" -X POST "${token_url}" \
+curl --silent --show-error --fail-with-body \
+  --connect-timeout 10 --max-time 60 "${read_retry[@]}" -o "${response_file}" -X POST "${token_url}" \
   -d grant_type=client_credentials \
   -d client_id="${KC_SA_CLIENT_ID}" \
-  --data-urlencode "client_secret=${KC_SA_CLIENT_SECRET}" \
-  | jq -r '.access_token // empty')"
+  --data-urlencode "client_secret=${KC_SA_CLIENT_SECRET}"
+token="$(jq -r '.access_token // empty' "${response_file}")"
 
 if [[ -z "${token}" ]]; then
   echo "::error::Could not obtain a Keycloak administration token."

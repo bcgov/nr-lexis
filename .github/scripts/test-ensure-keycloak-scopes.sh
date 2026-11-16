@@ -15,9 +15,14 @@ method=GET
 output=""
 write_format=""
 fail_with_body=0
+retry=0
 url=""
 while (( $# > 0 )); do
   case "$1" in
+    --retry)
+      retry=1
+      shift 2
+      ;;
     -X)
       method="$2"
       shift 2
@@ -51,6 +56,10 @@ while (( $# > 0 )); do
 done
 
 printf '%s\t%s\n' "${method}" "${url}" >> "${MOCK_STATE_DIR}/calls.log"
+if [[ "${retry}" == 1 && -z "${output}" ]]; then
+  echo "Retried requests must write to an -o file; curl keeps a failed attempt's body on stdout." >&2
+  exit 91
+fi
 scope_object='{"id":"scope-1","name":"lexis:federal-submission:submit","protocol":"openid-connect","attributes":{"include.in.token.scope":"true","display.on.consent.screen":"false"}}'
 scope="${scope_object}"
 case "${MOCK_SCOPE_MODE:-valid}" in
@@ -143,11 +152,12 @@ case "${method} ${url}" in
     ;;
 esac
 
-if [[ "${output}" != "/dev/null" ]]; then
+if [[ -z "${output}" ]]; then
   printf '%s' "${body}"
+else
+  printf '%s' "${body}" > "${output}"
 fi
 if [[ -n "${write_format}" ]]; then
-  if [[ "${write_format}" == *$'\n'* ]]; then printf '\n'; fi
   printf '%s' "${status}"
 fi
 if [[ "${fail_with_body}" == 1 && "${status}" -ge 400 ]]; then exit 22; fi
