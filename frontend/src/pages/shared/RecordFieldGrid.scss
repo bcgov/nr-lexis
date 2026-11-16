@@ -54,6 +54,13 @@
   margin-block: 0;
 }
 
+// A client name with its number needs the whole row below the widest layout.
+@media (max-width: 1311px) {
+  .record-field.record-field--client {
+    grid-column: 1 / -1;
+  }
+}
+
 .record-field .cds--date-picker,
 .record-field .cds--date-picker-container,
 .record-field .cds--date-picker-input__wrapper,

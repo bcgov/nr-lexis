@@ -20,19 +20,20 @@
   }
 }
 
-@media (max-width: 671px) {
-  // On a phone the page keeps the shell's gutter, the tab background still reaches the side
-  // navigation and the screen edge, and each card keeps a 16px inset, so fields are wide enough
-  // to show their values.
-  .detail-page-grid.provincial-application-detail {
-    padding-inline: 0;
+@media (max-width: 1055px) {
+  // Scrolls in its frame with readable columns, and Edit fits its column.
+  .application-remarks-table {
+    min-inline-size: 48rem;
 
-    .application-detail-tabs-column > .application-detail-tab-panel.cds--tab-content {
-      inline-size: calc(100% + 3rem);
-      margin-inline: -1.5rem;
-      padding-inline: 1.5rem;
+    thead th.application-remarks-table__actions {
+      inline-size: 7.5rem;
     }
+  }
+}
 
+@media (max-width: 671px) {
+  // Each card keeps a 16px inset, so fields are wide enough to show their values.
+  .detail-page-grid.provincial-application-detail {
     .application-detail-tab-panel .cds--tile,
     .application-items-card {
       padding-inline: 1rem;

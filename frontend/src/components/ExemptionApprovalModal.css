@@ -9,6 +9,11 @@
   gap: 1.5rem;
 }
 
+/* The body takes focus on open: keep its outline clear of the content. */
+.exemption-approval-modal .lexis-confirmation-modal__body:focus-visible {
+  outline-offset: 0.375rem;
+}
+
 .exemption-approval-modal .cds--modal-scroll-content {
   mask-image: none;
 }

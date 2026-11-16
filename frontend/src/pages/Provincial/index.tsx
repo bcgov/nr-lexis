@@ -325,7 +325,7 @@ const ProvincialPage = () => {
   )
 
   return (
-    <Grid fullWidth className="default-grid">
+    <Grid fullWidth className="default-grid provincial-workflows-page">
       <Column sm={4} md={8} lg={16}>
         <PageHeader
           title="Provincial workflows"
