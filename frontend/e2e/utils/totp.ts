@@ -33,12 +33,17 @@ export const generateTotp = (secret: string, now: number = Date.now()): string =
   return code.toString().padStart(DIGITS, '0')
 }
 
-/** Waits for the next code when the current one would expire before it is submitted. */
+let lastIssuedStep = -1
+
+/** Waits for the next code when this one was issued already or is about to expire. */
 export const freshTotp = async (secret: string, minRemainingMs = 5_000): Promise<string> => {
   const stepMs = STEP_SECONDS * 1000
+  const currentStep = () => Math.floor(Date.now() / stepMs)
   const remainingMs = stepMs - (Date.now() % stepMs)
-  if (remainingMs < minRemainingMs) {
+  // The identity provider refuses a code it has already accepted.
+  if (remainingMs < minRemainingMs || currentStep() === lastIssuedStep) {
     await new Promise((resolve) => setTimeout(resolve, remainingMs + 250))
   }
+  lastIssuedStep = currentStep()
   return generateTotp(secret)
 }

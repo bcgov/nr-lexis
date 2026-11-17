@@ -61,7 +61,8 @@ type AccessTokenDiagnostics = {
 }
 
 const baseOrigin = new URL(E2E_BASE_URL).origin
-const LOGIN_SESSION_TIMEOUT_MS = 60_000
+// Leaves room to wait out one 30-second code when a sign-in follows another closely.
+const LOGIN_SESSION_TIMEOUT_MS = 90_000
 const LOGIN_PROMPT_CLICK_TIMEOUT_MS = 5_000
 const LOGIN_BUTTON_VISIBLE_TIMEOUT_MS = 10_000
 const LOGIN_BUTTON_CLICK_TIMEOUT_MS = 15_000
