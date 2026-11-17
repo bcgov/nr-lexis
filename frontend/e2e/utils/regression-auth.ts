@@ -78,7 +78,7 @@ const TRANSIENT_REQUEST_ERROR =
 const CONNECTION_NOT_ESTABLISHED =
   /^apiRequestContext\.(?:post|put|delete): connect ECONNREFUSED\b/i
 const LOGIN_ERROR_TEXT =
-  /username or password.*incorrect|user id or password.*incorrect|user id and password.*don't match|invalid username|invalid password|authentication failed|expected verification code/i
+  /username or password.*incorrect|user id or password.*incorrect|user id and password.*don't match|invalid username|invalid password|authentication failed|expected verification code|code you entered is incorrect/i
 const SENSITIVE_URL_PARAM_PATTERN =
   /^(password|token|access_token|refresh_token|id_token|code|state|session_state|id_token_hint|email|user|username)$/i
 
@@ -729,10 +729,22 @@ const fillCredentialScreen = async (
   return true
 }
 
+const isShown = (locator: Locator): Promise<boolean> =>
+  locator
+    .first()
+    .isVisible()
+    .catch(() => false)
+
 /** Enters an authenticator code on the Microsoft second-factor screen. True once submitted. */
 const submitSecondFactorCode = async (page: Page): Promise<boolean> => {
-  const codeInput = await firstVisible(page, 'input[name="otc"], #idTxtBx_SAOTCC_OTC')
-  if (!codeInput) {
+  // Microsoft has two layouts for this screen; the newer one is found by its title.
+  const codeScreen = page.locator('body').filter({ has: page.getByText(/^Enter (the )?code$/) })
+  const codeInput = page
+    .locator('input[name="otc"], #idTxtBx_SAOTCC_OTC')
+    .or(codeScreen.getByRole('textbox'))
+    .filter({ visible: true })
+    .first()
+  if (!(await isShown(codeInput))) {
     // The account's default method may be an app notification; switch to a code.
     const codeMethod =
       (await firstVisible(page, '[data-value="PhoneAppOTP"]')) ??
@@ -746,21 +758,17 @@ const submitSecondFactorCode = async (page: Page): Promise<boolean> => {
     throw new Error('IDIR login asked for an authenticator code. Set E2E_IDIR_TOTP_SECRET.')
   }
   await codeInput.fill(await freshTotp(totpSecret))
-  await page
-    .locator('#idSubmit_SAOTCC_Continue, input[type="submit"], button[type="submit"]')
-    .first()
-    .click({ timeout: LOGIN_PROMPT_CLICK_TIMEOUT_MS })
+  const submitButton = await firstVisible(
+    page,
+    '#idSubmit_SAOTCC_Continue, input[type="submit"], button[type="submit"]',
+  )
+  if (submitButton) await submitButton.click({ timeout: LOGIN_PROMPT_CLICK_TIMEOUT_MS })
+  else await codeInput.press('Enter')
   return true
 }
 
 /** Clears "Pick an account" and "Stay signed in?", which Microsoft can show after the code. */
 const dismissPostSignInPrompt = async (page: Page, username: string): Promise<void> => {
-  const isShown = (locator: Locator) =>
-    locator
-      .first()
-      .isVisible()
-      .catch(() => false)
-
   let choice: Locator | undefined
   if (await isShown(page.getByRole('heading', { name: /pick an account/i }))) {
     const signInName = username.split('\\').pop()?.split('@')[0] ?? ''
