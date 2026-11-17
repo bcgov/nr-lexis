@@ -1,11 +1,7 @@
 // Fictional data for the user manual screenshots. Every name, number and address is invented.
 import type { LexisSessionCapabilities } from '../../src/interfaces/LexisSession'
+import type { LexisNotificationView } from '../../src/interfaces/LexisNotification'
 import type {
-  LexisNotification,
-  LexisNotificationView,
-} from '../../src/interfaces/LexisNotification'
-import type {
-  FederalApplicationDetail,
   ProvincialApplicationDetail,
   ProvincialExemptionDetail,
   ProvincialOfferDetail,
@@ -21,11 +17,7 @@ import type {
   SummaryPermit,
 } from '../../src/service/summary-service'
 
-export type ManualScenario =
-  | 'industryChooseOrganization'
-  | 'industrySubmitter'
-  | 'federalReadOnly'
-  | 'ministryAdmin'
+export type ManualScenario = 'industryChooseOrganization' | 'industrySubmitter' | 'federalReadOnly'
 
 export type ManualApiResponse = { status: number; body: unknown }
 
@@ -44,56 +36,6 @@ type ManualRoute = {
 }
 
 // Mirrors backend LexisLegacyActionCatalog and the role-actions in application.yml.
-const ADMINISTRATOR_ACTIONS = [
-  '/applicationDetails',
-  '/applicationRemarks',
-  '/applicationReport',
-  '/applicationSearch',
-  '/applicationsReview',
-  '/approvedExemptionReport',
-  '/changeApplicantType',
-  '/createExemption',
-  '/editCompletedApplications',
-  '/exemptionDetails',
-  '/exemptionReport',
-  '/exemptionSearch',
-  '/federalApplicationDetails',
-  '/federalApplicationSearch',
-  '/feeReport',
-  '/fileApplicationUpload',
-  '/fileExemptionUpload',
-  '/fileInvoiceUpload',
-  '/filePermitUpload',
-  '/lexisAgentAdmin',
-  '/lexisFILAdmin',
-  '/lexisPolicyAdmin',
-  '/offerDetails',
-  '/offerReport',
-  '/offersSearch',
-  '/permitDetails',
-  '/permitLedgerReport',
-  '/permitReport',
-  '/permitSearch',
-  '/permitsReview',
-  '/speciesGradeReport',
-  '/summary',
-  '/teacReport',
-  '/tenureReport',
-  '/transportReport',
-  'approveExemption',
-  'createApplication',
-  'createOffer',
-  'createPermit',
-  'manageFederalApplication',
-  'mofrListing',
-  'saveExemption',
-  'savePermit',
-  'searchClients',
-  'uploadApplicationSubmission',
-  'viewFederalApplication',
-  'viewNotifications',
-]
-
 const PROVINCIAL_SUBMITTER_ACTIONS = [
   'viewNotifications',
   'searchClients',
@@ -136,18 +78,6 @@ const capabilitiesFor = (scenario: ManualScenario): LexisSessionCapabilities => 
     legacyPath: null,
     actionRegions: {},
     accessDeniedReason: null,
-  }
-  if (scenario === 'ministryAdmin') {
-    return {
-      ...base,
-      principal: 'IDIR\\JSAMPLE',
-      roles: ['ADMIN'],
-      grantedActions: ADMINISTRATOR_ACTIONS,
-      orgUnitNo: '1909',
-      forestClientNumber: null,
-      availableForestClientNumbers: [],
-      forestClientSelectionRequired: false,
-    }
   }
   if (scenario === 'federalReadOnly') {
     return {
@@ -324,11 +254,10 @@ export const MAIN_APPLICATION = 48101
 export const NEW_APPLICATION = 48102
 export const ADVERTISED_APPLICATION = 48104
 export const MAIN_EXEMPTION = '26-9001'
-export const NEW_EXEMPTION = '26-9002'
 export const BLANKET_OIC_EXEMPTION = '26-9005'
 export const MAIN_OFFER = 81001
 export const MAIN_PERMIT = 9030101
-export const COMPLETED_PERMIT = 9030102
+const COMPLETED_PERMIT = 9030102
 
 const summaryPage = <T>(results: T[]): SummaryPage<T> => ({
   results,
@@ -498,14 +427,6 @@ const ACTIVE_NOTIFICATIONS: LexisNotificationView[] = [
     updateTimestamp: '2026-11-16T08:30:00',
   },
 ]
-
-const ADMIN_NOTIFICATIONS: LexisNotification[] = ACTIVE_NOTIFICATIONS.map((notification) => ({
-  ...notification,
-  createUser: 'IDIR\\JSAMPLE',
-  createTimestamp: notification.updateTimestamp,
-  updateUserId: 'IDIR\\JSAMPLE',
-  audienceRoles: [],
-}))
 
 // ---------------------------------------------------------------------------
 // Application records
@@ -692,23 +613,6 @@ const packageFor = (packageNumber: string | null) => {
 const endUseDescription = (code: string) =>
   END_USES.find((endUse) => endUse.code === code)?.description ?? code
 
-const REVIEW_QUEUE = [
-  [NEW_APPLICATION, 1320, 'New', 'RSC', '2026-12-02'],
-  [48108, 2475.5, 'New', 'RWC', '2026-12-02'],
-  [48109, 860, 'New', 'RSC', '2026-12-02'],
-  [48107, 980, 'Pending', 'RWC', '2026-12-16'],
-  [48110, 1510, 'New', 'RSC', '2026-12-16'],
-  [48111, 3120, 'New', 'RWC', '2026-12-16'],
-].map(([applicationNumber, volume, status, region, listingDate]) => ({
-  applicationNumber,
-  volume,
-  speciesEndUse: 'HE/BA SAWLOG',
-  listingDate,
-  status,
-  region,
-  showInfoIcon: false,
-}))
-
 export const UPLOAD_FILE_NAME = 'example-forestry-boom-08.xml'
 
 const UPLOAD_VALIDATION = {
@@ -746,8 +650,7 @@ const UPLOAD_VALIDATION = {
 // ---------------------------------------------------------------------------
 // Offers
 
-const offerDetail = (scenario: ManualScenario): ProvincialOfferDetail => {
-  const staff = scenario === 'ministryAdmin'
+const offerDetail = (): ProvincialOfferDetail => {
   return {
     offerNumber: MAIN_OFFER,
     applicationNumber: ADVERTISED_APPLICATION,
@@ -775,8 +678,8 @@ const offerDetail = (scenario: ManualScenario): ProvincialOfferDetail => {
     offerVolume: 850,
     region: 'South Coast',
     author: 'BCEID\\JSAMPLE',
-    canEditScheduleDates: staff,
-    canEditOfferRemarks: staff,
+    canEditScheduleDates: false,
+    canEditOfferRemarks: false,
     canEditOfferDetails: true,
     canEditWithdrawFields: true,
     locked: false,
@@ -881,31 +784,6 @@ const EXEMPTIONS: Record<string, ManualExemption> = {
       },
     ],
   },
-  [NEW_EXEMPTION]: {
-    detail: exemptionDetail({
-      exemptionNumber: NEW_EXEMPTION,
-      exemptionStatusCode: 'NEW',
-      exemptionStatusDescription: 'New',
-      ownerClientNumber: SECOND_CLIENT,
-      applicationNumber: 48112,
-      applicationStatus: 'Exempted',
-      expiryDate: '2027-05-24',
-      approvedVolume: 940,
-      usedVolume: 0,
-      remainingVolume: 940,
-    }),
-    regions: ['1910'],
-    applications: [
-      {
-        applicationNumber: 48112,
-        requestedVolume: '940.0',
-        scaleVolume: '0.0',
-        ownerClientNumber: SECOND_CLIENT,
-        ownerContactName: 'Pat Example',
-      },
-    ],
-    permits: [],
-  },
   [BLANKET_OIC_EXEMPTION]: {
     detail: exemptionDetail({
       exemptionNumber: BLANKET_OIC_EXEMPTION,
@@ -969,7 +847,7 @@ type ManualPermit = {
       volume: string
     }[]
   }[]
-  fees: { amv: string; ewb: string; fil: string; mf: string; fee: string }[]
+  fees: { amv: string; fil: string; mf: string; fee: string }[]
   gbms: Record<string, string>[]
 }
 
@@ -1045,67 +923,10 @@ const PERMITS: Record<string, ManualPermit> = {
       },
     ],
     fees: [
-      { amv: '$64.00', ewb: '$23,116.80', fil: '10%', mf: '6%', fee: '2450.29' },
-      { amv: '$58.00', ewb: '$14,401.40', fil: '10%', mf: '6%', fee: '1526.55' },
+      { amv: '$64.00', fil: '10%', mf: '6%', fee: '2450.29' },
+      { amv: '$58.00', fil: '10%', mf: '6%', fee: '1526.55' },
     ],
     gbms: [],
-  },
-  [COMPLETED_PERMIT]: {
-    detail: permitDetail({
-      permitNumber: COMPLETED_PERMIT,
-      permitStatusCode: 'COM',
-      permitStatusDescription: 'Complete',
-      destinationCompanyName: 'Example Pacific Trading Co.',
-      transportName: 'MV Sample Voyager',
-      applicationDate: '2026-11-02',
-      receivedDate: '2026-11-02',
-      issueDate: '2026-11-10',
-      estimatedShippingDate: '2026-11-19',
-      permitVolume: 438,
-      numberOfPieces: 297,
-      invoiceNumber: 'LX26-00418',
-    }),
-    packages: [
-      {
-        packageNumber: 'EX-BOOM-01',
-        volume: '438.0',
-        length: '11.0',
-        diameter: '16.5',
-        scales: [
-          {
-            id: '7201',
-            timberMark: 'EM0001',
-            species: 'HE',
-            grade: 'H',
-            pieces: 181,
-            volume: '262.80',
-          },
-          {
-            id: '7202',
-            timberMark: 'EM0002',
-            species: 'CE',
-            grade: 'J',
-            pieces: 116,
-            volume: '175.20',
-          },
-        ],
-      },
-    ],
-    fees: [
-      { amv: '$64.00', ewb: '$16,819.20', fil: '10%', mf: '6%', fee: '1782.84' },
-      { amv: '$71.00', ewb: '$12,439.20', fil: '10%', mf: '6%', fee: '1318.56' },
-    ],
-    gbms: [
-      {
-        gbmsInvoiceNumber: '26004187',
-        cancelledByInvoice: '',
-        replacedByInvoice: '',
-        invoiceAmount: '3101.40',
-        printedDate: '2026-11-11',
-        entryDate: '2026-11-10',
-        updateDate: '2026-11-11',
-      },
-    ],
   },
 }
 
@@ -1141,7 +962,7 @@ const permitCoreTabs = (permit: ManualPermit) => ({
   })),
 })
 
-const permitFees = (permit: ManualPermit, scenario: ManualScenario) => {
+const permitFees = (permit: ManualPermit) => {
   let feeIndex = 0
   return {
     packageList: permit.packages.map((item) => ({
@@ -1156,9 +977,9 @@ const permitFees = (permit: ManualPermit, scenario: ManualScenario) => {
         return {
           ...scale,
           packageNumber: item.packageNumber,
-          ministryUser: scenario === 'ministryAdmin',
+          ministryUser: false,
           amv: fee?.amv ?? '',
-          ewb: scenario === 'ministryAdmin' ? (fee?.ewb ?? '') : '',
+          ewb: '',
           fil: fee?.fil ?? '',
           mf: fee?.mf ?? '',
           fee: fee?.fee ?? '',
@@ -1199,18 +1020,8 @@ const PERMIT_SEARCH_OPTIONS = { permitStatuses: PERMIT_STATUSES, regions: REGION
 // ---------------------------------------------------------------------------
 // Federal applications
 
-export const FEDERAL_APPLICATION = 47215
-
 const FEDERAL_SEARCH_ROWS = [
-  [
-    FEDERAL_APPLICATION,
-    'NX-26-0412',
-    'Approved',
-    OWN_CLIENT,
-    'Surplus',
-    '2026-11-03',
-    '2026-11-18',
-  ],
+  [47215, 'NX-26-0412', 'Approved', OWN_CLIENT, 'Surplus', '2026-11-03', '2026-11-18'],
   [47216, 'NX-26-0419', 'New', SECOND_CLIENT, 'Surplus', '2026-11-12', '2026-12-02'],
   [47211, 'NX-26-0377', 'Rejected', THIRD_CLIENT, 'Economic', '2026-10-14', '2026-10-21'],
   [47208, 'NX-26-0351', 'Approved', OWN_CLIENT, 'Utilization', '2026-10-01', '2026-10-07'],
@@ -1235,152 +1046,6 @@ const FEDERAL_SEARCH_ROWS = [
   }),
 )
 
-const FEDERAL_PACKAGE_SCALES: Record<string, ManualApplication['packages'][string]['scales']> = {
-  'NX-BOOM-12': [
-    {
-      id: '7401',
-      timberMark: 'EM0003',
-      species: 'HE',
-      grade: 'H',
-      pieces: 266,
-      volume: '431.60',
-      permitted: false,
-    },
-    {
-      id: '7402',
-      timberMark: 'EM0003',
-      species: 'CE',
-      grade: 'I',
-      pieces: 172,
-      volume: '288.40',
-      permitted: false,
-    },
-  ],
-}
-
-const federalApplicationDetail = (): FederalApplicationDetail => {
-  const owner = CLIENTS[OWN_CLIENT]
-  return {
-    applicationNumber: FEDERAL_APPLICATION,
-    federalApplicationNumber: 'NX-26-0412',
-    statusCode: 'APP',
-    statusDescription: 'Approved',
-    ownerClientNumber: OWN_CLIENT,
-    ownerClientLocationCode: '00',
-    ownerApplicantType: 'O',
-    ownerContactName: 'Jordan Sample',
-    ownerCompanyName: owner.companyName,
-    ownerClientContext: {
-      address: owner.address,
-      city: owner.city,
-      province: 'BC',
-      postalCode: owner.postalCode,
-      country: 'Canada',
-      phone: owner.phone,
-      fax: null,
-      email: owner.email,
-    },
-    agentClientNumber: null,
-    agentClientLocationCode: null,
-    agentApplicantType: null,
-    agentContactName: null,
-    agentCompanyName: null,
-    agentClientContext: null,
-    exemptionNumber: null,
-    exemptionType: null,
-    exemptionReason: 'Surplus',
-    region: 'South Coast',
-    orgUnitNumber: 1909,
-    productType: 'Harvested Timber',
-    applicationDate: '2026-11-03',
-    receivedDate: '2026-11-03',
-    listingDate: '2026-11-18',
-    termDays: 180,
-    logLocation: 'Log sort at Example Arm',
-    ageClass: 'Second Growth',
-    averageLogVolume: 1.6,
-    applicationVolume: 720,
-    endUse: 'HE/CE SAWLOG',
-    author: 'SERVICE\\NEXCOL',
-    readOnly: false,
-    locked: false,
-    lockHeldByCurrentUser: false,
-    lockedBy: null,
-    lockMessage: null,
-    packages: ['NX-BOOM-12'],
-    remarks: [],
-    offers: [],
-    federalPermit: null,
-  }
-}
-
-// ---------------------------------------------------------------------------
-// Reports and administration
-
-const all = option('', 'All')
-
-const REPORT_OPTIONS = {
-  currentSchedules: CURRENT_SCHEDULES,
-  defaultRegion: '',
-  regions: REGIONS,
-  reportJurisdictions: [all, option('P', 'Provincial'), option('F', 'Federal')],
-  biweeklyJurisdictions: [all, option('P', 'Provincial'), option('F', 'Federal')],
-  teacJurisdictions: [option('P', 'Provincial'), option('F', 'Federal')],
-  exemptionTypes: [all, ...EXEMPTION_TYPES],
-  tenureExemptionTypes: [all, ...EXEMPTION_TYPES],
-  exemptionReasons: [all, ...EXEMPTION_REASONS],
-  exemptionStatuses: [all, ...EXEMPTION_STATUSES],
-  growthTypes: [all, ...GROWTH_TYPES],
-  permitStatuses: [all, ...PERMIT_STATUSES],
-  destinationCountries: [all, ...SHIPPING_REFERENCE_OPTIONS.countries],
-  allDestinationCountries: SHIPPING_REFERENCE_OPTIONS.countries,
-  portsOfExport: [all, ...SHIPPING_REFERENCE_OPTIONS.ports],
-}
-
-const feePolicy = (id: string, effectiveDate: string, orgUnitNo: string, percentage: string) => {
-  const region = REGIONS.find((item) => item.code === orgUnitNo)
-  return {
-    id,
-    effectiveDate,
-    orgUnitNo,
-    orgUnitCode: orgUnitNo === '1909' ? 'RSC' : 'RWC',
-    orgUnitName: `${region?.name ?? ''} Natural Resource Region`,
-    policyPercentage: percentage,
-    entryUserId: 'IDIR\\JSAMPLE',
-    entryTimestamp: '2026-03-02',
-    updateUserId: 'IDIR\\JSAMPLE',
-    updateTimestamp: '2026-03-02',
-  }
-}
-
-const FEE_POLICIES = [
-  feePolicy('5', '2027-04-01', '1909', '8'),
-  feePolicy('4', '2026-04-01', '1910', '6'),
-  feePolicy('3', '2026-04-01', '1909', '6'),
-  feePolicy('2', '2025-04-01', '1910', '4'),
-  feePolicy('1', '2025-04-01', '1909', '4'),
-]
-
-const AMV_SPECIES = ['BA', 'HE', 'CE', 'CY', 'FI', 'SP', 'WH']
-const AMV_GRADES = ['B', 'C', 'D', 'F', 'H', 'I', 'J', 'U', 'X', 'Y']
-
-const amvValue = (species: number, grade: number, bump: number) =>
-  Math.round((180 - grade * 14 - species * 6 + bump) * 100) / 100
-
-const amvRows = (effectiveDate: string, bump: number) =>
-  AMV_SPECIES.flatMap((species, speciesIndex) =>
-    AMV_GRADES.map((grade, gradeIndex) => ({
-      species,
-      grade,
-      growthIndicator: 'S',
-      retrievalDate: effectiveDate,
-      updateDate: effectiveDate,
-      currentValue: Math.max(amvValue(speciesIndex, gradeIndex, bump), 12),
-      newValue: null,
-      returnCode: null,
-    })),
-  )
-
 // ---------------------------------------------------------------------------
 // Routes
 
@@ -1396,20 +1061,6 @@ const ROUTES: ManualRoute[] = [
     respond: () => ({ defaultRegion: null }),
   },
   { method: 'GET', path: /^\/lexis\/notifications$/, respond: () => ACTIVE_NOTIFICATIONS },
-  { method: 'GET', path: /^\/lexis\/admin\/notifications$/, respond: () => ADMIN_NOTIFICATIONS },
-  {
-    method: 'GET',
-    path: /^\/lexis\/admin\/notifications\/audience-roles$/,
-    respond: () => ({
-      roles: [
-        'ADMIN',
-        'READ_ONLY',
-        'APPLICATION_APPROVER',
-        'EXEMPTION_APPROVER',
-        'PROVINCIAL_SUBMITTER',
-      ],
-    }),
-  },
   {
     method: 'GET',
     path: /^\/lexis\/rpc\/application-details\/client-data$/,
@@ -1545,32 +1196,10 @@ const ROUTES: ManualRoute[] = [
     path: /^\/lexis\/rpc\/application-details\/package-scales$/,
     respond: (r) => {
       const packageNumber = r.query.get('packageNumber') ?? ''
-      const scales =
-        packageFor(packageNumber)?.extra.scales ?? FEDERAL_PACKAGE_SCALES[packageNumber]
+      const scales = packageFor(packageNumber)?.extra.scales
       // Every sample record is coast scale.
       return scales?.map((scale) => ({ ...scale, cascadeSplitCode: 'W' }))
     },
-  },
-  {
-    method: 'GET',
-    path: /^\/lexis\/application-reviews\/search\/options$/,
-    respond: () => ({
-      productTypes: PRODUCT_TYPES,
-      regions: REGIONS,
-      reviewStatuses: APPLICATION_STATUSES.filter((status) =>
-        ['APP', 'REJ', 'WDN'].includes(status.code),
-      ),
-    }),
-  },
-  {
-    method: 'GET',
-    path: /^\/lexis\/application-reviews\/search$/,
-    respond: () => ({ results: REVIEW_QUEUE, total: REVIEW_QUEUE.length, page: 0, size: 100 }),
-  },
-  {
-    method: 'GET',
-    path: /^\/lexis\/application-reviews\/search\/count$/,
-    respond: () => ({ total: REVIEW_QUEUE.length }),
   },
   {
     method: 'POST',
@@ -1586,7 +1215,7 @@ const ROUTES: ManualRoute[] = [
   {
     method: 'GET',
     path: /^\/lexis\/purchase-offers\/(\d+)$/,
-    respond: (r, m) => (Number(m[1]) === MAIN_OFFER ? offerDetail(r.scenario) : undefined),
+    respond: (_r, m) => (Number(m[1]) === MAIN_OFFER ? offerDetail() : undefined),
   },
   {
     method: 'GET',
@@ -1709,25 +1338,6 @@ const ROUTES: ManualRoute[] = [
   },
   {
     method: 'GET',
-    path: /^\/lexis\/rpc\/exemption-details\/approval-recipients$/,
-    respond: (r) =>
-      (r.query.get('exemptionNumbers') ?? '')
-        .split(',')
-        .filter((exemptionNumber) => exemptionFor(exemptionNumber))
-        .map((exemptionNumber) => {
-          const owner = CLIENTS[exemptionFor(exemptionNumber)?.detail.ownerClientNumber ?? '']
-          return {
-            exemptionNumber,
-            ownerEmail: owner?.email ?? '',
-            agentEmail: '',
-            agentApplicable: false,
-            sendable: true,
-            message: '',
-          }
-        }),
-  },
-  {
-    method: 'GET',
     path: /^\/lexis\/permits\/search\/options$/,
     respond: () => PERMIT_SEARCH_OPTIONS,
   },
@@ -1767,7 +1377,7 @@ const ROUTES: ManualRoute[] = [
     path: /^\/lexis\/rpc\/permit-details\/all-scale-fees$/,
     respond: (r) => {
       const permit = permitFor(r.query.get('permitNumber'))
-      return permit && permitFees(permit, r.scenario)
+      return permit && permitFees(permit)
     },
   },
   {
@@ -1794,49 +1404,6 @@ const ROUTES: ManualRoute[] = [
     method: 'GET',
     path: /^\/lexis\/federal\/applications\/search\/count$/,
     respond: () => ({ total: FEDERAL_SEARCH_ROWS.length }),
-  },
-  {
-    method: 'GET',
-    path: /^\/lexis\/federal\/applications\/(\d+)$/,
-    respond: (_r, m) =>
-      Number(m[1]) === FEDERAL_APPLICATION ? federalApplicationDetail() : undefined,
-  },
-  {
-    method: 'GET',
-    path: /^\/lexis\/federal\/applications\/(\d+)\/remarks$/,
-    respond: (_r, m) =>
-      Number(m[1]) === FEDERAL_APPLICATION
-        ? [
-            {
-              remarkId: 1,
-              remark: 'Approved for the Nov 18, 2026 advertising list.',
-              user: 'IDIR\\JSAMPLE',
-              date: '2026-11-04T10:15:00',
-            },
-          ]
-        : undefined,
-  },
-  { method: 'GET', path: /^\/lexis\/reports\/options$/, respond: () => REPORT_OPTIONS },
-  {
-    method: 'GET',
-    path: /^\/lexis\/admin\/policies\/fee$/,
-    respond: () => ({ rows: FEE_POLICIES, total: FEE_POLICIES.length, page: 0, size: 100 }),
-  },
-  {
-    method: 'GET',
-    path: /^\/lexis\/rtm\/emslogamv\/last-saved$/,
-    respond: () => ({ savedBy: 'IDIR\\JSAMPLE', savedAt: '2026-11-20T14:32:00' }),
-  },
-  {
-    method: 'GET',
-    path: /^\/lexis\/rtm\/emslogamv$/,
-    respond: (r) =>
-      r.query.get('latestBeforeDate')
-        ? amvRows('2026-11-01', 0)
-        : amvRows(
-            r.query.get('retrievalDate') ?? '',
-            r.query.get('retrievalDate') === '2026-12-01' ? 4 : 0,
-          ),
   },
 ]
 

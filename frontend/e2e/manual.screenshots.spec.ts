@@ -1,30 +1,50 @@
 import path from 'node:path'
-import { expect, test, type Browser, type Locator, type Page } from '@playwright/test'
+import {
+  expect,
+  test,
+  type Browser,
+  type BrowserContext,
+  type Locator,
+  type Page,
+} from '@playwright/test'
 import { E2E_BASE_URL, gotoSyntheticRoute, installSyntheticOidcSession } from './utils'
 import {
   ADVERTISED_APPLICATION,
   BLANKET_OIC_EXEMPTION,
-  COMPLETED_PERMIT,
-  FEDERAL_APPLICATION,
   MAIN_EXEMPTION,
   MAIN_OFFER,
   MAIN_PERMIT,
   NEW_APPLICATION,
-  NEW_EXEMPTION,
   OWN_CLIENT,
   UPLOAD_FILE_NAME,
   resolveManualApi,
   type ManualScenario,
 } from './utils/manual-fixtures'
+import { createSampleDetailSwap } from './utils/manual-sample-details'
+import { gotoWithRecovery } from './utils/navigation'
+import {
+  getWithAuth,
+  hasIdirCredentials,
+  isSafeCredentialedRegressionBaseUrl,
+  loginWithIdir,
+} from './utils/regression-auth'
 
-// Manual screenshots: add a SHOTS entry, plus fixture data for any API call it makes.
+// Industry edition: a synthetic session with sample data. Add a SHOTS entry and its fixture data.
+// Ministry edition: a signed-in IDIR session on E2E_BASE_URL, read-only, with sample personal details.
 
 type Edition = 'industry' | 'ministry'
 
-type Shot = {
+type Frame = {
   edition: Edition
   /** Image name without extension; the two-digit prefix is the chapter. */
   file: string
+  /** Screenshot one viewport scrolled to this element instead of the top of the page. */
+  focus?: (page: Page) => Locator
+  /** Tallest capture from the top of the page, in CSS pixels. */
+  maxHeight?: number
+}
+
+type Shot = Frame & {
   /** 'loggedOut' installs no session. */
   scenario: ManualScenario | 'loggedOut'
   route: string
@@ -32,10 +52,6 @@ type Shot = {
   ready: (page: Page) => Locator
   /** Clicks, typing and tab changes after the screen is ready. */
   steps?: (page: Page) => Promise<void>
-  /** Screenshot one viewport scrolled to this element instead of the top of the page. */
-  focus?: (page: Page) => Locator
-  /** Tallest capture from the top of the page, in CSS pixels. */
-  maxHeight?: number
   /** Device scale factor; photo-heavy screens use 1 to keep the image small. */
   scale?: number
 }
@@ -50,6 +66,7 @@ const LOADING_TEXT =
   /^(Loading|Checking|Searching|Validating|Refreshing|Counting|Calculating)\b.*…$/
 
 const heading = (page: Page, name: string) => page.getByRole('heading', { level: 1, name })
+const pageTitle = (page: Page) => page.getByRole('heading', { level: 1 }).first()
 const tab = (page: Page, name: string) => page.getByRole('tab', { name, exact: true })
 // First match: a few actions repeat in an empty state and a card header.
 const button = (page: Page, name: string) => page.getByRole('button', { name, exact: true }).first()
@@ -69,12 +86,22 @@ const runSearch = async (page: Page, resultText: string) => {
   await expect(page.getByText(resultText, { exact: true }).first()).toBeVisible()
 }
 
-const tickRow = async (page: Page, label: string) => {
-  const checkbox = page.getByLabel(label, { exact: true })
+const selectTab = async (page: Page, name: string) => {
+  await tab(page, name).click()
+  await expect(tab(page, name)).toHaveAttribute('aria-selected', 'true')
+}
+
+const tick = async (checkbox: Locator) => {
   // Carbon hides the input behind its styled label, so click the input itself.
   await checkbox.dispatchEvent('click')
   await expect(checkbox).toBeChecked()
 }
+
+const searchFinished = (page: Page) =>
+  page
+    .locator('[aria-label="Search results table"][aria-busy="false"]')
+    .or(page.getByRole('heading', { name: 'No results found', exact: true }))
+    .first()
 
 const loginShot = (edition: Edition): Shot => ({
   edition,
@@ -102,7 +129,6 @@ const SHOTS: Shot[] = [
     scenario: 'industrySubmitter',
     route: '/provincial/summary',
     ready: (page) => page.getByText('Example Forestry Ltd.').first(),
-    maxHeight: 1200,
   },
   {
     edition: 'industry',
@@ -119,7 +145,7 @@ const SHOTS: Shot[] = [
     route: '/provincial/application',
     ready: (page) => button(page, 'Search'),
     steps: (page) => runSearch(page, '48106'),
-    maxHeight: 1250,
+    maxHeight: 1000,
   },
   {
     edition: 'industry',
@@ -166,7 +192,7 @@ const SHOTS: Shot[] = [
     scenario: 'industrySubmitter',
     route: `/provincial/application/${NEW_APPLICATION}?tab=items`,
     ready: (page) => page.getByRole('cell', { name: '702.4' }),
-    maxHeight: 1500,
+    focus: (page) => button(page, 'Create package'),
   },
   {
     edition: 'industry',
@@ -181,7 +207,6 @@ const SHOTS: Shot[] = [
       offerCondition: 'Logs to be towed by the buyer within 30 days of approval.',
     })}`,
     ready: (page) => page.getByText('HE/BA SAWLOG').first(),
-    maxHeight: 1600,
   },
   {
     edition: 'industry',
@@ -189,7 +214,6 @@ const SHOTS: Shot[] = [
     scenario: 'industrySubmitter',
     route: `/provincial/offers/${MAIN_OFFER}`,
     ready: (page) => page.getByText('Boom ground at Sample Inlet, Jervis Inlet').first(),
-    maxHeight: 1500,
   },
   {
     edition: 'industry',
@@ -215,7 +239,6 @@ const SHOTS: Shot[] = [
     scenario: 'industrySubmitter',
     route: `/provincial/permit/${MAIN_PERMIT}`,
     ready: (page) => heading(page, `Permit ${MAIN_PERMIT} (Pending)`),
-    maxHeight: 1300,
   },
   {
     edition: 'industry',
@@ -232,7 +255,7 @@ const SHOTS: Shot[] = [
     route: `/provincial/permit/${MAIN_PERMIT}`,
     ready: (page) => heading(page, `Permit ${MAIN_PERMIT} (Pending)`),
     steps: (page) => openTab(page, 'Fees', '$2,450.29'),
-    maxHeight: 1200,
+    focus: pageTitle,
   },
   {
     edition: 'industry',
@@ -244,7 +267,7 @@ const SHOTS: Shot[] = [
       await page.locator('#boic-permit-request-pieces').fill('380')
       await page.locator('#boic-permit-request-volume').fill('512.4')
     },
-    maxHeight: 1300,
+    focus: pageTitle,
   },
   {
     edition: 'industry',
@@ -253,144 +276,11 @@ const SHOTS: Shot[] = [
     route: '/federal',
     ready: (page) => button(page, 'Search'),
     steps: (page) => runSearch(page, 'NX-26-0419'),
-    maxHeight: 1250,
+    maxHeight: 1000,
   },
 
-  // Ministry edition
+  // The ministry edition's other screenshots come from the signed-in session below.
   loginShot('ministry'),
-  {
-    edition: 'ministry',
-    file: '01-home',
-    scenario: 'ministryAdmin',
-    route: '/provincial/review',
-    ready: (page) => page.getByRole('link', { name: '48111', exact: true }),
-  },
-  {
-    edition: 'ministry',
-    file: '01-profile',
-    scenario: 'ministryAdmin',
-    route: '/provincial/review',
-    ready: (page) => page.getByRole('link', { name: '48111', exact: true }),
-    steps: async (page) => {
-      await openProfilePanel(page)
-      await expect(button(page, 'Save preference')).toBeVisible()
-    },
-  },
-  {
-    edition: 'ministry',
-    file: '02-application-review',
-    scenario: 'ministryAdmin',
-    route: '/provincial/review',
-    ready: (page) => page.getByRole('link', { name: '48111', exact: true }),
-    steps: async (page) => {
-      await tickRow(page, `Select application ${NEW_APPLICATION}`)
-      await tickRow(page, 'Select application 48108')
-      await expect(page.getByText('2 applications selected').first()).toBeVisible()
-    },
-  },
-  {
-    edition: 'ministry',
-    file: '02-application-review-tab',
-    scenario: 'ministryAdmin',
-    route: `/provincial/application/${NEW_APPLICATION}`,
-    ready: (page) => page.getByText('jordan.sample@example.com').first(),
-    steps: async (page) => {
-      await openTab(page, 'Review', 'Not reviewed yet')
-      await button(page, 'Update status').click()
-      await expect(page.getByRole('radio', { name: 'Approved' })).toBeVisible()
-    },
-  },
-  {
-    edition: 'ministry',
-    file: '03-offer-approval',
-    scenario: 'ministryAdmin',
-    route: `/provincial/offers/${MAIN_OFFER}`,
-    ready: (page) => page.getByText('Boom ground at Sample Inlet, Jervis Inlet').first(),
-    steps: async (page) => {
-      await button(page, 'Edit offer').click()
-      await expect(page.getByLabel('TEAC review date').first()).toBeVisible()
-    },
-    focus: (page) => page.getByText('Offer withdrawals', { exact: true }).first(),
-  },
-  {
-    edition: 'ministry',
-    file: '04-create-exemption',
-    scenario: 'ministryAdmin',
-    route: '/provincial/exemption/create',
-    ready: (page) => page.getByRole('radio', { name: 'Order in Council', exact: true }),
-  },
-  {
-    edition: 'ministry',
-    file: '04-exemption-approve',
-    scenario: 'ministryAdmin',
-    route: `/provincial/exemption/${NEW_EXEMPTION}`,
-    ready: (page) => page.getByText('pat.example@example.com').first(),
-    steps: async (page) => {
-      await button(page, 'Approve exemption').click()
-      await expect(
-        page.getByRole('dialog').getByText('pat.example@example.com').first(),
-      ).toBeVisible()
-    },
-  },
-  {
-    edition: 'ministry',
-    file: '05-permit-fees',
-    scenario: 'ministryAdmin',
-    route: `/provincial/permit/${COMPLETED_PERMIT}`,
-    ready: (page) => heading(page, `Permit ${COMPLETED_PERMIT}`),
-    steps: (page) => openTab(page, 'Fees', '$1,782.84'),
-    maxHeight: 1200,
-  },
-  {
-    edition: 'ministry',
-    file: '05-permit-invoices',
-    scenario: 'ministryAdmin',
-    route: `/provincial/permit/${COMPLETED_PERMIT}`,
-    ready: (page) => heading(page, `Permit ${COMPLETED_PERMIT}`),
-    steps: (page) => openTab(page, 'GBMS', '26004187'),
-  },
-  {
-    edition: 'ministry',
-    file: '06-federal-application',
-    scenario: 'ministryAdmin',
-    route: `/federal/application/${FEDERAL_APPLICATION}`,
-    ready: (page) => page.getByText('jordan.sample@example.com').first(),
-    steps: (page) => openTab(page, 'Application', 'Harvested Timber'),
-  },
-  {
-    edition: 'ministry',
-    file: '07-advertising-list',
-    scenario: 'ministryAdmin',
-    route: '/reports/biweeklyListing',
-    ready: (page) => button(page, 'Use current advertising period'),
-    steps: async (page) => {
-      await button(page, 'Use current advertising period').click()
-      await expect(page.getByLabel('Listing from date').first()).toHaveValue('2026-11-18')
-    },
-  },
-  {
-    edition: 'ministry',
-    file: '08-multiplication-factor',
-    scenario: 'ministryAdmin',
-    route: '/admin/policies/fee',
-    ready: (page) => page.getByRole('cell', { name: 'Apr 1, 2027', exact: true }),
-  },
-  {
-    edition: 'ministry',
-    file: '08-average-market-values',
-    scenario: 'ministryAdmin',
-    route: '/admin/rtm/emslogamv/upload',
-    ready: (page) => button(page, 'Replace file'),
-    maxHeight: 1300,
-  },
-  {
-    edition: 'ministry',
-    file: '08-notifications',
-    scenario: 'ministryAdmin',
-    route: '/notifications',
-    ready: (page) => page.getByText('Sample notice: planned maintenance').first(),
-    steps: (page) => expect(button(page, 'New notification')).toBeVisible(),
-  },
 ]
 
 type CaptureIssues = string[]
@@ -418,7 +308,7 @@ const newShotPage = async (browser: Browser, shot: Shot, issues: CaptureIssues) 
   if (shot.scenario !== 'loggedOut') {
     await installSyntheticOidcSession(page, {
       username: 'JSAMPLE',
-      orgUnitNo: shot.scenario === 'ministryAdmin' ? '1909' : '',
+      orgUnitNo: '',
       issuedAtSeconds: Math.floor(FIXED_NOW.getTime() / 1000),
       refreshToken: 'manual-refresh-token',
     })
@@ -454,7 +344,7 @@ const newShotPage = async (browser: Browser, shot: Shot, issues: CaptureIssues) 
 }
 
 /** Waits for skeletons, spinners and "Loading…" text to go, then for transitions to settle. */
-const settle = async (page: Page, shot: Shot, issues: CaptureIssues) => {
+const settle = async (page: Page, frame: Frame, issues: CaptureIssues) => {
   const busy = page
     .locator('.cds--skeleton, .cds--skeleton__text, .cds--data-table--skeleton, .cds--loading')
     .filter({ visible: true })
@@ -463,19 +353,19 @@ const settle = async (page: Page, shot: Shot, issues: CaptureIssues) => {
     await expect(busy).toHaveCount(0, { timeout: SETTLE_TIMEOUT_MS })
     await expect(loadingText).toHaveCount(0, { timeout: SETTLE_TIMEOUT_MS })
   } catch {
-    issues.push(`${shot.edition}/${shot.file}: still loading after ${SETTLE_TIMEOUT_MS / 1000}s`)
+    issues.push(`${frame.edition}/${frame.file}: still loading after ${SETTLE_TIMEOUT_MS / 1000}s`)
   }
   await page.waitForTimeout(500)
 }
 
-const snap = async (page: Page, shot: Shot, issues: CaptureIssues) => {
-  await settle(page, shot, issues)
+const snap = async (page: Page, frame: Frame, issues: CaptureIssues) => {
+  await settle(page, frame, issues)
   // No focus ring or hover state in the image: park the pointer on the empty part of the header.
   await page.mouse.move(VIEWPORT.width / 2, 2)
   await page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur())
-  const output = path.join(OUT_DIR, shot.edition, 'images', `${shot.file}.png`)
-  if (shot.focus) {
-    await shot.focus(page).evaluate((element, offset) => {
+  const output = path.join(OUT_DIR, frame.edition, 'images', `${frame.file}.png`)
+  if (frame.focus) {
+    await frame.focus(page).evaluate((element, offset) => {
       window.scrollTo(0, element.getBoundingClientRect().top + window.scrollY - offset)
     }, HEADER_OFFSET_PX)
     await page.waitForTimeout(300)
@@ -487,7 +377,7 @@ const snap = async (page: Page, shot: Shot, issues: CaptureIssues) => {
   await page.screenshot({
     path: output,
     fullPage: true,
-    clip: { x: 0, y: 0, width: VIEWPORT.width, height: Math.min(height, shot.maxHeight ?? 900) },
+    clip: { x: 0, y: 0, width: VIEWPORT.width, height: Math.min(height, frame.maxHeight ?? 900) },
     animations: 'disabled',
   })
 }
@@ -512,7 +402,7 @@ for (const shot of SHOTS) {
 }
 
 for (const [chapter, shots] of chapters) {
-  test(`manual screenshots: ${chapter}`, async ({ browser }) => {
+  test(`sample data: ${chapter}`, async ({ browser }) => {
     const issues: CaptureIssues = []
     for (const shot of shots) {
       await test.step(`${shot.edition}/${shot.file}`, () => capture(browser, shot, issues))
@@ -523,3 +413,258 @@ for (const [chapter, shots] of chapters) {
     expect(issues, 'Every screenshot must load fully from fixtures').toEqual([])
   })
 }
+
+const READ_METHODS = ['GET', 'HEAD', 'OPTIONS']
+const RECORDS_TO_TRY = 5
+const SIGNED_IN_ACTION_TIMEOUT_MS = 10_000
+
+/** Blocks every write, and swaps the personal details in what the API returns for sample ones. */
+const allowReadsWithSampleDetails = async (page: Page) => {
+  const swapSampleDetails = createSampleDetailSwap()
+  await page.route(`${new URL(E2E_BASE_URL).origin}/api/**`, async (route) => {
+    const request = route.request()
+    if (!READ_METHODS.includes(request.method())) return route.abort()
+    const response = await route.fetch()
+    const body = await response.text()
+    if (!body || !(response.headers()['content-type'] ?? '').includes('json')) {
+      return route.fulfill({ response })
+    }
+    const headers = { ...response.headers() }
+    delete headers['content-length']
+    delete headers['content-encoding']
+    await route.fulfill({
+      status: response.status(),
+      headers,
+      body: JSON.stringify(swapSampleDetails(new URL(request.url()).pathname, JSON.parse(body))),
+    })
+  })
+}
+
+test.describe('signed in: ministry edition', () => {
+  test.describe.configure({ retries: 0 })
+  test.skip(
+    !process.env.E2E_BASE_URL || !hasIdirCredentials(),
+    'Set E2E_BASE_URL, E2E_IDIR_USER and E2E_IDIR_PASSWORD to capture the ministry edition.',
+  )
+
+  let context: BrowserContext | undefined
+  let page: Page
+  let issues: CaptureIssues = []
+
+  const capture = (file: string, framing: Pick<Frame, 'focus' | 'maxHeight'> = {}) =>
+    snap(page, { edition: 'ministry', file, ...framing }, issues)
+
+  const notCaptured = (file: string, reason: string) => {
+    const description = `ministry/${file}: ${reason}`
+    test.info().annotations.push({ type: 'not captured', description })
+    console.warn(`Not captured: ${description}`)
+  }
+
+  const open = async (route: string) => {
+    await gotoWithRecovery(page, new URL(route, E2E_BASE_URL).toString(), {
+      ready: pageTitle(page),
+    })
+    await expect(pageTitle(page)).toBeVisible({ timeout: 30_000 })
+    // Never save the no-access page under a screen's name.
+    await expect(pageTitle(page)).not.toHaveText(/^(Unauthorized|Page not found)$/)
+    await settle(page, { edition: 'ministry', file: route }, issues)
+  }
+
+  const openSearch = async (route: string) => {
+    await open(route)
+    await expect(searchFinished(page)).toBeVisible({ timeout: 30_000 })
+  }
+
+  /** Record numbers from a search API, so no search form has to be filled in. */
+  const findRecordNumbers = async (
+    searchPath: string,
+    numberField: string,
+    criteria: Record<string, string> = {},
+  ) => {
+    const response = await getWithAuth(page, searchPath, {
+      params: { page: '0', size: String(RECORDS_TO_TRY), ...criteria },
+    })
+    expect(response.status(), searchPath).toBe(200)
+    const { results = [] } = (await response.json()) as { results?: Record<string, unknown>[] }
+    return results.map((row) => String(row[numberField] ?? '')).filter(Boolean)
+  }
+
+  /** Opens each record until `prepare` succeeds on one; reports the screenshot as not captured otherwise. */
+  const openFirstRecord = async (file: string, routes: string[], prepare: () => Promise<void>) => {
+    let reason = 'the search found no record'
+    for (const route of routes) {
+      await open(route)
+      try {
+        await prepare()
+        return true
+      } catch (error) {
+        reason = String(error).split('\n')[0]
+      }
+    }
+    notCaptured(file, reason)
+    return false
+  }
+
+  test.beforeAll(async ({ browser }) => {
+    if (!isSafeCredentialedRegressionBaseUrl(E2E_BASE_URL)) {
+      throw new Error(
+        'Signed-in screenshots need E2E_BASE_URL to be localhost, DEV, TEST or a PR preview.',
+      )
+    }
+    context = await browser.newContext({
+      baseURL: E2E_BASE_URL,
+      viewport: VIEWPORT,
+      deviceScaleFactor: 1.5,
+      colorScheme: 'light',
+    })
+    page = await context.newPage()
+    page.setDefaultTimeout(SIGNED_IN_ACTION_TIMEOUT_MS)
+    await page.addInitScript(() => {
+      window.localStorage.setItem('lexis.ui.theme', 'white')
+      window.localStorage.setItem('lexis.ui.sideNavCollapsed', 'false')
+    })
+    await allowReadsWithSampleDetails(page)
+  })
+
+  test.afterAll(async () => {
+    await context?.close()
+  })
+
+  test.beforeEach(async () => {
+    issues = []
+    await loginWithIdir(page)
+  })
+
+  test.afterEach(() => {
+    expect(issues, 'Every screenshot must load fully').toEqual([])
+  })
+
+  test('ministry 01', async () => {
+    await openSearch('/provincial/review')
+    await capture('01-home')
+    await openProfilePanel(page)
+    await capture('01-profile')
+  })
+
+  test('ministry 02', async () => {
+    await openSearch('/provincial/review')
+    const rows = page.getByRole('checkbox', { name: /^Select application \d+$/ })
+    if ((await rows.count()) >= 2) {
+      // Selecting changes nothing until Approve is confirmed.
+      await tick(rows.nth(0))
+      await tick(rows.nth(1))
+      await expect(page.getByText('2 applications selected').first()).toBeVisible()
+      await capture('02-application-review')
+    } else {
+      notCaptured('02-application-review', 'fewer than two applications are waiting for review')
+    }
+
+    const applications = await findRecordNumbers(
+      '/api/lexis/application-reviews/search',
+      'applicationNumber',
+    )
+    const reviewOpen = await openFirstRecord(
+      '02-application-review-tab',
+      applications.map((number) => `/provincial/application/${number}`),
+      async () => {
+        await selectTab(page, 'Review')
+        await button(page, 'Update status').click()
+        await expect(page.getByRole('radio', { name: 'Approved' })).toBeVisible()
+      },
+    )
+    if (reviewOpen) await capture('02-application-review-tab', { focus: pageTitle })
+  })
+
+  test('ministry 03', async () => {
+    const approval = (target: Page) =>
+      target.getByText('Offer withdrawals', { exact: true }).first()
+    const offers = await findRecordNumbers('/api/lexis/purchase-offers/search', 'offerNumber')
+    const offerOpen = await openFirstRecord(
+      '03-offer-approval',
+      offers.map((number) => `/provincial/offers/${number}`),
+      async () => {
+        await button(page, 'Edit offer').click()
+        await expect(page.getByLabel('TEAC review date').first()).toBeVisible()
+        await expect(approval(page)).toBeVisible()
+      },
+    )
+    if (offerOpen) await capture('03-offer-approval', { focus: approval })
+  })
+
+  test('ministry 04', async () => {
+    await open('/provincial/exemption/create')
+    await expect(page.getByRole('radio', { name: 'Order in Council', exact: true })).toBeVisible()
+    await capture('04-create-exemption')
+
+    const newExemptions = await findRecordNumbers(
+      '/api/lexis/exemptions/search',
+      'exemptionNumber',
+      {
+        exemptionStatusCode: 'NEW',
+      },
+    )
+    const approvalOpen = await openFirstRecord(
+      '04-exemption-approve',
+      newExemptions.map((number) => `/provincial/exemption/${encodeURIComponent(number)}`),
+      async () => {
+        await button(page, 'Approve exemption').click()
+        await expect(
+          page
+            .getByRole('dialog')
+            .getByText(/^Approve exemption/)
+            .first(),
+        ).toBeVisible()
+      },
+    )
+    if (approvalOpen) await capture('04-exemption-approve')
+  })
+
+  test('ministry 05', async () => {
+    const completedPermits = await findRecordNumbers('/api/lexis/permits/search', 'permitNumber', {
+      permitStatus: 'COM',
+    })
+    const feesOpen = await openFirstRecord(
+      '05-permit-fees',
+      completedPermits.map((number) => `/provincial/permit/${number}`),
+      async () => {
+        await expect(tab(page, 'GBMS')).toBeVisible()
+        await selectTab(page, 'Fees')
+      },
+    )
+    if (!feesOpen) return
+    await capture('05-permit-fees', { focus: pageTitle })
+    await selectTab(page, 'GBMS')
+    await capture('05-permit-invoices', { focus: pageTitle })
+  })
+
+  test('ministry 06', async () => {
+    const federalApplications = await findRecordNumbers(
+      '/api/lexis/federal/applications/search',
+      'applicationNumber',
+    )
+    const applicationOpen = await openFirstRecord(
+      '06-federal-application',
+      federalApplications.map((number) => `/federal/application/${number}`),
+      () => selectTab(page, 'Application'),
+    )
+    if (applicationOpen) await capture('06-federal-application', { focus: pageTitle })
+  })
+
+  test('ministry 07', async () => {
+    await open('/reports/biweeklyListing')
+    await button(page, 'Use current advertising period').click()
+    await capture('07-advertising-list')
+  })
+
+  test('ministry 08', async () => {
+    await open('/admin/policies/fee')
+    await capture('08-multiplication-factor')
+
+    await open('/admin/rtm/emslogamv/upload')
+    await capture('08-average-market-values', { maxHeight: 1000 })
+
+    await open('/notifications')
+    await expect(button(page, 'New notification')).toBeVisible()
+    await capture('08-notifications')
+  })
+})

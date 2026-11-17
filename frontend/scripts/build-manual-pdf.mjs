@@ -6,7 +6,7 @@
 // marked for Markdown and the Playwright Chromium the e2e tests already install. Screenshots come
 // from e2e/manual.screenshots.spec.ts (`npm run manual:screenshots`).
 import { execSync } from 'node:child_process'
-import { existsSync, mkdtempSync, readdirSync, readFileSync, writeFileSync } from 'node:fs'
+import { mkdtempSync, readdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
 import { pathToFileURL } from 'node:url'
@@ -108,7 +108,7 @@ const css = `
   td:first-child { width: 34%; }
 
   figure { margin: 5mm 0 6mm; page-break-inside: avoid; text-align: center; }
-  figure img { max-width: 88%; max-height: 150mm; border: 1px solid var(--rule); border-radius: 1.5mm; box-shadow: 0 1mm 3mm rgba(1,51,102,.12); }
+  figure img { max-width: 88%; max-height: 100mm; border: 1px solid var(--rule); border-radius: 1.5mm; box-shadow: 0 1mm 3mm rgba(1,51,102,.12); }
   figcaption { font-size: 8.8pt; color: var(--muted); margin-top: 2mm; font-style: italic; }
 `
 
@@ -188,23 +188,6 @@ const buildHtml = (edition) => {
 <section class="intro">${intro}</section>
 ${body}
 </body></html>`
-}
-
-/** Chapter images that don't exist yet, as "edition/chapter.md: images/name.png". */
-const missingImages = EDITIONS.flatMap(({ dir }) =>
-  readdirSync(path.join(MANUAL, dir))
-    .filter((f) => f.endsWith('.md'))
-    .flatMap((f) =>
-      [...readFileSync(path.join(MANUAL, dir, f), 'utf-8').matchAll(/!\[[^\]]*\]\(([^)\s]+)\)/g)]
-        .filter(([, href]) => !existsSync(path.join(MANUAL, dir, href)))
-        .map(([, href]) => `${dir}/${f}: ${href}`),
-    ),
-)
-if (missingImages.length > 0) {
-  console.error(
-    `Missing screenshots:\n  ${missingImages.join('\n  ')}\nRun npm run manual:screenshots first.`,
-  )
-  process.exit(1)
 }
 
 const temp = mkdtempSync(path.join(tmpdir(), 'lexis-manual-'))

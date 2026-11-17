@@ -22,8 +22,12 @@ regression coverage uses a separate TEST-only Playwright config.
   synthetic session-timeout, automatic/manual logout warning scenarios, and the TEST credentialed
   regression specs.
 - `playwright.manual.config.ts` runs only `manual.screenshots.spec.ts` (`npm run manual:screenshots`).
-  It captures the user manual screenshots from a synthetic session with mocked API responses and
-  fictional data, and writes them to `docs/manual/<edition>/images/`. No CI job runs it.
+  It writes the user manual screenshots to `docs/manual/<edition>/images/`. The industry edition
+  comes from a synthetic session with mocked API responses and fictional data. The ministry edition
+  comes from a signed-in IDIR session on `E2E_BASE_URL` and is skipped unless `E2E_BASE_URL`,
+  `E2E_IDIR_USER` and `E2E_IDIR_PASSWORD` are set; it blocks every write and swaps personal details
+  in API responses for sample ones. Run it locally only: no CI job runs it, and each image is
+  reviewed before it is committed.
 
 ## CI setup
 

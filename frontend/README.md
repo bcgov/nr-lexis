@@ -76,7 +76,7 @@ These are read by `vite.config.ts` and only matter when running `npm run dev` or
 | `npm run e2e:regression` | Run TEST credentialed regression E2E |
 | `npm run e2e:ui` | Run Playwright UI mode |
 | `npm run e2e:report` | Open the last Playwright HTML report |
-| `npm run manual:screenshots` | Capture the user manual screenshots from a synthetic session |
+| `npm run manual:screenshots` | Capture the user manual screenshots (see `e2e/README.md`) |
 | `npm run manual:pdf` | Build the user manual PDFs from `docs/manual/` |
 
 ## Testing

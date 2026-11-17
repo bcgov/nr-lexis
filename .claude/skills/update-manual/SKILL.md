@@ -91,28 +91,36 @@ that differ from legacy LEXIS are in `docs/intentional-legacy-divergences.md`.
 
 Screenshots live in `docs/manual/<edition>/images/` and are referenced as
 `![Caption](images/NN-name.png)`. The caption doubles as the figure caption
-in the PDF. They are produced by `frontend/e2e/manual.screenshots.spec.ts`
-from a synthetic session with mocked API responses: no sign-in, no
-environment data, the same result on every run. The responses come from
-`frontend/e2e/utils/manual-fixtures.ts`, one fictional set of records shared
-by every shot.
+in the PDF. They are produced by `frontend/e2e/manual.screenshots.spec.ts`;
+don't hand-edit images.
 
-- If a change alters a screen that has a screenshot, or adds a screen worth
-  showing, add or update its `SHOTS` entry in the spec and the fixture for
-  any API call the screen makes. A call with no fixture fails the capture and
-  names the missing path. Don't hand-edit images.
-- Keep every fixture value fictional: sample people ("Jordan Sample"),
-  sample companies ("Example Forestry Ltd."), `example.com` addresses. Never
-  paste a record from TEST or PROD into a fixture.
-- Recapture: `cd frontend && npm run manual:screenshots`. It starts the local
-  dev server itself and needs no credentials.
+- **Industry edition:** a synthetic session with mocked API responses (there
+  is no Business BCeID test login). If a change alters a screen that has a
+  screenshot, or adds one worth showing, add or update its `SHOTS` entry and
+  the data in `frontend/e2e/utils/manual-fixtures.ts` for any API call the
+  screen makes. A call with no fixture fails the capture and names the path.
+  Keep every fixture value fictional ("Jordan Sample", "Example Forestry
+  Ltd.", `example.com`); never paste a record from TEST or PROD into it.
+- **Ministry edition:** a signed-in IDIR session on a real environment. The
+  capture is read-only: it blocks every write, opens screens and picks
+  records through searches. Personal details in API responses are swapped
+  for sample ones by `frontend/e2e/utils/manual-sample-details.ts`; add any
+  new field that holds a person, company, contact detail or free text
+  there. A screen the environment has no record for is reported as
+  `Not captured` and its image is left as it was.
+- Recapture the industry edition: `cd frontend && npm run manual:screenshots`.
+  It starts the local dev server and needs no credentials.
+- Recapture both editions: the same command with `E2E_BASE_URL` set to TEST,
+  DEV, a PR preview or a local full stack, and `E2E_IDIR_USER` /
+  `E2E_IDIR_PASSWORD` exported. Never write the credentials into a file,
+  command or message.
 - Rebuild the PDFs after any manual change: `cd frontend && npm run manual:pdf`
   (writes `docs/manual/LEXIS-Industry-User-Manual.pdf` and
-  `LEXIS-Ministry-User-Manual.pdf`; it stops if a chapter names an image that
-  doesn't exist).
+  `LEXIS-Ministry-User-Manual.pdf`). Figures are at most 100 mm tall, so keep
+  a capture to about one screen; frame a lower part of a page with `focus`.
 - Both commands launch Chromium. If it can't start where you are running (a
   sandboxed session), say which images and PDFs are now out of date and give
-  the user the two commands to run.
+  the user the commands to run.
 
 ## 5. Secrets and personal-data sweep
 
@@ -120,21 +128,25 @@ The repository is public, so run this sweep on every manual change before you
 report done: every new or changed chapter, image and the rebuilt PDFs. Fix
 anything found; never just mention it.
 
-1. **Text.** Grep the changed manual files (and the spec if you touched it):
-   `git diff --name-only HEAD -- docs/manual frontend/e2e/manual.screenshots.spec.ts frontend/e2e/utils/manual-fixtures.ts`
+1. **Text.** Grep the changed manual files (and the capture code if you
+   touched it):
+   `git diff --name-only HEAD -- docs/manual frontend/e2e/manual.screenshots.spec.ts frontend/e2e/utils/manual-fixtures.ts frontend/e2e/utils/manual-sample-details.ts`
    plus untracked files, against
    `password|secret|token|api[_-]?key|bearer|BEGIN .*PRIVATE|eyJ[A-Za-z0-9_-]{10,}|AKIA|ghp_|sk-|jdbc:|@gov\.bc\.ca|IDIR\\[A-Z]|BCEID\\[A-Z0-9]`.
    Matches that only name a concept ("token", `IDIR\NAME`) are fine, and so
    are the export office mailboxes the login page itself shows. Any real
    credential, person or personal mailbox is not. Never print a credential
    value you find, only the file and line.
-2. **Screenshots: look at every new or changed image** (Read the PNG). Reject
-   and fix the spec if it shows any of:
-   - a real person's name, user id, email or phone number (only the sample
-     identity `JSAMPLE` and the fictional fixture names are allowed);
-   - a real client name, or any record copied from an environment;
+2. **Screenshots: look at every new or changed image** (Read the PNG). The
+   ministry images show a real environment, so check each one field by
+   field. Reject it and fix the capture if it shows any of:
+   - a real person's name, user id, email, phone number or address (only the
+     sample identities `JSAMPLE` / `PEXAMPLE`, "Jordan Sample", "Pat Example"
+     and `example.com` addresses are allowed);
+   - a real client or company name (sample companies only), or free text
+     someone typed into the environment;
    - a token, cookie, URL with query secrets, devtools, an error stack trace
-     or a hostname other than the local dev server.
+     or the browser address bar.
 3. **Image metadata.** PNGs must carry no `tEXt`/`iTXt`/`zTXt`/`eXIf`
    chunks (Playwright writes none; anything else added them).
 4. **PDFs.** After `npm run manual:pdf`, check each PDF's decompressed streams

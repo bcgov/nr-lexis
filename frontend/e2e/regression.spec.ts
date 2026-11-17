@@ -18,6 +18,7 @@ import {
   fetchSessionCapabilities,
   getWithAuth,
   hasIdirCredentials,
+  isSafeCredentialedRegressionBaseUrl,
   loginWithIdir,
   postWithCsrf,
   putWithCsrf,
@@ -213,22 +214,6 @@ const redirectExternalLogoutToLoginShell = async (page: Page): Promise<void> => 
       })
     },
   )
-}
-
-const isSafeCredentialedRegressionBaseUrl = (rawUrl: string): boolean => {
-  try {
-    const hostname = new URL(rawUrl).hostname.toLowerCase()
-    return (
-      hostname === 'localhost' ||
-      hostname === '127.0.0.1' ||
-      hostname === '[::1]' ||
-      hostname === 'nr-lexis-dev.apps.gold.devops.gov.bc.ca' ||
-      hostname === 'nr-lexis-test.apps.gold.devops.gov.bc.ca' ||
-      /^nr-lexis-\d+\.apps\.gold\.devops\.gov\.bc\.ca$/.test(hostname)
-    )
-  } catch {
-    return false
-  }
 }
 
 const isSharedTestRegressionBaseUrl = (rawUrl: string): boolean => {

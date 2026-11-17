@@ -36,5 +36,5 @@ Industry users have their own edition.
 - **Most roles are regional.** Read Only, Application Approver and Exemption
   Approver work with records in the Natural Resource Regions they were
   granted. Administrators work province-wide.
-- **The screenshots use made-up sample data.** The names, numbers and volumes
-  in them are not real records.
+- **The screenshots come from a test system.** The people, companies and
+  contact details in them are sample ones.

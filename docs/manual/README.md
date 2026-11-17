@@ -14,4 +14,4 @@ The manuals live in the repository next to the code and are updated in the
 same change as the feature they describe. Developers: see the `update-manual`
 skill in `.claude/skills/update-manual/SKILL.md` for the conventions and the
 source → chapter mapping. In `frontend/`, `npm run manual:screenshots`
-captures the images from sample data and `npm run manual:pdf` builds the PDFs.
+captures the images and `npm run manual:pdf` builds the PDFs.

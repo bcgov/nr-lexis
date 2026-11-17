@@ -93,6 +93,22 @@ const authSessionRefreshes = new WeakMap<Page, Promise<void>>()
 const hasCredentials = ({ usernameEnv, passwordEnv }: LoginConfig): boolean =>
   Boolean(process.env[usernameEnv]?.trim() && process.env[passwordEnv]?.trim())
 
+export const isSafeCredentialedRegressionBaseUrl = (rawUrl: string): boolean => {
+  try {
+    const hostname = new URL(rawUrl).hostname.toLowerCase()
+    return (
+      hostname === 'localhost' ||
+      hostname === '127.0.0.1' ||
+      hostname === '[::1]' ||
+      hostname === 'nr-lexis-dev.apps.gold.devops.gov.bc.ca' ||
+      hostname === 'nr-lexis-test.apps.gold.devops.gov.bc.ca' ||
+      /^nr-lexis-\d+\.apps\.gold\.devops\.gov\.bc\.ca$/.test(hostname)
+    )
+  } catch {
+    return false
+  }
+}
+
 export const hasIdirCredentials = (): boolean => hasCredentials(idirLoginConfig)
 
 const credentials = ({ usernameEnv, passwordEnv }: LoginConfig): RealCredentials => {
