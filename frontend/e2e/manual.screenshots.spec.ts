@@ -388,7 +388,7 @@ const SHOTS: Shot[] = [
     file: '08-notifications',
     scenario: 'ministryAdmin',
     route: '/notifications',
-    ready: (page) => page.getByText('Planned maintenance on November 28').first(),
+    ready: (page) => page.getByText('Sample notice: planned maintenance').first(),
     steps: (page) => expect(button(page, 'New notification')).toBeVisible(),
   },
 ]

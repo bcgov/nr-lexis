@@ -479,9 +479,9 @@ const APPLICATION_SEARCH_ROWS = [
 const ACTIVE_NOTIFICATIONS: LexisNotificationView[] = [
   {
     id: 3,
-    title: 'Advertising list schedule for December',
+    title: 'Sample notice: advertising list dates',
     contentHtml:
-      '<p>The advertising lists for December close on Dec 2 and Dec 16, 2026. Submit applications by noon on the closing date.</p>',
+      '<p>This is an example of an information notice. Administrators use notices like this to share dates and reminders.</p>',
     notificationLevel: 'INFORMATION',
     displayStartDate: '2026-11-02',
     displayEndDate: '2026-12-16',
@@ -489,9 +489,9 @@ const ACTIVE_NOTIFICATIONS: LexisNotificationView[] = [
   },
   {
     id: 2,
-    title: 'Planned maintenance on November 28',
+    title: 'Sample notice: planned maintenance',
     contentHtml:
-      '<p>LEXIS will be unavailable on Saturday, November 28, 2026 from 8:00 a.m. to noon while updates are installed.</p>',
+      '<p>This is an example of a warning notice. Administrators use notices like this to announce a planned outage.</p>',
     notificationLevel: 'WARNING',
     displayStartDate: '2026-11-16',
     displayEndDate: '2026-11-28',
