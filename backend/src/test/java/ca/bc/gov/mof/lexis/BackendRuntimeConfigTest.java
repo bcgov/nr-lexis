@@ -201,14 +201,9 @@ class BackendRuntimeConfigTest {
             "LEXIS_REPORT_JDBC_FETCH_SIZE:"
                 + " ${{ vars.LEXIS_REPORT_JDBC_FETCH_SIZE || '100' }}")
         .contains(
-            "LEXIS_REPORT_MAX_CONCURRENT_GENERATIONS:"
-                + " ${{ vars.LEXIS_REPORT_MAX_CONCURRENT_GENERATIONS || '6' }}")
-        .contains(
             "-p LEXIS_REPORT_QUERY_TIMEOUT_SECONDS=\"$LEXIS_REPORT_QUERY_TIMEOUT_SECONDS\"")
         .contains("-p LEXIS_REPORT_JDBC_FETCH_SIZE=\"$LEXIS_REPORT_JDBC_FETCH_SIZE\"")
-        .contains(
-            "-p LEXIS_REPORT_MAX_CONCURRENT_GENERATIONS="
-                + "\"$LEXIS_REPORT_MAX_CONCURRENT_GENERATIONS\"");
+        .doesNotContain("LEXIS_REPORT_MAX_CONCURRENT_GENERATIONS");
   }
 
   @Test
