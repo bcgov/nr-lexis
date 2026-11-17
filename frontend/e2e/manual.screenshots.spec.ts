@@ -415,7 +415,7 @@ for (const [chapter, shots] of chapters) {
 }
 
 const READ_METHODS = ['GET', 'HEAD', 'OPTIONS']
-const RECORDS_TO_TRY = 5
+const RECORDS_TO_TRY = 10
 const SIGNED_IN_ACTION_TIMEOUT_MS = 10_000
 
 /** Blocks every write, and swaps the personal details in what the API returns for sample ones. */
@@ -612,11 +612,9 @@ test.describe('signed in: ministry edition', () => {
       newExemptions.map((number) => `/provincial/exemption/${encodeURIComponent(number)}`),
       async () => {
         await button(page, 'Approve exemption').click()
+        // An exemption with no application has no recipients, and its dialog shows only an error.
         await expect(
-          page
-            .getByRole('dialog')
-            .getByText(/^Approve exemption/)
-            .first(),
+          page.getByRole('dialog').getByRole('button', { name: 'Edit recipients' }),
         ).toBeVisible()
       },
     )

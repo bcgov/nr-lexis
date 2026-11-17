@@ -54,7 +54,8 @@ applications become **Exempted**.
 ### Create an Order in Council or Blanket OIC exemption
 
 1. **Provincial › Create exemption**.
-2. Choose the **Exemption type**.
+2. Choose the **Exemption type**: **OIC** for an Order in Council exemption,
+   or **BOIC** for a Blanket OIC.
 3. Enter the **Exemption number** (up to 8 characters). LEXIS checks that it
    isn't already used.
 4. Enter the **Approval date**, **Expiry date** and **Approval volume
