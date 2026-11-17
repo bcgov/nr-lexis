@@ -1,6 +1,9 @@
 import { defineConfig } from '@playwright/test'
 import { createE2EConfig } from './e2e/playwright-config'
 
+// A failure snapshot of the sign-in page would hold the typed password.
+process.env.PLAYWRIGHT_NO_COPY_PROMPT = '1'
+
 export default defineConfig({
   ...createE2EConfig({
     testMatch: /regression\.spec\.ts/,

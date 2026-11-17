@@ -78,7 +78,7 @@ const TRANSIENT_REQUEST_ERROR =
 const CONNECTION_NOT_ESTABLISHED =
   /^apiRequestContext\.(?:post|put|delete): connect ECONNREFUSED\b/i
 const LOGIN_ERROR_TEXT =
-  /username or password.*incorrect|user id or password.*incorrect|user id and password.*don't match|invalid username|invalid password|authentication failed|expected verification code|code you entered is incorrect/i
+  /username or password.*incorrect|user id or password.*incorrect|user id and password.*don't match|invalid username|invalid password|authentication failed|expected verification code|code you entered is incorrect|account or password is incorrect/i
 const SENSITIVE_URL_PARAM_PATTERN =
   /^(password|token|access_token|refresh_token|id_token|code|state|session_state|id_token_hint|email|user|username)$/i
 
@@ -588,6 +588,20 @@ const firstVisible = async (page: Page, selector: string) => {
   return visible ? locator : null
 }
 
+const isShown = (locator: Locator): Promise<boolean> =>
+  locator
+    .first()
+    .isVisible()
+    .catch(() => false)
+
+const currentHeading = async (page: Page): Promise<string> => {
+  const [heading = ''] = await page
+    .getByRole('heading')
+    .allTextContents()
+    .catch(() => [])
+  return redactedTextSnippet(heading.trim(), 80)
+}
+
 const currentPageSummary = async (page: Page): Promise<string> => {
   const rawUrl = page.url()
   const safeUrl = (() => {
@@ -693,8 +707,14 @@ const fillCredentialScreen = async (
   }
 
   // A slow response can leave the submitted form visible. Wait for its outcome instead
-  // of posting credentials again. A username-only/password-only step is a new screen.
-  const screenKey = JSON.stringify([page.url(), Boolean(usernameInput), Boolean(passwordInput)])
+  // of posting credentials again. A username-only/password-only step is a new screen, and so
+  // is a new heading: Microsoft keeps both fields on one address for both steps.
+  const screenKey = JSON.stringify([
+    page.url(),
+    Boolean(usernameInput),
+    Boolean(passwordInput),
+    await currentHeading(page),
+  ])
   if (submittedScreens.has(screenKey) || submittedScreens.size >= 4) return false
   submittedScreens.add(screenKey)
 
@@ -705,46 +725,31 @@ const fillCredentialScreen = async (
     await passwordInput.fill(password)
   }
 
-  const submitButton = page.locator('input[type="submit"], button[type="submit"]').first()
-  if (await submitButton.isVisible({ timeout: 5000 }).catch(() => false)) {
-    await submitButton.click()
-  } else if (
-    await page
-      .getByRole('button', { name: /log in|login|sign in|continue|submit/i })
-      .first()
-      .isVisible({ timeout: 5000 })
-      .catch(() => false)
-  ) {
-    await page
-      .getByRole('button', { name: /log in|login|sign in|continue|submit/i })
-      .first()
-      .click()
-  } else if (passwordInput) {
-    await passwordInput.press('Enter')
-  } else if (usernameInput) {
-    await usernameInput.press('Enter')
-  }
+  const submitButton = page
+    .locator('input[type="submit"], button[type="submit"]')
+    .or(page.getByRole('button', { name: /log in|login|sign in|continue|submit/i }))
+    .filter({ visible: true })
+    .first()
+  if (await isShown(submitButton)) await submitButton.click()
+  else await (passwordInput ?? usernameInput)?.press('Enter')
 
   await page.waitForLoadState('domcontentloaded').catch(() => undefined)
   return true
 }
 
-const isShown = (locator: Locator): Promise<boolean> =>
-  locator
-    .first()
-    .isVisible()
-    .catch(() => false)
-
 /** Enters an authenticator code on the Microsoft second-factor screen. True once submitted. */
 const submitSecondFactorCode = async (page: Page): Promise<boolean> => {
   // Microsoft has two layouts for this screen; the newer one is found by its title.
-  const codeScreen = page.locator('body').filter({ has: page.getByText(/^Enter (the )?code$/) })
-  const codeInput = page
-    .locator('input[name="otc"], #idTxtBx_SAOTCC_OTC')
-    .or(codeScreen.getByRole('textbox'))
+  const titledCodeInput = page
+    .locator('body')
+    .filter({ has: page.getByText(/^Enter (the )?code$/) })
+    .getByRole('textbox')
     .filter({ visible: true })
-    .first()
-  if (!(await isShown(codeInput))) {
+    .last()
+  const codeInput =
+    (await firstVisible(page, 'input[name="otc"], #idTxtBx_SAOTCC_OTC')) ??
+    ((await isShown(titledCodeInput)) ? titledCodeInput : null)
+  if (!codeInput) {
     // The account's default method may be an app notification; switch to a code.
     const codeMethod =
       (await firstVisible(page, '[data-value="PhoneAppOTP"]')) ??
@@ -758,12 +763,7 @@ const submitSecondFactorCode = async (page: Page): Promise<boolean> => {
     throw new Error('IDIR login asked for an authenticator code. Set E2E_IDIR_TOTP_SECRET.')
   }
   await codeInput.fill(await freshTotp(totpSecret))
-  const submitButton = await firstVisible(
-    page,
-    '#idSubmit_SAOTCC_Continue, input[type="submit"], button[type="submit"]',
-  )
-  if (submitButton) await submitButton.click({ timeout: LOGIN_PROMPT_CLICK_TIMEOUT_MS })
-  else await codeInput.press('Enter')
+  await codeInput.press('Enter')
   return true
 }
 
@@ -816,9 +816,12 @@ const loginWithConfig = async (page: Page, config: LoginConfig): Promise<void> =
 
     // isVisible does not wait for a form to render. Keep handling late federation screens
     // throughout the session budget, including when navigation has not left the app yet.
-    await fillCredentialScreen(page, username, password, submittedScreens)
     // The identity provider refuses a code it has already seen, so one is entered once.
     secondFactorCodeSubmitted ||= await submitSecondFactorCode(page)
+    // Credentials come before the code, never after it.
+    if (!secondFactorCodeSubmitted) {
+      await fillCredentialScreen(page, username, password, submittedScreens)
+    }
     await dismissPostSignInPrompt(page, username)
     await page.waitForTimeout(Math.max(0, Math.min(1000, deadline - Date.now())))
 
@@ -832,7 +835,7 @@ const loginWithConfig = async (page: Page, config: LoginConfig): Promise<void> =
 
   if (await isSessionAuthenticated(page)) return
   throw new Error(
-    `${label} login did not establish a LEXIS session. Last page: ${await currentPageSummary(page)}. ${await authDiagnostics(page)}.`,
+    `${label} login did not establish a LEXIS session. Last page: ${await currentPageSummary(page)}, heading "${await currentHeading(page)}". ${await authDiagnostics(page)}.`,
   )
 }
 

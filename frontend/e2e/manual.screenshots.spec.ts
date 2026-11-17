@@ -524,15 +524,16 @@ test.describe('signed in: ministry edition', () => {
       window.localStorage.setItem('lexis.ui.sideNavCollapsed', 'false')
     })
     await allowReadsWithSampleDetails(page)
+    // One sign-in for the run: a failure here stops it instead of retrying per chapter.
+    await loginWithIdir(page)
   })
 
   test.afterAll(async () => {
     await context?.close()
   })
 
-  test.beforeEach(async () => {
+  test.beforeEach(() => {
     issues = []
-    await loginWithIdir(page)
   })
 
   test.afterEach(() => {

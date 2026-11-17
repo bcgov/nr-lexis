@@ -106,8 +106,10 @@ regression coverage uses a separate TEST-only Playwright config.
   stdout/stderr are suppressed. Keep test names free of business data. Do not override this reporter
   for credentialed public runs or enable debug output.
 - Credentials are supplied only to the validation/test steps as GitHub secrets. Traces, screenshots,
-  videos, HTML reports, and artifact uploads remain disabled for credentialed runs. Detailed
-  debugging belongs in a controlled synthetic reproduction or an approved private channel. See
+  videos, failure page snapshots (`PLAYWRIGHT_NO_COPY_PROMPT`), HTML reports, and artifact uploads
+  remain disabled for credentialed runs: a snapshot of the sign-in page holds the typed password.
+  Detailed debugging belongs in a controlled synthetic reproduction or an approved private
+  channel. See
   [GitHub's secure-use guidance](https://docs.github.com/en/actions/reference/security/secure-use).
 - The Chromium job retains `continue-on-error` so the separate **TEST Regression Result** job can
   report the outcome outside the deployment environment. A green Chromium job alone is not a pass.
