@@ -10,8 +10,10 @@ RUN npm run deploy
 FROM caddy:2.11.9-builder AS caddy
 # Install CA certificates for Go module downloads; libcap for setcap
 RUN apk add --no-cache ca-certificates libcap
+# Remove the override once Caddy includes the x/net HTML parser security fix.
 RUN xcaddy build \
-    --with github.com/corazawaf/coraza-caddy/v2@v2.6.2
+    --with github.com/corazawaf/coraza-caddy/v2@v2.6.2 \
+    --replace golang.org/x/net=golang.org/x/net@v0.62.0
 # Strip file capabilities here so the final image does not need libcap
 RUN setcap -r /usr/bin/caddy
 
