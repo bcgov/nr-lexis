@@ -140,14 +140,8 @@ const buildHtml = (edition) => {
           return `<a href="#${anchor ? `${target}--${anchor}` : target}">${inner}</a>`
         },
         image({ href, text }) {
-          const file = path.join(dir, href)
-          if (!existsSync(file)) {
-            throw new Error(
-              `${edition.dir}/${chapterId}.md: missing image ${href}. Run npm run manual:screenshots.`,
-            )
-          }
           const caption = escapeHtml(text)
-          return `<figure><img src="${pathToFileURL(file).href}" alt="${caption}"><figcaption>${caption}</figcaption></figure>`
+          return `<figure><img src="${pathToFileURL(path.join(dir, href)).href}" alt="${caption}"><figcaption>${caption}</figcaption></figure>`
         },
       },
     })
@@ -194,6 +188,23 @@ const buildHtml = (edition) => {
 <section class="intro">${intro}</section>
 ${body}
 </body></html>`
+}
+
+/** Chapter images that don't exist yet, as "edition/chapter.md: images/name.png". */
+const missingImages = EDITIONS.flatMap(({ dir }) =>
+  readdirSync(path.join(MANUAL, dir))
+    .filter((f) => f.endsWith('.md'))
+    .flatMap((f) =>
+      [...readFileSync(path.join(MANUAL, dir, f), 'utf-8').matchAll(/!\[[^\]]*\]\(([^)\s]+)\)/g)]
+        .filter(([, href]) => !existsSync(path.join(MANUAL, dir, href)))
+        .map(([, href]) => `${dir}/${f}: ${href}`),
+    ),
+)
+if (missingImages.length > 0) {
+  console.error(
+    `Missing screenshots:\n  ${missingImages.join('\n  ')}\nRun npm run manual:screenshots first.`,
+  )
+  process.exit(1)
 }
 
 const temp = mkdtempSync(path.join(tmpdir(), 'lexis-manual-'))
