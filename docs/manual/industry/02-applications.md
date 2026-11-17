@@ -94,7 +94,7 @@ application's **Scale** tab.
    mark**, **Pieces**, **Species**, **Grade** and **Volume (m³)**. Select
    **Save scale**.
 
-![An application's Scale tab, with a package and its summary of scale](images/02-application-scale.png)
+![A package and its summary of scale, on an application's Scale tab](images/02-application-scale.png)
 
 **Total pieces** and **Total scale volume (m³)** add up as you go.
 

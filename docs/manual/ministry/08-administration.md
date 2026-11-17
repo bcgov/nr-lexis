@@ -87,7 +87,7 @@ date the **Values take effect**. Earlier months can't be changed.
    correct a value on screen (0 to 9999.99, two decimal places).
 6. Select **Save values**.
 
-![Average market values for next month, with saved values](images/08-average-market-values.png)
+![Average market values for next month, with values to check](images/08-average-market-values.png)
 
 All the values are saved together, or none are. They stay editable until the
 month starts: change a value and select **Save values** again, or select

@@ -60,7 +60,7 @@ const VIEWPORT = { width: 1440, height: 900 }
 // Every screen shows the same "today", so dates in the images never drift.
 const FIXED_NOW = new Date('2026-11-25T18:00:00Z')
 const OUT_DIR = path.join(import.meta.dirname, '..', '..', 'docs', 'manual')
-const HEADER_OFFSET_PX = 96
+const HEADER_OFFSET_PX = 88
 const SETTLE_TIMEOUT_MS = 20_000
 const LOADING_TEXT =
   /^(Loading|Checking|Searching|Validating|Refreshing|Counting|Calculating)\b.*…$/
@@ -594,7 +594,10 @@ test.describe('signed in: ministry edition', () => {
 
   test('ministry 04', async () => {
     await open('/provincial/exemption/create')
-    await expect(page.getByRole('radio', { name: 'Order in Council', exact: true })).toBeVisible()
+    // The type names come from the environment, so wait for the choices themselves.
+    await expect(page.locator('input[name="exemptionTypeCode"]').first()).toBeVisible({
+      timeout: 15_000,
+    })
     await capture('04-create-exemption')
 
     const newExemptions = await findRecordNumbers(
