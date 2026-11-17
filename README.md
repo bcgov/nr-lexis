@@ -173,6 +173,7 @@ the next deployment. If the variable is unset, PROD and DEV default to off and T
 
 ## Component docs
 
+- [docs/manual/](docs/manual/README.md) - End-user manuals for industry (Business BCeID) and ministry (IDIR) users, updated with the code.
 - [docs/architecture.md](docs/architecture.md) - Runtime architecture and legacy-to-modern shifts.
 - [docs/intentional-legacy-divergences.md](docs/intentional-legacy-divergences.md) - Business-approved differences from legacy behaviour and their searchable code markers.
 - [docs/legacy-bug-register.md](docs/legacy-bug-register.md) - Legacy defects, modern corrections and proposed procedure changes deferred pending a business request.

@@ -21,6 +21,9 @@ regression coverage uses a separate TEST-only Playwright config.
 - `playwright.regression.config.ts` runs files ending in `regression.spec.ts`, including the
   synthetic session-timeout, automatic/manual logout warning scenarios, and the TEST credentialed
   regression specs.
+- `playwright.manual.config.ts` runs only `manual.screenshots.spec.ts` (`npm run manual:screenshots`).
+  It captures the user manual screenshots from a synthetic session with mocked API responses and
+  fictional data, and writes them to `docs/manual/<edition>/images/`. No CI job runs it.
 
 ## CI setup
 
