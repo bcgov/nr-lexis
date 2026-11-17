@@ -15,7 +15,9 @@ RUN java /tmp/VerifyTimezone.java && rm /tmp/VerifyTimezone.java
 ENV HOME=/tmp \
     XDG_CACHE_HOME=/tmp/.cache
 
-RUN apk add --no-cache font-dejavu \
+# Refresh runtime packages that predate security fixes in the pinned JDK image.
+RUN apk upgrade --no-cache \
+    && apk add --no-cache font-dejavu \
     && adduser -D -s /bin/sh spring
 RUN mkdir -p /logs
 RUN chown -R spring:spring /logs
