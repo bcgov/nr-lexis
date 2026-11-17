@@ -9,8 +9,8 @@ spring:
     password: ${DATABASE_PASSWORD}
     driver-class-name: oracle.jdbc.OracleDriver
     hikari:
-      # All pods share one Oracle account's session limit; raise this only when the limit allows.
-      maximum-pool-size: ${LEXIS_DATABASE_MAX_POOL_SIZE:6}
+      # All pods share the Oracle account's 50-session limit; keep pods x pool size under it.
+      maximum-pool-size: ${LEXIS_DATABASE_MAX_POOL_SIZE:12}
       minimum-idle: 1
       connection-timeout: 10000
       idle-timeout: 600000
