@@ -1545,7 +1545,10 @@ const ROUTES: ManualRoute[] = [
     path: /^\/lexis\/rpc\/application-details\/package-scales$/,
     respond: (r) => {
       const packageNumber = r.query.get('packageNumber') ?? ''
-      return packageFor(packageNumber)?.extra.scales ?? FEDERAL_PACKAGE_SCALES[packageNumber]
+      const scales =
+        packageFor(packageNumber)?.extra.scales ?? FEDERAL_PACKAGE_SCALES[packageNumber]
+      // Every sample record is coast scale.
+      return scales?.map((scale) => ({ ...scale, cascadeSplitCode: 'W' }))
     },
   },
   {
@@ -1573,6 +1576,12 @@ const ROUTES: ManualRoute[] = [
     method: 'POST',
     path: /^\/lexis\/application-submissions\/validation$/,
     respond: () => UPLOAD_VALIDATION,
+  },
+  {
+    // Record pages call this as they close.
+    method: 'POST',
+    path: /^\/lexis\/rpc\/(application|exemption|offer|permit)-details\/release-lock$/,
+    respond: () => ({ success: true }),
   },
   {
     method: 'GET',

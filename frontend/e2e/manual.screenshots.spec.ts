@@ -36,13 +36,15 @@ type Shot = {
   focus?: (page: Page) => Locator
   /** Tallest capture from the top of the page, in CSS pixels. */
   maxHeight?: number
+  /** Device scale factor; photo-heavy screens use 1 to keep the image small. */
+  scale?: number
 }
 
 const VIEWPORT = { width: 1440, height: 900 }
 // Every screen shows the same "today", so dates in the images never drift.
 const FIXED_NOW = new Date('2026-11-25T18:00:00Z')
 const OUT_DIR = path.join(import.meta.dirname, '..', '..', 'docs', 'manual')
-const HEADER_OFFSET_PX = 64
+const HEADER_OFFSET_PX = 96
 const SETTLE_TIMEOUT_MS = 20_000
 const LOADING_TEXT =
   /^(Loading|Checking|Searching|Validating|Refreshing|Counting|Calculating)\b.*…$/
@@ -80,6 +82,7 @@ const loginShot = (edition: Edition): Shot => ({
   scenario: 'loggedOut',
   route: '/',
   ready: (page) => button(page, 'Log in with Business BCeID'),
+  scale: 1,
 })
 
 const SHOTS: Shot[] = [
@@ -91,6 +94,7 @@ const SHOTS: Shot[] = [
     scenario: 'industryChooseOrganization',
     route: '/',
     ready: (page) => page.getByText('Forest client 00067890').first(),
+    scale: 1,
   },
   {
     edition: 'industry',
@@ -115,7 +119,7 @@ const SHOTS: Shot[] = [
     route: '/provincial/application',
     ready: (page) => button(page, 'Search'),
     steps: (page) => runSearch(page, '48106'),
-    focus: (page) => page.getByText('6 applications found', { exact: true }).first(),
+    maxHeight: 1250,
   },
   {
     edition: 'industry',
@@ -249,7 +253,7 @@ const SHOTS: Shot[] = [
     route: '/federal',
     ready: (page) => button(page, 'Search'),
     steps: (page) => runSearch(page, 'NX-26-0419'),
-    focus: (page) => page.getByText('5 applications found', { exact: true }).first(),
+    maxHeight: 1250,
   },
 
   // Ministry edition
@@ -306,14 +310,14 @@ const SHOTS: Shot[] = [
       await button(page, 'Edit offer').click()
       await expect(page.getByLabel('TEAC review date').first()).toBeVisible()
     },
-    focus: (page) => page.getByText('Approval', { exact: true }).first(),
+    focus: (page) => page.getByText('Offer withdrawals', { exact: true }).first(),
   },
   {
     edition: 'ministry',
     file: '04-create-exemption',
     scenario: 'ministryAdmin',
     route: '/provincial/exemption/create',
-    ready: (page) => page.getByRole('radio', { name: 'Order in Council' }),
+    ready: (page) => page.getByRole('radio', { name: 'Order in Council', exact: true }),
   },
   {
     edition: 'ministry',
@@ -369,7 +373,7 @@ const SHOTS: Shot[] = [
     file: '08-multiplication-factor',
     scenario: 'ministryAdmin',
     route: '/admin/policies/fee',
-    ready: (page) => page.getByRole('cell', { name: 'Apr 1, 2027' }),
+    ready: (page) => page.getByRole('cell', { name: 'Apr 1, 2027', exact: true }),
   },
   {
     edition: 'ministry',
@@ -395,7 +399,7 @@ const newShotPage = async (browser: Browser, shot: Shot, issues: CaptureIssues) 
   const context = await browser.newContext({
     baseURL: E2E_BASE_URL,
     viewport: VIEWPORT,
-    deviceScaleFactor: 1.5,
+    deviceScaleFactor: shot.scale ?? 1.5,
     colorScheme: 'light',
   })
   const page = await context.newPage()
@@ -466,6 +470,9 @@ const settle = async (page: Page, shot: Shot, issues: CaptureIssues) => {
 
 const snap = async (page: Page, shot: Shot, issues: CaptureIssues) => {
   await settle(page, shot, issues)
+  // No focus ring or hover state in the image: park the pointer on the empty part of the header.
+  await page.mouse.move(VIEWPORT.width / 2, 2)
+  await page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur())
   const output = path.join(OUT_DIR, shot.edition, 'images', `${shot.file}.png`)
   if (shot.focus) {
     await shot.focus(page).evaluate((element, offset) => {

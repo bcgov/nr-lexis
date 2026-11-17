@@ -108,7 +108,7 @@ const css = `
   td:first-child { width: 34%; }
 
   figure { margin: 5mm 0 6mm; page-break-inside: avoid; text-align: center; }
-  figure img { max-width: 88%; max-height: 100mm; border: 1px solid var(--rule); border-radius: 1.5mm; box-shadow: 0 1mm 3mm rgba(1,51,102,.12); }
+  figure img { max-width: 88%; max-height: 150mm; border: 1px solid var(--rule); border-radius: 1.5mm; box-shadow: 0 1mm 3mm rgba(1,51,102,.12); }
   figcaption { font-size: 8.8pt; color: var(--muted); margin-top: 2mm; font-style: italic; }
 `
 
