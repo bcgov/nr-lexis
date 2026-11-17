@@ -151,7 +151,7 @@ anything found; never just mention it.
    chunks (Playwright writes none; anything else added them).
 4. **PDFs.** After `npm run manual:pdf`, check each PDF's decompressed streams
    hold no `/Users/`, `file://` or local usernames, and that its Info has only
-   Title/Creator/Producer.
+   Title, Creator, Producer and the build dates.
 
 Report the sweep result in your summary (clean, or what you fixed).
 
