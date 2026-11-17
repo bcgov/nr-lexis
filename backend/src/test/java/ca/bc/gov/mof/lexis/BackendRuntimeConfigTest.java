@@ -119,7 +119,7 @@ class BackendRuntimeConfigTest {
         binder.bind("spring.datasource.hikari.data-source-properties", Properties.class).get();
 
     assertThat(binder.bind("spring.datasource.hikari.maximum-pool-size", Integer.class).get())
-        .isEqualTo(6);
+        .isEqualTo(12);
     assertThat(binder.bind("spring.datasource.hikari.connection-timeout", Long.class).get())
         .isEqualTo(10_000L);
     assertThat(driverProperties)
@@ -184,7 +184,7 @@ class BackendRuntimeConfigTest {
     assertThat(applicationConfig)
         .contains("query-timeout-seconds: ${LEXIS_REPORT_QUERY_TIMEOUT_SECONDS:120}")
         .contains("jdbc-fetch-size: ${LEXIS_REPORT_JDBC_FETCH_SIZE:100}")
-        .contains("max-concurrent-generations: ${LEXIS_REPORT_MAX_CONCURRENT_GENERATIONS:3}")
+        .contains("max-concurrent-generations: ${LEXIS_REPORT_MAX_CONCURRENT_GENERATIONS:6}")
         .doesNotContain("max-output-bytes", "LEXIS_REPORT_MAX_OUTPUT_BYTES");
     assertThat(deployment)
         .contains("- name: LEXIS_REPORT_QUERY_TIMEOUT_SECONDS")
@@ -202,7 +202,7 @@ class BackendRuntimeConfigTest {
                 + " ${{ vars.LEXIS_REPORT_JDBC_FETCH_SIZE || '100' }}")
         .contains(
             "LEXIS_REPORT_MAX_CONCURRENT_GENERATIONS:"
-                + " ${{ vars.LEXIS_REPORT_MAX_CONCURRENT_GENERATIONS || '3' }}")
+                + " ${{ vars.LEXIS_REPORT_MAX_CONCURRENT_GENERATIONS || '6' }}")
         .contains(
             "-p LEXIS_REPORT_QUERY_TIMEOUT_SECONDS=\"$LEXIS_REPORT_QUERY_TIMEOUT_SECONDS\"")
         .contains("-p LEXIS_REPORT_JDBC_FETCH_SIZE=\"$LEXIS_REPORT_JDBC_FETCH_SIZE\"")
