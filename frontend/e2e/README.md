@@ -108,6 +108,7 @@ regression coverage uses a separate TEST-only Playwright config.
 - Credentials are supplied only to the validation/test steps as GitHub secrets. Traces, screenshots,
   videos, failure page snapshots (`PLAYWRIGHT_NO_COPY_PROMPT`), HTML reports, and artifact uploads
   remain disabled for credentialed runs: a snapshot of the sign-in page holds the typed password.
+  Prefix a run of only the mocked specs with `PLAYWRIGHT_NO_COPY_PROMPT=` to keep its snapshots.
   Detailed debugging belongs in a controlled synthetic reproduction or an approved private
   channel. See
   [GitHub's secure-use guidance](https://docs.github.com/en/actions/reference/security/secure-use).
