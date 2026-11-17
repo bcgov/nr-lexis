@@ -25,6 +25,7 @@ import {
   redactedTextSnippet,
 } from './utils/regression-auth'
 import { E2E_BASE_URL } from './utils'
+import { redirectExternalLogoutToLoginShell } from './utils/logout'
 import { gotoWithRecovery } from './utils/navigation'
 import {
   regressionSubmissionFile,
@@ -197,23 +198,6 @@ const safeUrlForLog = (rawUrl: string): string => {
   } catch {
     return '[unparseable-url]'
   }
-}
-
-const redirectExternalLogoutToLoginShell = async (page: Page): Promise<void> => {
-  const logoutReturnUrl = `${new URL(E2E_BASE_URL).origin}/`
-
-  await page.route(
-    /https:\/\/[^/]+\/.*\/protocol\/openid-connect\/logout(?:\?.*)?$/i,
-    async (route) => {
-      await route.fulfill({
-        status: 302,
-        headers: {
-          location: logoutReturnUrl,
-        },
-        body: '',
-      })
-    },
-  )
 }
 
 const isSharedTestRegressionBaseUrl = (rawUrl: string): boolean => {
