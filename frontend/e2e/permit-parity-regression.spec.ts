@@ -662,13 +662,10 @@ test.describe('Provincial permit parity regressions', () => {
     await page
       .getByRole('option', { name: 'Owner Forestry Ltd. (OFL) · 00067890', exact: true })
       .click()
-    await expect(
-      page.getByRole('region', { name: 'Applicant details', exact: true }),
-    ).toContainText('1 Owner Street')
+    const applicantPanel = page.getByRole('tabpanel', { name: 'Applicant', exact: true })
+    await expect(applicantPanel).toContainText('1 Owner Street')
     await page.getByLabel('Client location', { exact: true }).selectOption('04')
-    await expect(
-      page.getByRole('region', { name: 'Applicant details', exact: true }),
-    ).toContainText('4 Mill Road')
+    await expect(applicantPanel).toContainText('4 Mill Road')
 
     await page
       .getByRole('tab', { name: 'Shipping, 3 required fields outstanding', exact: true })
