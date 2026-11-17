@@ -25,7 +25,8 @@ regression coverage uses a separate TEST-only Playwright config.
   It writes the user manual screenshots to `docs/manual/<edition>/images/`. The industry edition
   comes from a synthetic session with mocked API responses and fictional data. The ministry edition
   comes from a signed-in IDIR session on `E2E_BASE_URL` and is skipped unless `E2E_BASE_URL`,
-  `E2E_IDIR_USER` and `E2E_IDIR_PASSWORD` are set; it blocks every write and swaps personal details
+  `E2E_IDIR_USER` and `E2E_IDIR_PASSWORD` are set (plus `E2E_IDIR_TOTP_SECRET` for the second
+  factor); it blocks every write and swaps personal details
   in API responses for sample ones. Run it locally only: no CI job runs it, and each image is
   reviewed before it is committed.
 
@@ -44,6 +45,7 @@ regression coverage uses a separate TEST-only Playwright config.
 - Required `test` environment secrets:
   - `E2E_IDIR_USER`
   - `E2E_IDIR_PASSWORD`
+  - `E2E_IDIR_TOTP_SECRET`
 - No fixture identifiers need configuring. Each lifecycle run creates unique applications, packages,
   scales, offers, exemptions and permits through the normal APIs. Cleanup runs after success or
   failure: it removes packages/scales and terminalizes records retained by the business APIs.
@@ -111,9 +113,15 @@ regression coverage uses a separate TEST-only Playwright config.
   report the outcome outside the deployment environment. A green Chromium job alone is not a pass.
 - Login uses the CSS integration's Keycloak authorization-code flow with PKCE; logout chains
   SiteMinder `logoff.cgi` (when configured) to the realm's end-session endpoint and returns to the
-  registered LEXIS origin. IDIR MFA
-  requirements must be checked before enabling credentialed CI; credentials alone do not establish
-  that unattended federation will work.
+  registered LEXIS origin.
+- IDIR sign-in asks for a second factor. The login helper answers it with the code an authenticator
+  app would show, generated from `E2E_IDIR_TOTP_SECRET` (`e2e/utils/totp.ts`), following BC Gov
+  SSO's [Automating MFA with TOTP](https://bcgov.github.io/sso-docs/advanced/automating-mfa-totp).
+  To get the secret, sign in as the regression account at
+  <https://mysignins.microsoft.com/security-info>, choose **Add sign-in method → Microsoft
+  Authenticator → Set up a different authentication app → Can't scan QR code?**, copy the **Secret
+  key**, and finish the registration with one generated code. The secret is the second factor
+  itself: keep it only in a masked secret.
 - Synthetic browser coverage uses the real `oidc-client-ts` user format in `sessionStorage` and
   intercepts discovery, refresh and logout endpoints. Tokens are synthetic and backend routes are
   intercepted; these tests prove browser behavior, not live CSS provisioning or Oracle

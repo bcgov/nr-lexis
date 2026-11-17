@@ -3,21 +3,26 @@ import { loginWithIdir } from './utils/regression-auth'
 
 // Exercise the real helper using intercepted pages and synthetic credentials only.
 test.describe('federated login timing', () => {
-  let previousUser: string | undefined
-  let previousPassword: string | undefined
+  const syntheticCredentials: Record<string, string> = {
+    E2E_IDIR_USER: 'synthetic-user',
+    E2E_IDIR_PASSWORD: 'synthetic-password',
+    E2E_IDIR_TOTP_SECRET: 'AAAAAAAAAAAAAAAA',
+  }
+  let previousCredentials: Record<string, string | undefined> = {}
 
   test.beforeEach(() => {
-    previousUser = process.env.E2E_IDIR_USER
-    previousPassword = process.env.E2E_IDIR_PASSWORD
-    process.env.E2E_IDIR_USER = 'synthetic-user'
-    process.env.E2E_IDIR_PASSWORD = 'synthetic-password'
+    for (const [name, value] of Object.entries(syntheticCredentials)) {
+      previousCredentials[name] = process.env[name]
+      process.env[name] = value
+    }
   })
 
   test.afterEach(() => {
-    if (previousUser === undefined) delete process.env.E2E_IDIR_USER
-    else process.env.E2E_IDIR_USER = previousUser
-    if (previousPassword === undefined) delete process.env.E2E_IDIR_PASSWORD
-    else process.env.E2E_IDIR_PASSWORD = previousPassword
+    for (const [name, value] of Object.entries(previousCredentials)) {
+      if (value === undefined) delete process.env[name]
+      else process.env[name] = value
+    }
+    previousCredentials = {}
   })
 
   for (const scenario of [
@@ -25,9 +30,11 @@ test.describe('federated login timing', () => {
     'slow submission',
     'split credentials',
     'rejected credentials',
+    'second factor',
   ]) {
     test(scenario, async ({ page }) => {
       let submissions = 0
+      const submittedCodes: string[] = []
       await page.route('**/*', async (route) => {
         await route.fulfill({
           contentType: 'text/html',
@@ -47,6 +54,17 @@ test.describe('federated login timing', () => {
                     setTimeout(() => form(true), 1200)
                   } else if (scenario === 'rejected credentials') {
                     root.insertAdjacentHTML('beforeend', '<p>Invalid password</p>')
+                  } else if (scenario === 'second factor') {
+                    root.innerHTML = '<form><input name="otc" type="tel">' +
+                      '<input type="submit" id="idSubmit_SAOTCC_Continue" value="Verify"></form>'
+                    document.querySelector('form').onsubmit = (event) => {
+                      event.preventDefault()
+                      console.log('synthetic-code-submit:' + document.querySelector('input').value)
+                      root.innerHTML = '<p>Stay signed in?</p><input type="button" id="idBtn_Back" value="No">'
+                      document.getElementById('idBtn_Back').onclick = () => {
+                        root.innerHTML = '<nav id="side-navigation">Signed in</nav>'
+                      }
+                    }
                   } else {
                     setTimeout(() => { root.innerHTML = '<nav id="side-navigation">Signed in</nav>' },
                       scenario === 'slow submission' ? 6000 : 0)
@@ -62,6 +80,8 @@ test.describe('federated login timing', () => {
       })
       page.on('console', (message) => {
         if (message.text() === 'synthetic-credential-submit') submissions += 1
+        const [, code] = message.text().match(/^synthetic-code-submit:(.*)$/) ?? []
+        if (code !== undefined) submittedCodes.push(code)
       })
       // APIRequestContext bypasses page routes. Stub it so no probe reaches TEST.
       const originalGet = page.request.get
@@ -84,6 +104,9 @@ test.describe('federated login timing', () => {
           await expect(page.locator('#side-navigation')).toHaveText('Signed in')
         }
         expect(submissions).toBe(scenario === 'split credentials' ? 2 : 1)
+        expect(submittedCodes).toEqual(
+          scenario === 'second factor' ? [expect.stringMatching(/^\d{6}$/)] : [],
+        )
       } finally {
         page.request.get = originalGet
       }

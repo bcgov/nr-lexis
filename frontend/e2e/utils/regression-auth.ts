@@ -1,6 +1,7 @@
-import { expect, type APIResponse, type Page } from '@playwright/test'
+import { expect, type APIResponse, type Locator, type Page } from '@playwright/test'
 import { E2E_BASE_URL } from './index'
 import { FRONTEND_RECOVERY_TIMEOUT_MS, gotoWithRecovery } from './navigation'
+import { freshTotp } from './totp'
 
 type SessionCapabilities = {
   authenticated?: boolean
@@ -60,7 +61,8 @@ type AccessTokenDiagnostics = {
 }
 
 const baseOrigin = new URL(E2E_BASE_URL).origin
-const LOGIN_SESSION_TIMEOUT_MS = 30_000
+const LOGIN_SESSION_TIMEOUT_MS = 60_000
+const LOGIN_PROMPT_CLICK_TIMEOUT_MS = 5_000
 const LOGIN_BUTTON_VISIBLE_TIMEOUT_MS = 10_000
 const LOGIN_BUTTON_CLICK_TIMEOUT_MS = 15_000
 const LOGIN_SHELL_RENDER_ATTEMPTS = 3
@@ -76,7 +78,7 @@ const TRANSIENT_REQUEST_ERROR =
 const CONNECTION_NOT_ESTABLISHED =
   /^apiRequestContext\.(?:post|put|delete): connect ECONNREFUSED\b/i
 const LOGIN_ERROR_TEXT =
-  /username or password.*incorrect|user id or password.*incorrect|user id and password.*don't match|invalid username|invalid password|authentication failed/i
+  /username or password.*incorrect|user id or password.*incorrect|user id and password.*don't match|invalid username|invalid password|authentication failed|expected verification code/i
 const SENSITIVE_URL_PARAM_PATTERN =
   /^(password|token|access_token|refresh_token|id_token|code|state|session_state|id_token_hint|email|user|username)$/i
 
@@ -485,7 +487,11 @@ export const getWithAuth = async (
 }
 export const redactedTextSnippet = (text: string, maxLength = 500): string => {
   let redacted = text
-  for (const credential of [process.env.E2E_IDIR_USER, process.env.E2E_IDIR_PASSWORD]) {
+  for (const credential of [
+    process.env.E2E_IDIR_USER,
+    process.env.E2E_IDIR_PASSWORD,
+    process.env.E2E_IDIR_TOTP_SECRET,
+  ]) {
     if (credential) {
       redacted = redacted.split(credential).join('[credential-redacted]')
     }
@@ -723,6 +729,51 @@ const fillCredentialScreen = async (
   return true
 }
 
+/** Enters an authenticator code on the Microsoft second-factor screen. True once submitted. */
+const submitSecondFactorCode = async (page: Page): Promise<boolean> => {
+  const codeInput = await firstVisible(page, 'input[name="otc"], #idTxtBx_SAOTCC_OTC')
+  if (!codeInput) {
+    // The account's default method may be an app notification; switch to a code.
+    const codeMethod =
+      (await firstVisible(page, '[data-value="PhoneAppOTP"]')) ??
+      (await firstVisible(page, '#signInAnotherWay'))
+    await codeMethod?.click({ timeout: LOGIN_PROMPT_CLICK_TIMEOUT_MS }).catch(() => undefined)
+    return false
+  }
+
+  const totpSecret = process.env.E2E_IDIR_TOTP_SECRET?.trim()
+  if (!totpSecret) {
+    throw new Error('IDIR login asked for an authenticator code. Set E2E_IDIR_TOTP_SECRET.')
+  }
+  await codeInput.fill(await freshTotp(totpSecret))
+  await page
+    .locator('#idSubmit_SAOTCC_Continue, input[type="submit"], button[type="submit"]')
+    .first()
+    .click({ timeout: LOGIN_PROMPT_CLICK_TIMEOUT_MS })
+  return true
+}
+
+/** Clears "Pick an account" and "Stay signed in?", which Microsoft can show after the code. */
+const dismissPostSignInPrompt = async (page: Page, username: string): Promise<void> => {
+  const isShown = (locator: Locator) =>
+    locator
+      .first()
+      .isVisible()
+      .catch(() => false)
+
+  let choice: Locator | undefined
+  if (await isShown(page.getByRole('heading', { name: /pick an account/i }))) {
+    const signInName = username.split('\\').pop()?.split('@')[0] ?? ''
+    choice = page.getByText(`${signInName}@`)
+  } else if (await isShown(page.getByText('Stay signed in?'))) {
+    choice = page.locator('#idBtn_Back').or(page.getByRole('button', { name: 'No', exact: true }))
+  }
+  await choice
+    ?.first()
+    .click({ timeout: LOGIN_PROMPT_CLICK_TIMEOUT_MS })
+    .catch(() => undefined)
+}
+
 const loginWithConfig = async (page: Page, config: LoginConfig): Promise<void> => {
   const { label } = config
   const { username, password } = credentials(config)
@@ -742,6 +793,7 @@ const loginWithConfig = async (page: Page, config: LoginConfig): Promise<void> =
 
   const deadline = Date.now() + LOGIN_SESSION_TIMEOUT_MS
   const submittedScreens = new Set<string>()
+  let secondFactorCodeSubmitted = false
   while (Date.now() < deadline) {
     if (await isSessionAuthenticated(page)) {
       return
@@ -757,6 +809,9 @@ const loginWithConfig = async (page: Page, config: LoginConfig): Promise<void> =
     // isVisible does not wait for a form to render. Keep handling late federation screens
     // throughout the session budget, including when navigation has not left the app yet.
     await fillCredentialScreen(page, username, password, submittedScreens)
+    // The identity provider refuses a code it has already seen, so one is entered once.
+    secondFactorCodeSubmitted ||= await submitSecondFactorCode(page)
+    await dismissPostSignInPrompt(page, username)
     await page.waitForTimeout(Math.max(0, Math.min(1000, deadline - Date.now())))
 
     const submittedLoginError = await visibleLoginError(page)

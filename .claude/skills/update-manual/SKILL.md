@@ -111,9 +111,9 @@ don't hand-edit images.
 - Recapture the industry edition: `cd frontend && npm run manual:screenshots`.
   It starts the local dev server and needs no credentials.
 - Recapture both editions: the same command with `E2E_BASE_URL` set to TEST,
-  DEV, a PR preview or a local full stack, and `E2E_IDIR_USER` /
-  `E2E_IDIR_PASSWORD` exported. Never write the credentials into a file,
-  command or message.
+  DEV, a PR preview or a local full stack, and `E2E_IDIR_USER`,
+  `E2E_IDIR_PASSWORD` and `E2E_IDIR_TOTP_SECRET` exported. Never write the
+  credentials into a file, command or message.
 - Rebuild the PDFs after any manual change: `cd frontend && npm run manual:pdf`
   (writes `docs/manual/LEXIS-Industry-User-Manual.pdf` and
   `LEXIS-Ministry-User-Manual.pdf`). Figures are at most 100 mm tall, so keep
