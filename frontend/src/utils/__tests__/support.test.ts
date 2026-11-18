@@ -32,6 +32,19 @@ describe('userManualsForRoles', () => {
     ])
   })
 
+  it('returns both approver manuals for a user holding both approver roles', () => {
+    expect(userManualsForRoles(['EXEMPTION_APPROVER', 'APPLICATION_APPROVER'])).toEqual([
+      {
+        label: 'User manual (Application Approver)',
+        href: '/manuals/LEXIS-Application-Approver-User-Manual.pdf',
+      },
+      {
+        label: 'User manual (Exemption Approver)',
+        href: '/manuals/LEXIS-Exemption-Approver-User-Manual.pdf',
+      },
+    ])
+  })
+
   it('links only to manuals that are in public/manuals', () => {
     const everyManual = userManualsForRoles([
       'ADMIN',
