@@ -96,8 +96,8 @@ switch beside your profile turns the dark theme on and off.
 Permits have no "create" menu item: you request a permit from the exemption
 it is issued against.
 
-**Report an issue**, at the bottom of the menu, starts an email to the LEXIS
-support team.
+Under **Support**, at the bottom of the menu, **User manual** downloads this
+manual and **Report an issue** starts an email to the LEXIS support team.
 
 ## Your profile
 

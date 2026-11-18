@@ -2,11 +2,13 @@
 //
 //   cd frontend && npm run manual:pdf
 //
-// Output: docs/manual/LEXIS-Industry-User-Manual.pdf and LEXIS-Ministry-User-Manual.pdf. Uses
-// marked for Markdown and the Playwright Chromium the e2e tests already install. Screenshots come
-// from e2e/manual.screenshots.spec.ts (`npm run manual:screenshots`).
+// Output: frontend/public/manuals/LEXIS-<name>-User-Manual.pdf, one for industry users and one for
+// each ministry role, served by the app for download. Uses marked for Markdown and the Playwright
+// Chromium the e2e tests already install. Screenshots come from e2e/manual.screenshots.spec.ts
+// (`npm run manual:screenshots`). `--check` stops before the PDFs: it runs the role, link and
+// table checks only and needs no browser.
 import { execSync } from 'node:child_process'
-import { mkdtempSync, readdirSync, readFileSync, writeFileSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, readdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
 import { pathToFileURL } from 'node:url'
@@ -15,20 +17,65 @@ import { chromium } from '@playwright/test'
 import { Marked } from 'marked'
 
 const MANUAL = path.resolve(import.meta.dirname, '..', '..', 'docs', 'manual')
+const OUT = path.resolve(import.meta.dirname, '..', 'public', 'manuals')
 const SYSTEM = 'Log Exemption Information System'
 
-const EDITIONS = [
+// One PDF each. A ministry manual holds only the chapters and lines marked for its role.
+const MANUALS = [
   {
     dir: 'industry',
     name: 'Industry User Manual',
     audience: 'For industry users who log in with Business BCeID',
   },
-  {
+  ...[
+    ['administrator', 'Administrator'],
+    ['application-approver', 'Application Approver'],
+    ['exemption-approver', 'Exemption Approver'],
+    ['read-only', 'Read Only'],
+  ].map(([role, roleName]) => ({
     dir: 'ministry',
-    name: 'Ministry User Manual',
-    audience: 'For ministry staff who log in with IDIR',
-  },
+    role,
+    name: `${roleName} User Manual`,
+    audience: `For ministry staff with the ${roleName} role, who log in with IDIR`,
+  })),
 ]
+const ROLES = MANUALS.flatMap((manual) => manual.role ?? [])
+
+/**
+ * Keeps the lines written for one role. `<!-- roles: a, b -->` on a line of its own opens a block
+ * that `<!-- /roles -->` closes; at the end of a line it applies to that line only.
+ */
+const linesForRole = (markdown, role, file) => {
+  const kept = []
+  let blockRoles = null
+  markdown.split('\n').forEach((line, index) => {
+    const fail = (problem) => {
+      throw new Error(`${file}:${index + 1}: ${problem}`)
+    }
+    const rolesIn = (list) => {
+      const roles = list.split(',').map((name) => name.trim())
+      const unknown = roles.find((name) => !ROLES.includes(name))
+      if (unknown) fail(`unknown role "${unknown}"`)
+      return roles
+    }
+    if (line.trim() === '<!-- /roles -->') {
+      if (!blockRoles) fail('no roles block is open')
+      blockRoles = null
+      return
+    }
+    const marker = line.match(/<!-- roles: ([^>]*?) -->\s*$/)
+    if (marker && line.trim() === marker[0].trim()) {
+      if (blockRoles) fail('a roles block is already open')
+      blockRoles = rolesIn(marker[1])
+      return
+    }
+    if (blockRoles && !blockRoles.includes(role)) return
+    if (!marker) kept.push(line)
+    else if (rolesIn(marker[1]).includes(role)) kept.push(line.slice(0, marker.index).trimEnd())
+  })
+  if (blockRoles) throw new Error(`${file}: a roles block is never closed`)
+  return kept.join('\n')
+}
 
 const slug = (text) =>
   text
@@ -110,12 +157,33 @@ const css = `
   figcaption { font-size: 8.8pt; color: var(--muted); margin-top: 2mm; font-style: italic; }
 `
 
-/** One edition's chapters as a single HTML document. */
-const buildHtml = (edition) => {
-  const dir = path.join(MANUAL, edition.dir)
-  const chapters = readdirSync(dir)
+/** One manual's chapters as a single HTML document. */
+const buildHtml = (manual) => {
+  const dir = path.join(MANUAL, manual.dir)
+  const read = (file) => {
+    const markdown = readFileSync(path.join(dir, file), 'utf-8')
+    return manual.role ? linesForRole(markdown, manual.role, `${manual.dir}/${file}`) : markdown
+  }
+  const chapterFiles = readdirSync(dir)
     .filter((f) => /^\d\d-.+\.md$/.test(f))
     .sort()
+  // A chapter whose title is not kept for this role is left out; the rest are numbered in order.
+  const chapters = chapterFiles
+    .map((file) => ({ file, id: path.basename(file, '.md'), markdown: read(file) }))
+    .filter((chapter) => /^# /m.test(chapter.markdown))
+    .map((chapter) => {
+      if (/^\|[-| :]+\|\n(?!\|)/m.test(chapter.markdown)) {
+        throw new Error(`${manual.name}: a table in ${chapter.file} has no rows left`)
+      }
+      return chapter
+    })
+    .map((chapter, index) => ({
+      ...chapter,
+      markdown: chapter.markdown.replace(/^# (\d+\.\s*)?/m, `# ${index + 1}. `),
+    }))
+
+  const headingIds = new Set()
+  const linkedIds = []
 
   /** Markdown → HTML for one chapter; heading ids and links are made unique across the book. */
   const render = (markdown, chapterId) => {
@@ -125,17 +193,24 @@ const buildHtml = (edition) => {
         heading({ tokens, depth, text }) {
           const inner = this.parser.parseInline(tokens)
           const id = depth === 1 ? chapterId : `${chapterId}--${slug(text)}`
+          headingIds.add(id)
           return `<h${depth} id="${id}">${inner}</h${depth}>\n`
         },
         link({ href, tokens }) {
           const inner = this.parser.parseInline(tokens)
           if (/^https?:|^mailto:/.test(href)) return `<a href="${href}">${inner}</a>`
           const [file, anchor] = href.split('#')
-          if (!file) return `<a href="#${chapterId}--${anchor}">${inner}</a>`
-          // Only this edition's chapters are in the book.
-          if (!chapters.includes(file)) return inner
-          const target = path.basename(file, '.md')
-          return `<a href="#${anchor ? `${target}--${anchor}` : target}">${inner}</a>`
+          if (file && !chapters.some((chapter) => chapter.file === file)) {
+            if (chapterFiles.includes(file)) {
+              throw new Error(`${manual.name}: ${chapterId} links to ${file}, which it leaves out`)
+            }
+            // Developer docs aren't in the book.
+            return inner
+          }
+          const target = file ? path.basename(file, '.md') : chapterId
+          const id = anchor ? `${target}--${anchor}` : target
+          linkedIds.push({ id, chapterId })
+          return `<a href="#${id}">${inner}</a>`
         },
         image({ href, text }) {
           const caption = escapeHtml(text)
@@ -147,7 +222,7 @@ const buildHtml = (edition) => {
   }
 
   /** The README's opening and its "How to read this manual" section are the introduction. */
-  const readme = readFileSync(path.join(dir, 'README.md'), 'utf-8')
+  const readme = read('README.md')
   const opening = readme
     .split('\n## Contents')[0]
     .replace(/^# .*\n/, '')
@@ -159,29 +234,32 @@ const buildHtml = (edition) => {
   )
 
   const body = chapters
-    .map((f) => {
-      const id = path.basename(f, '.md')
-      return `<section class="chapter">${render(readFileSync(path.join(dir, f), 'utf-8'), id)}</section>`
-    })
+    .map((chapter) => `<section class="chapter">${render(chapter.markdown, chapter.id)}</section>`)
     .join('\n')
+
+  const deadLink = linkedIds.find((link) => !headingIds.has(link.id))
+  if (deadLink) {
+    throw new Error(
+      `${manual.name}: ${deadLink.chapterId} links to #${deadLink.id}, which is not in it`,
+    )
+  }
 
   const toc = chapters
-    .map((f) => {
-      const id = path.basename(f, '.md')
-      const title = readFileSync(path.join(dir, f), 'utf-8').match(/^# (.+)$/m)?.[1] ?? id
-      const [, num, name] = title.match(/^(\d+)\.\s*(.*)$/) ?? [undefined, '', title]
-      return `<li><a href="#${id}"><span class="toc-num">${num}</span><span class="toc-name">${escapeHtml(name)}</span></a></li>`
+    .map((chapter) => {
+      const title = chapter.markdown.match(/^# (.+)$/m)[1]
+      const [, num, name] = title.match(/^(\d+)\.\s*(.*)$/)
+      return `<li><a href="#${chapter.id}"><span class="toc-num">${num}</span><span class="toc-name">${escapeHtml(name)}</span></a></li>`
     })
     .join('\n')
 
-  return `<!doctype html><html lang="en"><head><meta charset="utf-8"><title>LEXIS ${edition.name}</title><style>${css}</style></head><body>
+  return `<!doctype html><html lang="en"><head><meta charset="utf-8"><title>LEXIS ${manual.name}</title><style>${css}</style></head><body>
 <section class="cover"><div class="inner">
   <div class="kicker">Ministry of Forests</div>
   <h1>${SYSTEM}</h1>
-  <div class="sub">${edition.name}</div>
+  <div class="sub">${manual.name}</div>
   <div class="bar"></div>
   <div class="meta">${date}${revision ? `<br>Revision ${revision}` : ''}</div>
-</div><div class="foot">${edition.audience}</div></section>
+</div><div class="foot">${manual.audience}</div></section>
 <section class="toc"><h1>Contents</h1><ol>${toc}</ol></section>
 <section class="intro">${intro}</section>
 ${body}
@@ -189,16 +267,22 @@ ${body}
 }
 
 const temp = mkdtempSync(path.join(tmpdir(), 'lexis-manual-'))
-const pages = EDITIONS.map((edition) => {
-  const htmlPath = path.join(temp, `${edition.dir}.html`)
-  writeFileSync(htmlPath, buildHtml(edition))
-  return { edition, htmlPath }
+const pages = MANUALS.map((manual) => {
+  const fileName = `LEXIS-${manual.name.replaceAll(' ', '-')}`
+  const htmlPath = path.join(temp, `${fileName}.html`)
+  writeFileSync(htmlPath, buildHtml(manual))
+  return { manual, htmlPath, out: path.join(OUT, `${fileName}.pdf`) }
 })
 
+if (process.argv.includes('--check')) {
+  console.log(`Checked ${pages.length} manuals: ${temp}`)
+  process.exit(0)
+}
+
+mkdirSync(OUT, { recursive: true })
 const browser = await chromium.launch()
 try {
-  for (const { edition, htmlPath } of pages) {
-    const out = path.join(MANUAL, `LEXIS-${edition.name.replaceAll(' ', '-')}.pdf`)
+  for (const { manual, htmlPath, out } of pages) {
     const page = await browser.newPage()
     await page.goto(pathToFileURL(htmlPath).href, { waitUntil: 'load' })
     await page.pdf({
@@ -209,7 +293,7 @@ try {
       displayHeaderFooter: true,
       headerTemplate: '<span></span>',
       footerTemplate: `<div style="width:100%;font-family:Arial,sans-serif;font-size:7.5pt;color:#5b6370;padding:0 18mm;display:flex;justify-content:space-between">
-      <span>${SYSTEM} — ${edition.name}</span><span><span class="pageNumber"></span> / <span class="totalPages"></span></span></div>`,
+      <span>${SYSTEM} — ${manual.name}</span><span><span class="pageNumber"></span> / <span class="totalPages"></span></span></div>`,
     })
     await page.close()
     console.log(`Wrote ${path.relative(process.cwd(), out)}`)

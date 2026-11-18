@@ -27,7 +27,8 @@
     "e2e:ui": "playwright test --project=chromium --ui",
     "e2e:report": "playwright show-report",
     "manual:screenshots": "playwright test --config=playwright.manual.config.ts --project=chromium",
-    "manual:pdf": "node scripts/build-manual-pdf.mjs"
+    "manual:pdf": "node scripts/build-manual-pdf.mjs",
+    "manual:check": "node scripts/build-manual-pdf.mjs --check"
   },
   "dependencies": {
     "@carbon/ibm-products": "2.90.0",

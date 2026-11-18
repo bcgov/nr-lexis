@@ -1,6 +1,4 @@
-# 7. Reports
-
-*Read Only, Application Approver and Administrator.*
+# 7. Reports <!-- roles: administrator, application-approver, read-only -->
 
 Each report is a page of options and a **Generate report** button. There is
 no on-screen preview: the report downloads as a file.
@@ -32,8 +30,10 @@ no on-screen preview: the report downloads as a file.
 **Clear all** empties the options. If nothing matches, LEXIS says **No
 report data matched the selected criteria** and no file is produced.
 
-> **Regional staff:** the **Region** list holds your regions only. Leave it
-> empty to report on all of your regions.
+<!-- roles: application-approver, read-only -->
+> **Regions:** the **Region** list holds your regions only. Leave it empty
+> to report on all of your regions.
+<!-- /roles -->
 
 ### Advertising list
 

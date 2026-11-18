@@ -1,4 +1,4 @@
-# 3. Offers
+# 3. Offers <!-- roles: administrator, application-approver, read-only -->
 
 Companies offer to buy timber advertised on the Advertising List. Industry
 users place and withdraw their own offers. Staff enter offers for companies
@@ -7,16 +7,15 @@ decision, and withdraw offers for clients after the client deadline.
 
 | Role | Can |
 |---|---|
-| Application Approver, Administrator | Find, open, create and change offers. An Application Approver changes offers only on applications in their regions. |
-| Read Only | Find and open offers. |
-| Exemption Approver | No access to offers. |
+| Application Approver, Administrator | Find, open, create and change offers. An Application Approver changes offers only on applications in their regions. | <!-- roles: administrator, application-approver -->
+| Read Only | Find and open offers. | <!-- roles: read-only -->
 
 ## Screens
 
-| Menu item | Use it to | Who |
-|---|---|---|
-| **Provincial › Create offer** | Enter an offer for a company. | Application Approver, Administrator |
-| **Provincial › Offer search** | Find offers by application, package, region, list date, withdrawn date or client. | Application Approver, Read Only, Administrator |
+| Menu item | Use it to |
+|---|---|
+| **Provincial › Create offer** | Enter an offer for a company. | <!-- roles: administrator, application-approver -->
+| **Provincial › Offer search** | Find offers by application, package, region, list date, withdrawn date or client. |
 
 ## Common tasks
 
@@ -32,6 +31,12 @@ decision, and withdraw offers for clients after the client deadline.
 An offer has no status of its own. A filled **Offer withdrawn date** means it
 was withdrawn. The decision is in the record's **Approval** section.
 
+<!-- roles: read-only -->
+The **Approval** section shows you the three Yes/No answers: **Fair market
+value**, **Valid offer** and **Offer approved**.
+<!-- /roles -->
+
+<!-- roles: administrator, application-approver -->
 ### Enter an offer for a company
 
 1. **Provincial › Create offer**.
@@ -87,3 +92,4 @@ offer is saved.
 
 If someone else saved the offer after you opened it, LEXIS tells you your
 changes were not saved. Select **Refresh** and make your change again.
+<!-- /roles -->

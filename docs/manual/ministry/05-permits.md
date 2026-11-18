@@ -1,4 +1,4 @@
-# 5. Permits
+# 5. Permits <!-- roles: administrator, application-approver, read-only -->
 
 A provincial permit allows timber under an Active exemption to be shipped.
 Industry users request permits and send them for review. Staff check the
@@ -7,9 +7,8 @@ notify the applicant. Completing a permit creates its invoice.
 
 | Role | Can |
 |---|---|
-| Application Approver, Administrator | Start, change, complete, cancel and reactivate permits, override fees, enter receipt numbers. An Application Approver works in their regions. |
-| Read Only | Find and open permits in their regions, open documents and print completed permits. |
-| Exemption Approver | No access to permits. |
+| Application Approver, Administrator | Start, change, complete, cancel and reactivate permits, override fees, enter receipt numbers. An Application Approver works in their regions. | <!-- roles: administrator, application-approver -->
+| Read Only | Find and open permits in their regions, open documents and print completed permits. | <!-- roles: read-only -->
 
 ## Permit statuses
 
@@ -26,7 +25,7 @@ notify the applicant. Completing a permit creates its invoice.
 | Menu item | Use it to |
 |---|---|
 | **Provincial › Permit search** | Find permits by application, package or permit number, region, issued date, status, owner client or agent client. |
-| **Provincial › Exemption search** | Open the exemption to start a new permit. |
+| **Provincial › Exemption search** | Open the exemption to start a new permit. | <!-- roles: administrator, application-approver -->
 
 A permit record has these tabs: **Permit**, **Applicant**, **Shipping**,
 **Scale**, **Documents**, **Fees** and, once the permit has invoice
@@ -34,6 +33,7 @@ history, **GBMS**.
 
 ## Common tasks
 
+<!-- roles: administrator, application-approver -->
 ### Find permit requests waiting for review
 
 When a client selects **Email review request**, LEXIS emails your regional
@@ -80,8 +80,24 @@ You can correct the client's entries while the permit is **Active**.
 > **Shipping** tab has **Edit shipping**, and the receipt number is changed
 > with **Edit permit** on the **Fees** tab. Where the steps below say **Edit
 > permit details** and **Save changes**, use those buttons instead.
+<!-- /roles -->
 
+<!-- roles: read-only -->
+### Find a permit
+
+**Provincial › Permit search** finds permits by application, package or
+permit number, region, issued date, status, owner client or agent client.
+Select the number in the first column to open the permit. Active permits
+show **(Pending)** beside the number.
+<!-- /roles -->
+
+<!-- roles: administrator, application-approver -->
 ### Check and override the fee
+<!-- /roles -->
+
+<!-- roles: read-only -->
+### Read the fees
+<!-- /roles -->
 
 ![A permit's Fees tab](images/05-permit-fees.png)
 
@@ -99,8 +115,13 @@ In outline, LEXIS works out the fee for each scale line:
 
 A permit with a Canadian destination shows no fee amount. The average
 market values, multiplication factors and fee in lieu percentage are set by
-an Administrator. See [Administration](08-administration.md).
+an Administrator.
 
+<!-- roles: administrator -->
+See [Administration](08-administration.md).
+<!-- /roles -->
+
+<!-- roles: administrator, application-approver -->
 To replace the calculated total, select **Edit fee override**, set
 **Override fees?** to **Yes**, and enter the **Override fee (CAD)** and an
 **Override comment**. The override can be changed only while the permit is
@@ -108,7 +129,9 @@ To replace the calculated total, select **Edit fee override**, set
 
 For an interior permit, select **Edit receipt number** to record the
 prepaid fee receipt.
+<!-- /roles -->
 
+<!-- roles: administrator, application-approver -->
 ### Complete a permit
 
 1. On the **Permit** tab, select **Edit permit details**.
@@ -149,6 +172,7 @@ Change the **Status** in **Edit permit details**.
 - To replace an issued permit, set it back to **Active**, make the
   correction and complete it again. The new invoice replaces the earlier
   one.
+<!-- /roles -->
 
 ### Follow the invoices
 
@@ -165,6 +189,7 @@ Select **Print permit** at the top of a **Complete** permit. The PDF has
 the permit on the first page and the detailed summary by timber mark on the
 second.
 
+<!-- roles: administrator, application-approver -->
 ### What clients can change
 
 - A client can change an **Active** permit and send a new review request.
@@ -172,9 +197,20 @@ second.
   except the port of export, and print the permit again.
 - A client can't change the dates, the fee or the receipt number. A client
   can change the status only of a **Payment pending** permit.
+<!-- /roles -->
 
 ### Documents
 
+<!-- roles: administrator -->
 Add documents from the **Documents** tab. An Administrator can delete a
-document at any status. An Application Approver can delete one while the
+document at any status.
+<!-- /roles -->
+
+<!-- roles: application-approver -->
+Add documents from the **Documents** tab. You can delete one while the
 permit is **Active** or **Expired**.
+<!-- /roles -->
+
+<!-- roles: read-only -->
+Open and download documents from the **Documents** tab.
+<!-- /roles -->

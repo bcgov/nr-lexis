@@ -1,16 +1,22 @@
-# 6. Federal applications
+# 6. Federal applications <!-- roles: administrator, application-approver, read-only -->
 
+<!-- roles: administrator, application-approver -->
 Federal applications are not entered in LEXIS. The federal export system
 (NEXCOL) submits them, and they appear in LEXIS as records you can read,
 remark on and, in a few cases, reject or withdraw. They are approved for
 advertising from **Provincial › Application review**, together with
 provincial applications (see [Applications](02-applications.md)).
+<!-- /roles -->
+
+<!-- roles: read-only -->
+Federal applications are not entered in LEXIS. The federal export system
+(NEXCOL) submits them, and they appear in LEXIS as records you can read.
+<!-- /roles -->
 
 | Role | Can |
 |---|---|
-| Application Approver, Administrator | Find and open federal applications, add and edit remarks, and reject or withdraw an approved application through its list date. An Application Approver does this only in their regions. |
-| Read Only | Find and open federal applications in their regions and read the remarks. |
-| Exemption Approver | No access to federal applications. |
+| Application Approver, Administrator | Find and open federal applications, add and edit remarks, and reject or withdraw an approved application through its list date. An Application Approver does this only in their regions. | <!-- roles: administrator, application-approver -->
+| Read Only | Find and open federal applications in their regions and read the remarks. | <!-- roles: read-only -->
 
 ## Screens
 
@@ -45,9 +51,8 @@ Select the application number in the results. The record has these tabs:
 
 ![A federal application record](images/06-federal-application.png)
 
+<!-- roles: administrator, application-approver -->
 ### Add or change a remark
-
-*Application Approver and Administrator.*
 
 1. Open the **Remarks** tab.
 2. Select **Add remark**, or **Edit** beside an existing remark.
@@ -55,8 +60,6 @@ Select the application number in the results. The record has these tabs:
    **Update remark**.
 
 ### Reject or withdraw an approved application
-
-*Application Approver and Administrator.*
 
 **Withdraw** and **Reject** appear on the **Application** tab only while the
 application is **Approved** and today is on or before its **List date**.
@@ -74,3 +77,4 @@ Application review** instead.
 
 If someone else saved the application after you opened it, LEXIS tells you
 your change was not saved. Select **Refresh** and make your change again.
+<!-- /roles -->

@@ -1,6 +1,4 @@
-# 8. Administration
-
-*Administrator only.*
+# 8. Administration <!-- roles: administrator -->
 
 The **Admin** menu holds the values LEXIS uses to calculate the fee in lieu
 of manufacture on permits.

@@ -6,15 +6,15 @@ date. Permits are issued against it.
 | Type | How it is created | Starts as |
 |---|---|---|
 | **Ministerial** | From approved applications, in **Application search**. | **New**, until an Exemption Approver or Administrator approves it. |
-| **Order in Council** | On **Create exemption**, for a specific applicant. | **Active** |
-| **Blanket Order in Council** (Blanket OIC) | On **Create exemption**, for one or more regions. It has no applications. | **Active** |
+| **Order in Council** | On **Create exemption**, for a specific applicant. | **Active** | <!-- roles: administrator, application-approver, read-only -->
+| **Blanket Order in Council** (Blanket OIC) | On **Create exemption**, for one or more regions. It has no applications. | **Active** | <!-- roles: administrator, application-approver, read-only -->
 
 | Role | Can |
 |---|---|
-| Application Approver | Create exemptions, change their details, add and remove applications, add and delete documents, start permits. Can't approve a Ministerial exemption. |
-| Exemption Approver | Find, change and approve Ministerial exemptions in their regions. Sees no other exemption type and no **Permits** tab. |
-| Read Only | Find and open exemptions in their regions. |
-| Administrator | Everything, province-wide, including **Print approved exemption**. |
+| Application Approver | Create exemptions, change their details, add and remove applications, add and delete documents, start permits. Can't approve a Ministerial exemption. | <!-- roles: application-approver -->
+| Exemption Approver | Find, change and approve Ministerial exemptions in their regions. Sees no other exemption type and no **Permits** tab. | <!-- roles: exemption-approver -->
+| Read Only | Find and open exemptions in their regions. | <!-- roles: read-only -->
+| Administrator | Create, change and approve exemptions province-wide, start permits and use **Print approved exemption**. | <!-- roles: administrator -->
 
 ## Exemption statuses
 
@@ -27,14 +27,24 @@ date. Permits are issued against it.
 
 ## Screens
 
-| Menu item | Use it to | Who |
-|---|---|---|
-| **Provincial › Create exemption** | Create an Order in Council or Blanket OIC exemption. | Application Approver, Administrator |
-| **Provincial › Exemption search** | Find exemptions, and approve Ministerial ones. | All staff roles |
-| **Provincial › Application search** | Create a Ministerial exemption from approved applications. | Application Approver, Administrator |
+| Menu item | Use it to |
+|---|---|
+| **Provincial › Create exemption** | Create an Order in Council or Blanket OIC exemption. | <!-- roles: administrator, application-approver -->
+| **Provincial › Exemption search** | Find exemptions, and approve Ministerial ones. | <!-- roles: administrator, exemption-approver -->
+| **Provincial › Exemption search** | Find exemptions. | <!-- roles: application-approver, read-only -->
+| **Provincial › Application search** | Create a Ministerial exemption from approved applications. | <!-- roles: administrator, application-approver -->
 
 ## Common tasks
 
+### Find an exemption
+
+**Provincial › Exemption search** filters by **Application number**,
+**Package number**, **Exemption number**, **Region**, **Exemption type**,
+**Exemption status**, **Owner client** and **Agent client**. Select the
+number in the first column to open the exemption. Its **Applications** tab
+lists the applications it covers: select a number to open one.
+
+<!-- roles: administrator, application-approver -->
 ### Create a Ministerial exemption
 
 1. **Provincial › Application search**. Search for the approved
@@ -71,7 +81,7 @@ Applications, documents and permits are added after the exemption is saved.
 
 ### Add or remove an exemption's applications
 
-*Application Approver and Administrator. Not for Blanket OIC exemptions.*
+*Not for Blanket OIC exemptions.*
 
 1. Open the exemption's **Applications** tab and select **Add
    application**.
@@ -85,7 +95,9 @@ exemption over its approval volume.
 **Remove** is offered on an application that isn't on a permit. The
 application goes back to **Approved**. A regional Application Approver needs
 every region the exemption covers, and the application's region.
+<!-- /roles -->
 
+<!-- roles: administrator, application-approver, exemption-approver -->
 ### Change an exemption
 
 Select **Edit exemption details** on the **Exemption details** tab. You
@@ -107,15 +119,14 @@ approved. **Expired** is never chosen by hand.
 
 The fee rate is on the **Fees** tab under **Edit fee override**. For a
 Ministerial exemption it can change only while the exemption is New.
+<!-- /roles -->
 
+<!-- roles: administrator, exemption-approver -->
 ### Approve a Ministerial exemption
-
-*Exemption Approver and Administrator.*
 
 1. Open the **New** exemption and select **Approve exemption**. Or, in
    **Provincial › Exemption search**, tick one or more New Ministerial
-   exemptions and select **Approve**. For an Exemption Approver the search
-   starts on Ministerial exemptions with status New.
+   exemptions and select **Approve**.
 2. Tick **I certify that this exemption has been approved**.
 3. **Send approval email** starts ticked. The **Owner email**, and the
    **Agent email** when the applicant is an agent, come from their client
@@ -134,19 +145,25 @@ An exemption is not approved, and stays **New**, if it has no application,
 if its approval volume is less than the total requested volume, or if its
 expiry date is missing or already past. The reason is shown: correct it and
 approve again. You need every region the exemption covers.
+<!-- /roles -->
 
+<!-- roles: exemption-approver -->
+Your **Exemption search** starts on Ministerial exemptions with status New.
+<!-- /roles -->
+
+<!-- roles: administrator -->
 ### Print the approved exemption
-
-*Administrator.*
 
 Select **Print approved exemption** at the top of an **Active** exemption.
 The report downloads as a file.
+<!-- /roles -->
 
+<!-- roles: administrator, application-approver -->
 ### Start a permit
 
 On the **Permits** tab of an **Active** exemption, select **Apply for new
-permit**. See [Permits](05-permits.md). Exemption Approvers don't see this
-tab.
+permit**. See [Permits](05-permits.md).
+<!-- /roles -->
 
 ### Expiry
 

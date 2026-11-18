@@ -13,6 +13,10 @@ two editions, one per sign-in:
 | Industry | `docs/manual/industry/` | Business BCeID users: Provincial Submitter, Federal Read Only |
 | Ministry | `docs/manual/ministry/` | IDIR staff: Read Only, Application Approver, Exemption Approver, Administrator |
 
+The ministry edition is the source for four PDFs, one for each staff role.
+LEXIS offers each user the PDF for their role under **Support** in the menu
+(`userManualsForRoles` in `frontend/src/utils/support.ts`).
+
 Keep both in step with the code in the same change.
 
 ## 1. Decide whether the manuals need to change
@@ -86,6 +90,12 @@ that differ from legacy LEXIS are in `docs/intentional-legacy-divergences.md`.
 - Industry edition: only what a Business BCeID user can see and do. Staff-only
   steps appear there as what staff do next ("Export office staff review the
   request"), never as instructions.
+- Ministry edition: mark what each role gets with `roles` comments, as
+  described in `docs/manual/README.md`. A role's manual holds only what that
+  role can see and do, so mark a task, table row or sentence for the roles
+  that have it (`role-actions` in `application.yml`), and write a short
+  variant where a role sees the screen but can't change it. Write to "you",
+  not "Application Approvers can".
 
 ## 4. Screenshots and the PDFs
 
@@ -114,13 +124,17 @@ don't hand-edit images.
   DEV, a PR preview or a local full stack, and `E2E_IDIR_USER`,
   `E2E_IDIR_PASSWORD` and `E2E_IDIR_TOTP_SECRET` exported. Never write the
   credentials into a file, command or message.
+- The ministry images are captured as an Administrator and shared by the four
+  role manuals. Mark an image line for the roles that have that screen.
 - Rebuild the PDFs after any manual change: `cd frontend && npm run manual:pdf`
-  (writes `docs/manual/LEXIS-Industry-User-Manual.pdf` and
-  `LEXIS-Ministry-User-Manual.pdf`). Figures are at most 100 mm tall, so keep
+  (writes the industry manual and the four role manuals to
+  `frontend/public/manuals/`). Figures are at most 100 mm tall, so keep
   a capture to about one screen; frame a lower part of a page with `focus`.
-- Both commands launch Chromium. If it can't start where you are running (a
-  sandboxed session), say which images and PDFs are now out of date and give
-  the user the commands to run.
+- `npm run manual:check` runs the build's role, link and table checks without
+  a browser. Run it after every ministry edit.
+- The capture and the PDF build launch Chromium. If it can't start where you
+  are running (a sandboxed session), say which images and PDFs are now out of
+  date and give the user the commands to run.
 
 ## 5. Secrets and personal-data sweep
 
@@ -149,7 +163,8 @@ anything found; never just mention it.
      or the browser address bar.
 3. **Image metadata.** PNGs must carry no `tEXt`/`iTXt`/`zTXt`/`eXIf`
    chunks (Playwright writes none; anything else added them).
-4. **PDFs.** After `npm run manual:pdf`, check each PDF's decompressed streams
+4. **PDFs.** After `npm run manual:pdf`, check each PDF in
+   `frontend/public/manuals/`: its decompressed streams
    hold no `/Users/`, `file://` or local usernames, and that its Info has only
    Title, Creator, Producer and the build dates.
 
@@ -160,5 +175,7 @@ Report the sweep result in your summary (clean, or what you fixed).
 - Edit only the chapters affected. Keep the tables in step: a removed screen
   leaves no row behind.
 - If you added or renamed a chapter, update that edition's `README.md`.
+- A new role or a renamed manual also changes `userManualsForRoles` and the
+  `MANUALS` list in `frontend/scripts/build-manual-pdf.mjs`.
 - In your summary to the user, list which manual sections you changed, by
-  edition.
+  edition, and for the ministry edition which roles get them.

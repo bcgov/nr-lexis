@@ -7,18 +7,21 @@ for a client.
 
 | Role | Can |
 |---|---|
-| Application Approver, Administrator | Review, create, upload and change applications, add remarks. An Application Approver works in their regions. |
-| Read Only | Find and open applications in their regions and read the remarks. |
-| Exemption Approver | Open an application linked from an exemption. On a Ministerial exemption with volume remaining, edit or delete its packages and add or delete scale lines. No search, remarks or review. |
+| Application Approver, Administrator | Review, create, upload and change applications, add remarks. An Application Approver works in their regions. | <!-- roles: administrator, application-approver -->
+| Read Only | Find and open applications in their regions and read the remarks. | <!-- roles: read-only -->
+| Exemption Approver | Open an application linked from an exemption. On a Ministerial exemption with volume remaining, edit or delete its packages and add or delete scale lines. No search, remarks or review. | <!-- roles: exemption-approver -->
 
+<!-- roles: administrator, application-approver, read-only -->
 ## Screens
 
-| Menu item | Use it to | Who |
-|---|---|---|
-| **Provincial › Application review** | Approve or disapprove New and Pending applications for the Advertising List. | Application Approver, Administrator |
-| **Provincial › Create application** | Enter an application for a client. | Application Approver, Administrator |
-| **Provincial › Upload applications** | Create applications from files. | Application Approver, Administrator |
-| **Provincial › Application search** | Find provincial applications, and start an exemption from approved ones. | Application Approver, Read Only, Administrator |
+| Menu item | Use it to |
+|---|---|
+| **Provincial › Application review** | Approve or disapprove New and Pending applications for the Advertising List. | <!-- roles: administrator, application-approver -->
+| **Provincial › Create application** | Enter an application for a client. | <!-- roles: administrator, application-approver -->
+| **Provincial › Upload applications** | Create applications from files. | <!-- roles: administrator, application-approver -->
+| **Provincial › Application search** | Find provincial applications, and start an exemption from approved ones. | <!-- roles: administrator, application-approver -->
+| **Provincial › Application search** | Find provincial applications. | <!-- roles: read-only -->
+<!-- /roles -->
 
 ## Application statuses
 
@@ -33,6 +36,7 @@ for a client.
 
 ## Common tasks
 
+<!-- roles: administrator, application-approver -->
 ### Review applications for the Advertising List
 
 1. **Provincial › Application review**. The queue opens with every New and
@@ -140,18 +144,30 @@ details** or **Scale details** card.
 After the details lock, you can still change the agent on an application
 that is on a Ministerial or Blanket OIC permit, while each of its permits is
 Active or Payment pending.
+<!-- /roles -->
 
+<!-- roles: administrator, application-approver, exemption-approver -->
 ### Packages and the summary of scale
 
 Packages and their summary of scale are on the **Scale** tab.
+<!-- /roles -->
 
+<!-- roles: administrator, application-approver -->
 1. Select **Create package** and enter the **Package number** (unique, up
    to 20 characters), **Volume (m³)**, **Average length (m)** and **Average
    top diameter (rads)**. Select **Save package**.
 2. Under **Summary of scale**, select **Add scale** for each line: **Timber
    mark**, **Pieces**, **Species**, **Grade** and **Volume (m³)**. Select
    **Save scale**.
+<!-- /roles -->
 
+<!-- roles: exemption-approver -->
+Open the application from the exemption's **Applications** tab. While the
+exemption is Ministerial and has volume remaining, you can edit or delete a
+package and add or delete its scale lines.
+<!-- /roles -->
+
+<!-- roles: administrator, application-approver, exemption-approver -->
 | Rule | Detail |
 |---|---|
 | Package volume | The packages together can't be more than the application volume. |
@@ -159,27 +175,39 @@ Packages and their summary of scale are on the **Scale** tab.
 | Timber mark | Must be valid for the application's region. |
 | Scale lines | A package can hold one line for each combination of timber mark, species and grade. To correct a line, delete it and add it again. |
 
-- You can add and change packages and scale lines until the application is
-  on a completed permit.
+- Packages and scale lines can be changed until the application is on a
+  completed permit.
 - A package with a scale line on a completed permit can't be edited, and
   that scale line has no **Delete**.
 - **Delete package** is offered only for a package with no scale lines.
-- A package can be renamed while the application is New, or Approved within
-  six days of its list date.
 - The **Scale type** column shows **C** for coast scale and **I** for
   interior scale.
+<!-- /roles -->
 
+<!-- roles: administrator, application-approver -->
+A package can be renamed while the application is New, or Approved within
+six days of its list date.
+<!-- /roles -->
+
+<!-- roles: administrator, application-approver, read-only -->
 ### Remarks
 
-*Read Only can read remarks. Application Approver and Administrator add and
-edit them.*
-
 The **Remarks** tab lists each remark with its date, time and user. Only
-staff see it. Select **Add remark** while the application's details can be
-changed, or **Edit** on a saved remark at any time before the application
-expires. A remark holds up to 250 characters. Remarks entered when
-disapproving an application appear here too.
+staff see it. Remarks entered when disapproving an application appear here
+too.
+<!-- /roles -->
 
+<!-- roles: administrator, application-approver -->
+Select **Add remark** while the application's details can be changed, or
+**Edit** on a saved remark at any time before the application expires. A
+remark holds up to 250 characters.
+<!-- /roles -->
+
+<!-- roles: read-only -->
+The Read Only role can't add or edit remarks.
+<!-- /roles -->
+
+<!-- roles: administrator, application-approver, read-only -->
 ### Find applications
 
 **Provincial › Application search** filters by **Application number**,
@@ -187,12 +215,21 @@ disapproving an application appear here too.
 **Exemption type**, **Application status**, **Owner client**, **Agent
 client** and **Product type**. Federal applications are under **Federal ›
 Application search**.
+<!-- /roles -->
 
+<!-- roles: administrator, application-approver -->
 To start a Ministerial exemption, tick approved applications in the results
 and select **Create exemption**. See [Exemptions](04-exemptions.md).
+<!-- /roles -->
 
 ### Documents
 
-Add documents from the application's **Documents** tab. Application
-Approvers and Administrators can delete a document at any status. See
+<!-- roles: administrator, application-approver -->
+Add documents from the application's **Documents** tab. You can delete a
+document at any status. See [Getting started](01-getting-started.md).
+<!-- /roles -->
+
+<!-- roles: read-only, exemption-approver -->
+Open and download documents from the application's **Documents** tab. See
 [Getting started](01-getting-started.md).
+<!-- /roles -->
