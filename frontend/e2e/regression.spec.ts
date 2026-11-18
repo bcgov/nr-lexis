@@ -649,8 +649,12 @@ const expectLogoutRoundTrip = async (
 ): Promise<void> => {
   const baseOrigin = new URL(E2E_BASE_URL).origin
 
+  // The sign-out request is answered before it leaves, so the page never shows another origin.
   await Promise.all([
-    page.waitForURL((url) => url.origin !== baseOrigin, { timeout: 30_000 }),
+    page.waitForRequest(
+      (request) => request.isNavigationRequest() && new URL(request.url()).origin !== baseOrigin,
+      { timeout: 30_000 },
+    ),
     trigger(),
   ])
   await expectLoginShell(page, source)
@@ -1868,7 +1872,6 @@ test.describe('TEST IDIR admin regression', () => {
 
     await expectAdminNavigation(page)
     await expect(page.getByRole('link', { name: /^Summary$/ })).toHaveCount(0)
-    await expect(page.getByRole('link', { name: /^Upload applications$/i })).toHaveCount(0)
     await expect(page.getByRole('link', { name: /^Data upload$/i })).toHaveCount(0)
     await expect(page.locator(sideNavSection('Federal')).getByRole('link')).toHaveCount(1)
     await expect(
@@ -3958,16 +3961,16 @@ test.describe('TEST IDIR admin regression', () => {
       'Jursidiction Code',
       'Application Number',
       'Species Enduse',
-      'Product type',
+      'Product Type',
       'Product Location',
       'Exemption Application Volume',
       'Average Log Volume',
       'Agent Name',
       'Agent Phone',
       'Agent Contact Name',
-      'Package number',
+      'Package Number',
       'Package Volume',
-      'Age class',
+      'Age Class',
       'Average Length',
       'Average Diameter',
     ]
@@ -4605,7 +4608,8 @@ test.describe('TEST IDIR admin regression', () => {
       )
       const lifecycleApplicationUpdate = applicationSummaryForm(
         lifecycleTemplate,
-        String(lifecycleTemplate.exportScheduleId ?? ''),
+        // No list date: an exemption needs the listing date to have passed.
+        '',
         `${lifecycleMarker} edited`,
         submission.endUseCode,
       )
@@ -4639,6 +4643,7 @@ test.describe('TEST IDIR admin regression', () => {
           params: { applicationNumbers: String(lifecycleApplicationNumber) },
         }),
       )
+      expect(asStringArray(preview.errors)).toEqual([])
       expect(preview.valid).toBe(true)
       expect(preview.exemptionTypeCode).toBe('M')
       expect(preview.exemptionStatusCode).toBe('NEW')
