@@ -1,5 +1,8 @@
 package ca.bc.gov.mof.lexis.security;
 
+import static org.hamcrest.Matchers.contains;
+import static org.hamcrest.Matchers.containsInAnyOrder;
+import static org.hamcrest.Matchers.hasItems;
 import static org.springframework.security.test.web.servlet.setup.SecurityMockMvcConfigurers.springSecurity;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
@@ -194,36 +197,40 @@ class KeycloakBearerAuthenticationIntegrationTest {
   }
 
   @ParameterizedTest
-  @ValueSource(strings = {
-    "LEXIS_APPLICATION_APPROVER,LEXIS_EXEMPTION_APPROVER",
-    "LEXIS_APPLICATION_APPROVER_REGION,LEXIS_EXEMPTION_APPROVER_REGION",
-    "LEXIS_APPLICATION_APPROVER_REGION,LEXIS_EXEMPTION_APPROVER",
-    "LEXIS_APPLICATION_APPROVER,LEXIS_EXEMPTION_APPROVER_REGION",
-    "LEXIS_APPLICATION_APPROVER_REGION,LEXIS_EXEMPTION_APPROVER_REGION_REGION-SKEENA",
-    "LEXIS_APPLICATION_APPROVER_REGION_REGION-CARIBOO,LEXIS_EXEMPTION_APPROVER_REGION,LEXIS_ADMIN,LEXIS_READ_ONLY_REGION-SKEENA",
-    "LEXIS_APPLICATION_APPROVER_REGION-CARIBOO,LEXIS_EXEMPTION_APPROVER",
-    "LEXIS_APPLICATION_APPROVER,LEXIS_EXEMPTION_APPROVER_REGION_REGION-SKEENA",
-    "LEXIS_APPLICATION_APPROVER_REGION_REGION-CARIBOO,LEXIS_EXEMPTION_APPROVER_REGION_REGION-SKEENA,LEXIS_ADMIN,LEXIS_READ_ONLY_REGION-CARIBOO"
-  })
-  void signedConflictingApproverTokenHasOnlyNoAccessCapabilities(String roleCsv) throws Exception {
-    String token = bearer(b -> b.claim("client_roles", List.of(roleCsv.split(","))));
-    mvc.perform(get("/api/lexis/session/capabilities").accept(MediaType.APPLICATION_JSON).header("Authorization", token))
+  @ValueSource(strings = {"CARIBOO", "SKEENA"})
+  void signedDualApproverKeepsEachActionsRegionsAndCannotAdminister(String exemptionRegion)
+      throws Exception {
+    String token = bearer(b -> b.claim("client_roles", List.of(
+        "LEXIS_APPLICATION_APPROVER_REGION_REGION-CARIBOO",
+        "LEXIS_EXEMPTION_APPROVER_REGION_REGION-" + exemptionRegion)));
+    mvc.perform(get("/api/lexis/session/capabilities").accept(MediaType.APPLICATION_JSON)
+            .header("Authorization", token))
         .andExpect(status().isOk())
-        .andExpect(jsonPath("$.authenticated").value(true))
-        .andExpect(jsonPath("$.welcomeTarget").value("noAccess"))
-        .andExpect(jsonPath("$.roles").isEmpty())
-        .andExpect(jsonPath("$.grantedActions").isEmpty())
+        .andExpect(jsonPath("$.roles", containsInAnyOrder(
+            "LEXIS_APPLICATION_APPROVER", "LEXIS_EXEMPTION_APPROVER")))
+        .andExpect(jsonPath("$.welcomeTarget").value("exemptionApprover"))
+        .andExpect(jsonPath("$.actionRegions.createApplication", contains(1903)))
+        .andExpect(jsonPath("$.actionRegions.approveExemption",
+            contains((int) FamRegionGrant.Region.valueOf(exemptionRegion).orgUnitNumber())))
+        .andExpect(jsonPath("$.accessDeniedReason").doesNotExist());
+    mvc.perform(get("/api/lexis/session/welcome").header("Authorization", token))
+        .andExpect(status().isOk());
+    mvc.perform(get("/api/lexis/admin/notifications").header("Authorization", token))
+        .andExpect(status().isForbidden());
+  }
+
+  @Test
+  void explicitAdministratorRetainsProvinceWideAccessWithBothApproverGrants() throws Exception {
+    String token = bearer(b -> b.claim("client_roles", List.of("LEXIS_ADMIN",
+        "LEXIS_APPLICATION_APPROVER_REGION_REGION-CARIBOO",
+        "LEXIS_EXEMPTION_APPROVER_REGION_REGION-SKEENA")));
+    mvc.perform(get("/api/lexis/session/capabilities").accept(MediaType.APPLICATION_JSON)
+            .header("Authorization", token))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.welcomeTarget").value("administrator"))
         .andExpect(jsonPath("$.actionRegions").isEmpty())
-        .andExpect(jsonPath("$.accessDeniedReason").value("INCOMPATIBLE_APPROVER_ROLES"));
-    for (String path : List.of(
-        "/api/lexis/applicationSearch",
-        "/api/lexis/rpc/exemption-details/example",
-        "/api/lexis/session/preferences",
-        "/api/lexis/session/welcome",
-        "/api/lexis/admin/notifications",
-        "/machine")) {
-      mvc.perform(get(path).header("Authorization", token)).andExpect(status().isForbidden());
-    }
+        .andExpect(jsonPath("$.grantedActions", hasItems(
+            "createApplication", "approveExemption", "/lexisPolicyAdmin")));
   }
 
   @Test

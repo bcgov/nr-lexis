@@ -1279,7 +1279,7 @@ const ProvincialApplicationDetailsPage = () => {
     canUploadApplicationDocuments && !documentUploadUnavailableMessage
   const hasApplicationDocuments =
     documentLookupAvailability === 'available' && documentRows.length > 0
-  const canViewRemarks = canPerform('/applicationRemarks')
+  const canViewRemarks = canPerform('/applicationRemarks', applicationOrgUnit)
   const isApplicationExpired = isExpiredApplication(detail)
   const canUseApplicationMutations =
     canPerform('createApplication', applicationOrgUnit) &&

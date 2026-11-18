@@ -76,7 +76,7 @@ describe('Unauthorized page actions', () => {
     expect(screen.getByRole('heading', { name: 'Access not granted' })).toBeInTheDocument()
   })
 
-  it('directs an account with both approver roles to its administrator without naming them', () => {
+  it('retains contact guidance for a denial reported by an older backend', () => {
     mockedUseAuth.mockReturnValue(
       createTestAuthContext({
         capabilities: createTestCapabilities({

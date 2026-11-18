@@ -823,6 +823,25 @@ describe('Layout shell', () => {
     expect(screen.queryByRole('link', { name: /^Uploads$/i })).not.toBeInTheDocument()
   })
 
+  it('shows provincial workflows and hides Admin for a user with both approver roles', () => {
+    const grantedActions = ['/applicationsReview', '/applicationSearch', '/exemptionSearch']
+    mockedUseAuth.mockReturnValue(
+      createTestAuthContext({
+        capabilities: createTestCapabilities({
+          roles: ['LEXIS_APPLICATION_APPROVER', 'LEXIS_EXEMPTION_APPROVER'],
+          grantedActions,
+        }),
+        canPerform: (action: string) => grantedActions.includes(action),
+      }),
+    )
+
+    renderLayout('/provincial/exemption')
+
+    expect(screen.getByRole('link', { name: 'Exemption search' })).toBeVisible()
+    expect(screen.getByRole('link', { name: 'Application search' })).toBeVisible()
+    expect(screen.queryByRole('button', { name: 'Admin' })).not.toBeInTheDocument()
+  })
+
   it('shows federal search when federal read actions are granted', () => {
     mockedUseAuth.mockReturnValue(
       createTestAuthContext({

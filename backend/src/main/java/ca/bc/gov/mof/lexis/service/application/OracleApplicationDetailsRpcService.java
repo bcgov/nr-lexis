@@ -613,7 +613,8 @@ public class OracleApplicationDetailsRpcService implements ApplicationDetailsRpc
             hasCompletePermit,
             trimToNull(application.oicIndicator()),
             isMinisterialItemOverrideEligible(exemption),
-            permitsAllowAgentChange && isMinisterialOrBlanketOicExemption(exemption)));
+            permitsAllowAgentChange && isMinisterialOrBlanketOicExemption(exemption),
+            application.orgUnitNumber()));
   }
 
   private Optional<ExemptionDetailDto> findApplicationExemption(

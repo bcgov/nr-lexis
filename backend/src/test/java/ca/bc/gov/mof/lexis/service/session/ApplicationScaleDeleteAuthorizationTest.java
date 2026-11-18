@@ -28,6 +28,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.CsvSource;
 import org.junit.jupiter.params.provider.ValueSource;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
@@ -61,6 +62,8 @@ class ApplicationScaleDeleteAuthorizationTest {
       new LexisSessionService("LEXIS_PROVINCIAL_SUBMITTER");
   private final LexisAuthorizationService authorizationService =
       ProvincialRegionAuthorizationTest.configuredAuthorizationService(sessionService);
+  private final ApplicationEditPolicyService policy =
+      new ApplicationEditPolicyService(sessionService, authorizationService);
   private ProvincialAuthorizationService access;
   private ApplicationDetailsRpcController controller;
 
@@ -69,8 +72,6 @@ class ApplicationScaleDeleteAuthorizationTest {
     access = new ProvincialAuthorizationService(
         sessionService, authorizationService, applicationProvider, detailsProvider,
         null, permitProvider, null);
-    var policy = new ApplicationEditPolicyService(
-        sessionService, authorizationService);
     controller = new ApplicationDetailsRpcController(
         detailsProvider, null, null, sessionService, authorizationService, editLocks,
         access, policy, new ApplicationPermitOperationCoordinator(new PermitOperationMutex()));
@@ -84,10 +85,6 @@ class ApplicationScaleDeleteAuthorizationTest {
     lenient().when(details.findPermitNumberForScale("55")).thenReturn(Optional.of(PERMIT));
     lenient().when(details.getPermitNumbersForApplicationMutation(APPLICATION))
         .thenReturn(List.of(PERMIT));
-    lenient().when(details.getApplicationEditContext(APPLICATION))
-        .thenReturn(Optional.of(new ApplicationDetailsRpcService.ApplicationEditContext(
-            APPLICATION, "EXE", "P", "S", null, null,
-            false, false, false, "N", true, false)));
     lenient().when(editLocks.requireEditable(any(), any(), any()))
         .thenReturn(new ApplicationEditLockDto(false, true, null, null, null));
     regions(1909L, 1909L);
@@ -96,6 +93,29 @@ class ApplicationScaleDeleteAuthorizationTest {
   @AfterEach
   void clearSecurityContext() {
     SecurityContextHolder.clearContext();
+  }
+
+  @ParameterizedTest
+  @CsvSource({"1903,true,false", "1909,false,true", "1908,true,true", "1904,false,false",
+      ",false,false"})
+  void applicationEditsFollowTheApproverGrantsInTheRecordsRegion(
+      Long region, boolean applicationApprover, boolean exemptionApprover) {
+    var actor = authenticate("idir\\approver", AA_RCB, EA_RSC,
+        "LEXIS_APPLICATION_APPROVER_REGION_REGION-SKEENA",
+        "LEXIS_EXEMPTION_APPROVER_REGION_REGION-SKEENA");
+    when(details.getApplicationEditContext(APPLICATION))
+        .thenReturn(Optional.of(new ApplicationDetailsRpcService.ApplicationEditContext(
+            APPLICATION, "NEW", "P", "S", null, null,
+            false, false, false, "N", true, true, region)));
+
+    var edits = policy.resolve(actor, details, APPLICATION);
+    assertThat(edits.canEditApplicationDetails()).isEqualTo(applicationApprover);
+    assertThat(edits.canAddPackages()).isEqualTo(applicationApprover);
+    assertThat(edits.canUpdatePackageNumber()).isEqualTo(applicationApprover);
+    assertThat(edits.canChangeAgent()).isEqualTo(applicationApprover);
+    assertThat(edits.canEditPackages()).isEqualTo(applicationApprover || exemptionApprover);
+    assertThat(edits.canDeleteScales()).isEqualTo(applicationApprover || exemptionApprover);
+    assertThat(edits.exemptionApprover()).isEqualTo(exemptionApprover);
   }
 
   @ParameterizedTest
@@ -115,12 +135,9 @@ class ApplicationScaleDeleteAuthorizationTest {
     assertThat(access.canAccessPermit(actor, PERMIT)).isFalse();
   }
 
-  @ParameterizedTest
-  @ValueSource(booleans = {true, false})
-  void readOnlyRegionalGrantCannotLendLinkedOrUnassignedDeletePermission(boolean linked) {
+  @Test
+  void readOnlyRegionalGrantCannotAuthorizeItemDeletion() {
     regions(1903L, 1903L);
-    when(details.findPermitNumberForScale("55"))
-        .thenReturn(linked ? Optional.of(PERMIT) : Optional.empty());
     var actor = authenticate("idir\\approver", EA_RSC, RO_RCB);
     assertThat(access.canAccessApplication(actor, APPLICATION)).isTrue();
 
@@ -230,7 +247,7 @@ class ApplicationScaleDeleteAuthorizationTest {
     when(details.getApplicationEditContext(APPLICATION))
         .thenReturn(Optional.of(new ApplicationDetailsRpcService.ApplicationEditContext(
             APPLICATION, "NEW", "P", "H", null, null,
-            false, false, false, "N", false, false)));
+            false, false, false, "N", false, false, 1909L)));
     var actor = authenticate("idir\\approver", AA_RCB, EA_RSC);
     assertThat(access.canAccessApplication(actor, APPLICATION)).isTrue();
 
@@ -245,7 +262,7 @@ class ApplicationScaleDeleteAuthorizationTest {
     when(details.getApplicationEditContext(APPLICATION))
         .thenReturn(Optional.of(new ApplicationDetailsRpcService.ApplicationEditContext(
             APPLICATION, "NEW", "P", "H", null, null,
-            false, false, false, "N", false, false)));
+            false, false, false, "N", false, false, 1909L)));
     var actor = authenticate("idir\\approver", AA_RCB, EA_RSC);
 
     assertThatThrownBy(() -> access.requireApplicationScaleDeleteAccess(
@@ -345,6 +362,10 @@ class ApplicationScaleDeleteAuthorizationTest {
   }
 
   private void regions(long applicationRegion, long permitRegion) {
+    lenient().when(details.getApplicationEditContext(APPLICATION))
+        .thenReturn(Optional.of(new ApplicationDetailsRpcService.ApplicationEditContext(
+            APPLICATION, "EXE", "P", "S", null, null,
+            false, false, false, "N", true, false, applicationRegion)));
     lenient().when(applicationService.findAccessByApplicationNumber(APPLICATION))
         .thenReturn(Optional.of(new ApplicationAccessContextDto(
             APPLICATION, "P", applicationRegion, "00011111", "00022222")));
