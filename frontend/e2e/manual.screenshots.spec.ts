@@ -466,7 +466,9 @@ test.describe('signed in: ministry edition', () => {
     })
     await expect(pageTitle(page)).toBeVisible({ timeout: 30_000 })
     // Never save the no-access page under a screen's name.
-    await expect(pageTitle(page)).not.toHaveText(/^(Unauthorized|Page not found)$/)
+    await expect(pageTitle(page)).not.toHaveText(
+      /^(Access not granted|You don't have access to view this page|Page not found)$/,
+    )
     await settle(page, { edition: 'ministry', file: route }, issues)
   }
 

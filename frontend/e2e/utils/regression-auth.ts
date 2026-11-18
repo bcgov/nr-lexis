@@ -595,6 +595,12 @@ const isShown = (locator: Locator): Promise<boolean> =>
     .isVisible()
     .catch(() => false)
 
+/** Playwright's own fill error carries the typed value in its call log. */
+const fillWithoutLoggingValue = (input: Locator, value: string, fieldName: string): Promise<void> =>
+  input.fill(value).catch(() => {
+    throw new Error(`IDIR login could not fill the ${fieldName} field.`)
+  })
+
 const currentHeading = async (page: Page): Promise<string> => {
   const [heading = ''] = await page
     .getByRole('heading')
@@ -720,10 +726,10 @@ const fillCredentialScreen = async (
   submittedScreens.add(screenKey)
 
   if (usernameInput) {
-    await usernameInput.fill(username)
+    await fillWithoutLoggingValue(usernameInput, username, 'user name')
   }
   if (passwordInput) {
-    await passwordInput.fill(password)
+    await fillWithoutLoggingValue(passwordInput, password, 'password')
   }
 
   const submitButton = page
@@ -763,7 +769,7 @@ const submitSecondFactorCode = async (page: Page): Promise<boolean> => {
   if (!totpSecret) {
     throw new Error('IDIR login asked for an authenticator code. Set E2E_IDIR_TOTP_SECRET.')
   }
-  await codeInput.fill(await freshTotp(totpSecret))
+  await fillWithoutLoggingValue(codeInput, await freshTotp(totpSecret), 'authenticator code')
   await codeInput.press('Enter')
   return true
 }

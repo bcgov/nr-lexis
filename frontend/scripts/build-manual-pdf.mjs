@@ -33,8 +33,6 @@ const EDITIONS = [
 const slug = (text) =>
   text
     .toLowerCase()
-    .replace(/<[^>]+>/g, '')
-    .replace(/&[a-z]+;|&#\d+;/g, '')
     .replace(/[^\p{L}\p{N}\s-]/gu, '')
     .trim()
     .replace(/\s+/g, '-')

@@ -33,12 +33,13 @@ export const generateTotp = (secret: string, now: number = Date.now()): string =
   return code.toString().padStart(DIGITS, '0')
 }
 
-let lastIssuedStep = -1
+const stepMs = STEP_SECONDS * 1000
+const currentStep = () => Math.floor(Date.now() / stepMs)
+// A worker that failed just before this one started may have used the current code.
+let lastIssuedStep = currentStep()
 
 /** Waits for the next code when this one was issued already or is about to expire. */
 export const freshTotp = async (secret: string, minRemainingMs = 5_000): Promise<string> => {
-  const stepMs = STEP_SECONDS * 1000
-  const currentStep = () => Math.floor(Date.now() / stepMs)
   const remainingMs = stepMs - (Date.now() % stepMs)
   // The identity provider refuses a code it has already accepted.
   if (remainingMs < minRemainingMs || currentStep() === lastIssuedStep) {

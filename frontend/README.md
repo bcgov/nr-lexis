@@ -87,10 +87,10 @@ npm run test:cov
 npm run e2e
 ```
 
-The GitHub `Regression` workflow is manual-only while the FAM team fixes the TEST IDIR regression
-account for Keycloak. It loads credentials from GitHub `test` environment secrets and runs Playwright
-with the safe regression reporter. Local runs require `E2E_IDIR_USER` and `E2E_IDIR_PASSWORD` to be
-exported in your shell. See [the restoration steps](e2e/README.md#ci-setup) before resuming weekly runs.
+The GitHub `Regression` workflow runs weekly and by manual dispatch. It loads credentials from
+GitHub `test` environment secrets and runs Playwright with the safe regression reporter. Local runs
+require `E2E_IDIR_USER`, `E2E_IDIR_PASSWORD` and `E2E_IDIR_TOTP_SECRET` to be exported in your
+shell. See [CI setup](e2e/README.md#ci-setup).
 
 ### Testing Libraries
 
