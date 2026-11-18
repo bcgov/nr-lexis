@@ -23,7 +23,7 @@ const base32Decode = (input: string): Buffer => {
   return Buffer.from(bytes)
 }
 
-export const generateTotp = (secret: string, now: number = Date.now()): string => {
+const generateTotp = (secret: string, now: number = Date.now()): string => {
   const counter = Buffer.alloc(8)
   counter.writeBigUInt64BE(BigInt(Math.floor(now / 1000 / STEP_SECONDS)))
 

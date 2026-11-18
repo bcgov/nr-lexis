@@ -68,8 +68,8 @@ const FEDERAL_READ_ONLY_ACTIONS = [
 ]
 
 export const OWN_CLIENT = '00012345'
-export const SECOND_CLIENT = '00067890'
-export const THIRD_CLIENT = '00054321'
+const SECOND_CLIENT = '00067890'
+const THIRD_CLIENT = '00054321'
 
 const capabilitiesFor = (scenario: ManualScenario): LexisSessionCapabilities => {
   const base = {
@@ -250,7 +250,7 @@ const clientData = (clientNumber: string) => {
 // ---------------------------------------------------------------------------
 // Records
 
-export const MAIN_APPLICATION = 48101
+const MAIN_APPLICATION = 48101
 export const NEW_APPLICATION = 48102
 export const ADVERTISED_APPLICATION = 48104
 export const MAIN_EXEMPTION = '26-9001'
