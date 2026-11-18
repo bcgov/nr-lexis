@@ -2905,7 +2905,7 @@ test.describe('TEST IDIR admin regression', () => {
     await expect(speciesSelect).toBeEnabled()
     await page.getByRole('option', { name: firstSpeciesLabel, exact: true }).click()
     await expect(speciesSelect).toHaveAccessibleName(/Total items selected: 0/)
-    await expect(itemsPanel.getByText('At least one species is required.')).toBeVisible()
+    await expect(itemsPanel.getByText('At least one species is required')).toBeVisible()
     await expect(page.getByRole('button', { name: /Create package/i })).toHaveCount(0)
 
     for (const section of ['Documents', 'Remarks', 'Offers', 'Review']) {
@@ -4606,13 +4606,17 @@ test.describe('TEST IDIR admin regression', () => {
         page,
         `/api/lexis/applications/${lifecycleApplicationNumber}`,
       )
-      const lifecycleApplicationUpdate = applicationSummaryForm(
-        lifecycleTemplate,
-        // No list date: an exemption needs the listing date to have passed.
-        '',
-        `${lifecycleMarker} edited`,
-        submission.endUseCode,
-      )
+      const lifecycleApplicationUpdate = {
+        ...applicationSummaryForm(
+          lifecycleTemplate,
+          // No list date: an exemption needs the listing date to have passed.
+          '',
+          `${lifecycleMarker} edited`,
+          submission.endUseCode,
+        ),
+        // Only a summary save clears the list date; a full save keeps the stored one.
+        saveSource: 'summary-items',
+      }
       const updatedLifecycleApplication = await readJsonResponse<ApplicationPersistenceResponse>(
         await postWithCsrf(page, '/api/lexis/rpc/application-details/application-summary', {
           headers: versionHeaders(lifecycleApplication.version),
