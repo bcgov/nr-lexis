@@ -154,8 +154,7 @@ contract and [gateway/README.md](gateway/README.md) for gateway responsibilities
 
 ## CI regression
 
-The weekly `Regression` GitHub Actions trigger is paused while the FAM team fixes the TEST IDIR
-regression account for Keycloak. Manual dispatch remains available to verify recovery. It reads
+The `Regression` GitHub Actions workflow runs weekly against TEST and by manual dispatch. It reads
 TEST IDIR credentials from GitHub `test` environment secrets, creates its own lifecycle records and
 resolves external reference keys at runtime. Playwright uses a reporter that suppresses sensitive
 output. Business BCeID browser regression is intentionally not scheduled because repeated automated

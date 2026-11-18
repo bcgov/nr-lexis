@@ -1,9 +1,8 @@
 name: Regression
 
 on:
-  # Manual dispatch only until a TEST IDIR regression account signs in through modern FAM
-  # (Keycloak). Keep the regression specs current meanwhile. To resume the weekly run, complete a
-  # successful manual run, then restore the schedule; see frontend/e2e/README.md.
+  schedule:
+    - cron: "0 10 * * 3" # Wednesdays at 10:00 UTC; 3 AM Pacific during daylight time.
   workflow_dispatch:
 
 concurrency:
@@ -56,8 +55,9 @@ jobs:
         env:
           E2E_IDIR_USER: ${{ secrets.E2E_IDIR_USER }}
           E2E_IDIR_PASSWORD: ${{ secrets.E2E_IDIR_PASSWORD }}
+          E2E_IDIR_TOTP_SECRET: ${{ secrets.E2E_IDIR_TOTP_SECRET }}
         run: |
-          for required_name in E2E_IDIR_USER E2E_IDIR_PASSWORD; do
+          for required_name in E2E_IDIR_USER E2E_IDIR_PASSWORD E2E_IDIR_TOTP_SECRET; do
             if [[ -z "${!required_name}" ]]; then
               echo "::error::${required_name} test environment secret is required."
               exit 1

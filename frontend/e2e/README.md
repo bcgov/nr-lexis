@@ -32,16 +32,12 @@ regression coverage uses a separate TEST-only Playwright config.
 
 ## CI setup
 
-- The `Regression` workflow runs only by manual dispatch until there is a TEST IDIR regression
-  account that signs in through modern FAM (Keycloak). Keep the regression specs up to date with
-  every change meanwhile, so the suite can run as soon as that account works. It runs on the
-  default branch and reads TEST credentials from GitHub `test` environment secrets before running
-  Playwright; pushing a feature branch does not run this gate.
-- To resume weekly regression, confirm the account can sign in through modern FAM (Keycloak) and has
-  its required TEST role, then complete a successful manual `Regression` run. Restore the
-  `schedule` trigger in `.github/workflows/regression.yml` with cron `0 10 * * 3` (Wednesdays at
-  10:00 UTC; 3 AM Pacific during daylight time). Keep existing credential validation and failure
-  reporting. PR/merge Basic E2E and scheduled security scans continue during the pause.
+- The `Regression` workflow runs weekly (Wednesdays at 10:00 UTC; 3 AM Pacific during daylight
+  time) and by manual dispatch. It runs on the default branch and reads TEST credentials from
+  GitHub `test` environment secrets before running Playwright; pushing a feature branch does not
+  run this gate. Keep the regression specs up to date with every change.
+- The regression account is an IDIR that signs in through modern FAM (Keycloak) and holds the LEXIS
+  Administrator role in TEST only.
 - Required `test` environment secrets:
   - `E2E_IDIR_USER`
   - `E2E_IDIR_PASSWORD`
