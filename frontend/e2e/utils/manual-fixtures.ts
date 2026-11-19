@@ -17,7 +17,7 @@ import type {
   SummaryPermit,
 } from '../../src/service/summary-service'
 
-export type ManualScenario = 'industryChooseOrganization' | 'industrySubmitter' | 'federalReadOnly'
+export type ManualScenario = 'industryChooseOrganization' | 'industrySubmitter'
 
 export type ManualApiResponse = { status: number; body: unknown }
 
@@ -60,13 +60,6 @@ const PROVINCIAL_SUBMITTER_ACTIONS = [
   'uploadApplicationSubmission',
 ]
 
-const FEDERAL_READ_ONLY_ACTIONS = [
-  '/federalApplicationSearch',
-  '/federalApplicationDetails',
-  'searchClients',
-  'viewFederalApplication',
-]
-
 export const OWN_CLIENT = '00012345'
 const SECOND_CLIENT = '00067890'
 const THIRD_CLIENT = '00054321'
@@ -77,19 +70,6 @@ const capabilitiesFor = (scenario: ManualScenario): LexisSessionCapabilities => 
     welcomeTarget: null,
     legacyPath: null,
     actionRegions: {},
-    accessDeniedReason: null,
-  }
-  if (scenario === 'federalReadOnly') {
-    return {
-      ...base,
-      principal: 'BCEID\\JSAMPLE',
-      roles: ['FEDERAL_READ_ONLY'],
-      grantedActions: FEDERAL_READ_ONLY_ACTIONS,
-      orgUnitNo: null,
-      forestClientNumber: null,
-      availableForestClientNumbers: [],
-      forestClientSelectionRequired: false,
-    }
   }
   return {
     ...base,
@@ -1018,35 +998,6 @@ const SHIPPING_REFERENCE_OPTIONS = {
 const PERMIT_SEARCH_OPTIONS = { permitStatuses: PERMIT_STATUSES, regions: REGIONS }
 
 // ---------------------------------------------------------------------------
-// Federal applications
-
-const FEDERAL_SEARCH_ROWS = [
-  [47215, 'NX-26-0412', 'Approved', OWN_CLIENT, 'Surplus', '2026-11-03', '2026-11-18'],
-  [47216, 'NX-26-0419', 'New', SECOND_CLIENT, 'Surplus', '2026-11-12', '2026-12-02'],
-  [47211, 'NX-26-0377', 'Rejected', THIRD_CLIENT, 'Economic', '2026-10-14', '2026-10-21'],
-  [47208, 'NX-26-0351', 'Approved', OWN_CLIENT, 'Utilization', '2026-10-01', '2026-10-07'],
-  [47203, 'NX-26-0318', 'Withdrawn', SECOND_CLIENT, 'Surplus', '2026-09-15', '2026-09-23'],
-].map(
-  ([
-    applicationNumber,
-    federalApplicationNumber,
-    status,
-    client,
-    reason,
-    receivedDate,
-    listingDate,
-  ]) => ({
-    applicationNumber,
-    federalApplicationNumber,
-    status,
-    client,
-    reason,
-    receivedDate,
-    listingDate,
-  }),
-)
-
-// ---------------------------------------------------------------------------
 // Routes
 
 const ROUTES: ManualRoute[] = [
@@ -1384,26 +1335,6 @@ const ROUTES: ManualRoute[] = [
     method: 'GET',
     path: /^\/lexis\/shipping-reference-options$/,
     respond: () => SHIPPING_REFERENCE_OPTIONS,
-  },
-  {
-    method: 'GET',
-    path: /^\/lexis\/federal\/applications\/search\/options$/,
-    respond: () => ({ applicationStatuses: APPLICATION_STATUSES }),
-  },
-  {
-    method: 'GET',
-    path: /^\/lexis\/federal\/applications\/search$/,
-    respond: () => ({
-      results: FEDERAL_SEARCH_ROWS,
-      total: FEDERAL_SEARCH_ROWS.length,
-      page: 0,
-      size: 10,
-    }),
-  },
-  {
-    method: 'GET',
-    path: /^\/lexis\/federal\/applications\/search\/count$/,
-    respond: () => ({ total: FEDERAL_SEARCH_ROWS.length }),
   },
 ]
 

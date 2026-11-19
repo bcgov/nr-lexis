@@ -101,15 +101,15 @@ without a current region.
 
 ### Mixed grants
 
-Application Approver and Exemption Approver cannot be held together, in any regions, including
-alongside Administrator. The check counts every form of both roles, including the invalid unscoped
-ones. Interactive token conversion removes all application authorities from such an account. Its capabilities response contains no roles or actions and includes
-`accessDeniedReason: INCOMPATIBLE_APPROVER_ROLES`, so the signed-in user sees the no-access page
-with a general instruction to contact their administrator, who removes one of the roles in FAM.
-Business and administration API routes remain forbidden until a new token has a compatible
-assignment.
+An IDIR user may hold both Application Approver and Exemption Approver. Each grant supplies
+its own actions in its assigned regions. For example, an Application Approver in Cariboo and
+an Exemption Approver in Skeena can review applications in Cariboo and approve Ministerial
+exemptions in Skeena. In a region covered by both grants, both workflows are available.
+The Admin menu, policy administration and average market value maintenance require a separate
+Administrator grant. An Administrator
+who also holds regional roles retains province-wide access to all enabled actions.
 
-Read Only may accompany one approver role. Each grant retains its own regions: Read Only
+Read Only may accompany either or both approver roles. Each grant retains its own regions. Read Only
 assigned all eight can read current-region records while Cariboo Application Approver writes
 only in Cariboo. Capabilities tied to a role also stay within that role's regions. For example,
 Read Only in Cariboo plus Exemption Approver in Skeena sees Ministerial exemptions in both,

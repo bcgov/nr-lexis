@@ -269,15 +269,6 @@ const SHOTS: Shot[] = [
     },
     focus: pageTitle,
   },
-  {
-    edition: 'industry',
-    file: '06-federal-search',
-    scenario: 'federalReadOnly',
-    route: '/federal',
-    ready: (page) => button(page, 'Search'),
-    steps: (page) => runSearch(page, 'NX-26-0419'),
-    maxHeight: 1000,
-  },
 
   // The ministry edition's other screenshots come from the signed-in session below.
   loginShot('ministry'),

@@ -3,6 +3,8 @@ package ca.bc.gov.mof.lexis.service.application;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.nullable;
 import static org.mockito.Mockito.when;
 import static org.mockito.Mockito.lenient;
 
@@ -229,7 +231,7 @@ class ApplicationEditPolicyServiceTest {
 
   @Test
   void exemptionApproverChangesExistingItemsWithMinisterialItemOverrideButCannotCreatePackages() {
-    when(sessionService.parseRolesFromPrincipal(authentication))
+    when(sessionService.rolesForOrgUnit(authentication, null))
         .thenReturn(List.of("LEXIS_EXEMPTION_APPROVER"));
     context("PMT", TODAY.minusDays(30), true, true, true, true);
 
@@ -252,7 +254,7 @@ class ApplicationEditPolicyServiceTest {
 
   @Test
   void exemptionApproverWithoutMinisterialItemOverrideCannotChangeItems() {
-    when(sessionService.parseRolesFromPrincipal(authentication))
+    when(sessionService.rolesForOrgUnit(authentication, null))
         .thenReturn(List.of("LEXIS_EXEMPTION_APPROVER"));
     context("PMT", TODAY.minusDays(30), true, true, false, false);
 
@@ -378,8 +380,7 @@ class ApplicationEditPolicyServiceTest {
 
   @Test
   void approverUpdatesExistingRemarksAfterTheDetailsLock() {
-    when(sessionService.parseRolesFromPrincipal(authentication))
-        .thenReturn(List.of("LEXIS_APPLICATION_APPROVER"));
+    allowRoles("LEXIS_APPLICATION_APPROVER");
     context("PMT", TODAY.minusDays(30), true, true, true);
 
     assertThatCode(
@@ -391,7 +392,7 @@ class ApplicationEditPolicyServiceTest {
 
   @Test
   void readOnlyCannotUpdateRemarks() {
-    when(sessionService.parseRolesFromPrincipal(authentication))
+    when(sessionService.rolesForOrgUnit(authentication, null))
         .thenReturn(List.of("LEXIS_READ_ONLY"));
     context("PMT", TODAY.minusDays(30), true, true, true);
 
@@ -403,9 +404,54 @@ class ApplicationEditPolicyServiceTest {
   }
 
   @Test
+  void readOnlyInTheApplicationsRegionCannotUpdateRemarksWithAnApproverGrantElsewhere() {
+    Long skeena = 1908L;
+    when(applicationService.getApplicationEditContext(APPLICATION_NUMBER))
+        .thenReturn(
+            Optional.of(
+                new ApplicationEditContext(
+                    APPLICATION_NUMBER,
+                    "PMT",
+                    "P",
+                    "H",
+                    12L,
+                    TODAY.minusDays(30),
+                    true,
+                    true,
+                    true,
+                    null,
+                    false,
+                    false,
+                    skeena)));
+    when(sessionService.rolesForOrgUnit(authentication, skeena))
+        .thenReturn(List.of("LEXIS_READ_ONLY"));
+
+    assertThatThrownBy(
+            () ->
+                policyService.requireRemarkUpdate(
+                    authentication, applicationService, APPLICATION_NUMBER))
+        .hasMessageContaining("Remark editing");
+  }
+
+  @Test
+  void userWithoutARoleInTheApplicationsRegionCannotUpdateRemarks() {
+    lenient()
+        .when(
+            authorizationService.canPerformAction(
+                List.of("LEXIS_APPLICATION_APPROVER"), "createApplication"))
+        .thenReturn(true);
+    when(sessionService.rolesForOrgUnit(authentication, null)).thenReturn(List.of());
+    context("PMT", TODAY.minusDays(30), true, true, true);
+
+    assertThatThrownBy(
+            () ->
+                policyService.requireRemarkUpdate(
+                    authentication, applicationService, APPLICATION_NUMBER))
+        .hasMessageContaining("Remark editing");
+  }
+
+  @Test
   void remarksOnAnExpiredApplicationCannotBeUpdated() {
-    when(sessionService.parseRolesFromPrincipal(authentication))
-        .thenReturn(List.of("LEXIS_APPLICATION_APPROVER"));
     context("EXP", TODAY.minusDays(30), true, true, false);
 
     assertThatThrownBy(
@@ -583,7 +629,7 @@ class ApplicationEditPolicyServiceTest {
   @Test
   void mixedReadOnlyRolesStillRequireCreateApplicationAction() {
     List<String> roles = List.of("LEXIS_APPLICATION_APPROVER", "LEXIS_READ_ONLY");
-    when(sessionService.parseRolesFromPrincipal(authentication)).thenReturn(roles);
+    when(sessionService.rolesForOrgUnit(authentication, null)).thenReturn(roles);
     context("NEW", TODAY.plusDays(1), false, false, false);
 
     ApplicationEditPolicy policy =
@@ -608,7 +654,7 @@ class ApplicationEditPolicyServiceTest {
 
   @Test
   void provincialPolicyDeniesFederalApplicationContext() {
-    when(sessionService.parseRolesFromPrincipal(authentication))
+    when(sessionService.rolesForOrgUnit(authentication, null))
         .thenReturn(List.of("LEXIS_APPLICATION_APPROVER"));
     when(applicationService.getApplicationEditContext(APPLICATION_NUMBER))
         .thenReturn(
@@ -635,7 +681,7 @@ class ApplicationEditPolicyServiceTest {
 
   @Test
   void provincialPolicyDeniesSystemOwnedBlanketOicApplicationContext() {
-    when(sessionService.parseRolesFromPrincipal(authentication))
+    when(sessionService.rolesForOrgUnit(authentication, null))
         .thenReturn(List.of("LEXIS_APPLICATION_APPROVER"));
     when(applicationService.getApplicationEditContext(APPLICATION_NUMBER))
         .thenReturn(
@@ -662,8 +708,6 @@ class ApplicationEditPolicyServiceTest {
 
   @Test
   void lookupFailurePropagatesBeforeMutationAuthorization() {
-    when(sessionService.parseRolesFromPrincipal(authentication))
-        .thenReturn(List.of("LEXIS_APPLICATION_APPROVER"));
     when(applicationService.getApplicationEditContext(APPLICATION_NUMBER))
         .thenThrow(new IllegalStateException("Oracle unavailable"));
 
@@ -720,7 +764,8 @@ class ApplicationEditPolicyServiceTest {
 
   private void allowRoles(String... roles) {
     List<String> grantedRoles = List.of(roles);
-    when(sessionService.parseRolesFromPrincipal(authentication)).thenReturn(grantedRoles);
+    when(sessionService.rolesForOrgUnit(eq(authentication), nullable(Long.class)))
+        .thenReturn(grantedRoles);
     when(authorizationService.canPerformAction(grantedRoles, "createApplication"))
         .thenReturn(true);
   }
@@ -794,7 +839,8 @@ class ApplicationEditPolicyServiceTest {
                     false,
                     null,
                     false,
-                    true)));
+                    true,
+                    null)));
   }
 
   private void context(

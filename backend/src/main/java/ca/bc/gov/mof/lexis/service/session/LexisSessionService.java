@@ -9,6 +9,7 @@ import java.util.Collection;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -21,10 +22,6 @@ import org.springframework.stereotype.Service;
 @Service
 public class LexisSessionService {
 
-  // A denied token retains only this diagnostic authority, never an application role.
-  public static final String APPROVER_CONFLICT_AUTHORITY = "LEXIS_APPROVER_ROLE_CONFLICT";
-  public static final String APPROVER_CONFLICT_REASON = "INCOMPATIBLE_APPROVER_ROLES";
-
   private static final String ROLE_ADMIN = "LEXIS_ADMIN";
   private static final String ROLE_READ_ONLY = "LEXIS_READ_ONLY";
   private static final String ROLE_FEDERAL_READ_ONLY = "LEXIS_FEDERAL_READ_ONLY";
@@ -33,7 +30,7 @@ public class LexisSessionService {
   private static final String ROLE_PROVINCIAL_SUBMITTER = "LEXIS_PROVINCIAL_SUBMITTER";
   private static final String SCOPE_AUTHORITY_PREFIX = "SCOPE_";
   private static final Set<String> NON_LEXIS_FAM_AUTHORITIES =
-      Set.of("DELEGATED_ADMIN", "LEXIS_DELEGATED_ADMIN", APPROVER_CONFLICT_AUTHORITY);
+      Set.of("DELEGATED_ADMIN", "LEXIS_DELEGATED_ADMIN");
 
   private static final Set<String> CANONICAL_ROLES =
       Set.of(
@@ -101,25 +98,6 @@ public class LexisSessionService {
     return normalizeRoles(Arrays.asList(roleHeader.split(",")));
   }
 
-  public boolean hasConflictingApproverRoles(List<String> rawRoles) {
-    List<String> roles = normalizeRoles(rawRoles);
-    return holdsAnyVariant(roles, ROLE_APPLICATION_APPROVER)
-        && holdsAnyVariant(roles, ROLE_EXEMPTION_APPROVER);
-  }
-
-  // Unscoped, bare regional parent and unrecognized-region assignments count for conflicts
-  // without granting any authority themselves.
-  private static boolean holdsAnyVariant(List<String> roles, String role) {
-    String regional = role + "_REGION";
-    return roles.stream()
-        .anyMatch(
-            entry ->
-                entry.equals(role)
-                    || entry.equals(regional)
-                    || entry.startsWith(regional + "-")
-                    || entry.startsWith(regional + "_"));
-  }
-
   /**
    * Converts identity-provider groups to runtime authorities. Concrete forest-client authorities
    * are retained for data scoping and their base role is added for legacy action authorization.
@@ -157,6 +135,18 @@ public class LexisSessionService {
       return List.of();
     }
     return parseAuthorities(authentication.getAuthorities());
+  }
+
+  /** Regional grants apply to the record's own organization unit. */
+  public List<String> rolesForOrgUnit(Authentication authentication, Long orgUnitNumber) {
+    return normalizeRoles(
+        authorityNames(authentication).stream()
+            .filter(
+                authority ->
+                    FamRegionGrant.parse(canonicalizeRole(authority))
+                        .map(grant -> Objects.equals(orgUnitNumber, grant.region().orgUnitNumber()))
+                        .orElse(true))
+            .toList());
   }
 
   public String resolveForestClientNumber(Authentication authentication) {

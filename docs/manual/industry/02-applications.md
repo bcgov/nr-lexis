@@ -138,7 +138,6 @@ file that was not created with the reason.
 - Each application is created as **New** on the next open list date, with a
   180-day term, its package and its summary of scale.
 - No email is sent. The results are on screen only.
-- Federal applications can't be uploaded here.
 
 For the file format, ask your regional export office.
 

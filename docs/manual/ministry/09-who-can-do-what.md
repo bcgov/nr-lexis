@@ -15,9 +15,9 @@ Administrator is province-wide.
 | Administrator | Everything in LEXIS, in every region: reviewing applications, offers, exemptions and their approval, permits, federal applications and reports, plus the **Admin** menu, publishing notifications and **Print approved exemption**. | <!-- roles: administrator -->
 
 <!-- roles: application-approver, exemption-approver, read-only -->
-Application Approver and Exemption Approver can't be held together. An
-account granted both gets no access until one is removed. Read Only can be
-held with one approver role.
+Application Approver and Exemption Approver can be held together. Each
+gives you its own actions in its own regions. Read Only can be held with
+either or both.
 <!-- /roles -->
 
 ## Regions
@@ -61,14 +61,13 @@ records that have no current region.
 - **Admin** (all three) <!-- roles: administrator -->
 
 <!-- roles: administrator, application-approver -->
-## Industry roles
+## Industry role
 
-Industry users log in with a Business BCeID and hold one of these roles.
+Industry users log in with a Business BCeID and hold this role.
 
 | Role | Lets them |
 |---|---|
 | Provincial Submitter | Work under one forest client at a time: enter and upload applications, place and withdraw offers, see their exemptions, request permits and send them for review, print completed permits. They see records where that client is the owner or the agent, offers that client placed, and every Blanket OIC exemption. |
-| Federal Read Only | Find and read every federal application. |
 <!-- /roles -->
 
 ## Getting a role

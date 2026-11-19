@@ -330,7 +330,7 @@ class LexisApplicationControllerUnitTest {
     List<String> roles = List.of("LEXIS_READ_ONLY");
     when(service.findByApplicationNumber(1000456L)).thenReturn(Optional.of(detail));
     when(provincialAuthorizationService.canAccessApplication(authentication, detail)).thenReturn(true);
-    when(sessionService.parseRolesFromPrincipal(authentication)).thenReturn(roles);
+    when(sessionService.rolesForOrgUnit(authentication, detail.orgUnitNumber())).thenReturn(roles);
     when(authorizationService.canPerformAction(roles, "/applicationsReview")).thenReturn(false);
     when(authorizationService.canPerformAction(roles, "/applicationRemarks")).thenReturn(false);
     when(authentication.getName()).thenReturn("idir\\readonly");
@@ -352,7 +352,7 @@ class LexisApplicationControllerUnitTest {
     List<String> roles = List.of("LEXIS_APPLICATION_APPROVER");
     when(service.findByApplicationNumber(1000456L)).thenReturn(Optional.of(detail));
     when(provincialAuthorizationService.canAccessApplication(authentication, detail)).thenReturn(true);
-    when(sessionService.parseRolesFromPrincipal(authentication)).thenReturn(roles);
+    when(sessionService.rolesForOrgUnit(authentication, detail.orgUnitNumber())).thenReturn(roles);
     when(authorizationService.canPerformAction(roles, "/applicationsReview")).thenReturn(false);
     when(authorizationService.canPerformAction(roles, "/applicationRemarks")).thenReturn(true);
     when(authentication.getName()).thenReturn("idir\\approver");

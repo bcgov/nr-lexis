@@ -37,7 +37,7 @@ what](09-who-can-do-what.md).
 As an Administrator you see every notice, including scheduled and past
 ones, with **Edit** and **Delete**. The start date of a published notice
 can't be changed. Deleting a notice removes it for everyone at once. No
-email is sent for a notice, and Federal Read Only users don't see notices.
+email is sent for a notice.
 
 ### Add a multiplication factor
 

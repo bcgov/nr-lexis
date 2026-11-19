@@ -468,7 +468,8 @@ public interface ApplicationDetailsRpcService {
       boolean hasCompletePermit,
       String oicIndicator,
       boolean ministerialItemOverrideEligible,
-      boolean agentChangeablePermit) {
+      boolean agentChangeablePermit,
+      Long orgUnitNumber) {
 
     public ApplicationEditContext(
         Long applicationNumber,
@@ -494,7 +495,8 @@ public interface ApplicationDetailsRpcService {
           hasCompletePermit,
           oicIndicator,
           ministerialItemOverrideEligible,
-          false);
+          false,
+          null);
     }
   }
 

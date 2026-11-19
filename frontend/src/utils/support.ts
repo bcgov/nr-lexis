@@ -3,10 +3,8 @@ const SUPPORT_EMAIL = 'Heartwood@gov.bc.ca'
 /** Where "Report an issue" leads, in the side navigation and in failure messages. */
 export const REPORT_ISSUE_HREF = `mailto:${SUPPORT_EMAIL}`
 
-const isIndustryRole = (role: string): boolean =>
-  role === 'PROVINCIAL_SUBMITTER' ||
-  role.startsWith('PROVINCIAL_SUBMITTER_') ||
-  role === 'FEDERAL_READ_ONLY'
+const isProvincialSubmitterRole = (role: string): boolean =>
+  role === 'PROVINCIAL_SUBMITTER' || role.startsWith('PROVINCIAL_SUBMITTER_')
 
 const USER_MANUALS = [
   {
@@ -32,7 +30,7 @@ const USER_MANUALS = [
   {
     name: 'Industry',
     href: '/manuals/LEXIS-Industry-User-Manual.pdf',
-    appliesTo: isIndustryRole,
+    appliesTo: isProvincialSubmitterRole,
   },
 ]
 

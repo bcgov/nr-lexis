@@ -71,7 +71,14 @@ public class ApplicationEditPolicyService {
       Authentication authentication,
       ApplicationDetailsRpcService applicationService,
       Long applicationNumber) {
-    List<String> parsedRoles = sessionService.parseRolesFromPrincipal(authentication);
+    ApplicationDetailsRpcService.ApplicationEditContext context =
+        applicationService == null || applicationNumber == null || applicationNumber < 1
+            ? null
+            : applicationService.getApplicationEditContext(applicationNumber).orElse(null);
+    List<String> parsedRoles =
+        context == null
+            ? sessionService.parseRolesFromPrincipal(authentication)
+            : sessionService.rolesForOrgUnit(authentication, context.orgUnitNumber());
     Set<String> roles = normalizeRoles(parsedRoles);
     boolean administrator = roles.contains(ROLE_ADMIN);
     boolean industryUser = !administrator && isIndustryUser(roles);
@@ -80,12 +87,6 @@ public class ApplicationEditPolicyService {
 
     ApplicationEditPolicy denied =
         ApplicationEditPolicy.denied(industryUser, readOnly, exemptionApprover);
-    if (applicationService == null || applicationNumber == null || applicationNumber < 1) {
-      return denied;
-    }
-
-    ApplicationDetailsRpcService.ApplicationEditContext context =
-        applicationService.getApplicationEditContext(applicationNumber).orElse(null);
     if (context == null || !applicationNumber.equals(context.applicationNumber())) {
       return denied;
     }
@@ -104,6 +105,8 @@ public class ApplicationEditPolicyService {
 
     boolean applicationApprover =
         administrator || roles.contains(ROLE_APPLICATION_APPROVER);
+    boolean canEditAsApplicationApproverOrSubmitter =
+        actionAllowed && (applicationApprover || industryUser);
     String status = normalizeCode(context.applicationStatusCode());
     if (APPLICATION_STATUS_EXPIRED.equals(status)) {
       return denied;
@@ -120,8 +123,7 @@ public class ApplicationEditPolicyService {
         advertisingDate == null || advertisingDate.isAfter(today.minusDays(6));
 
     boolean canEditApplicationDetails =
-        !readOnly
-            && !exemptionApprover
+        canEditAsApplicationApproverOrSubmitter
             && (!industryUser || industryCanEdit)
             && ("NEW".equals(status)
                 || ("APP".equals(status)
@@ -133,7 +135,7 @@ public class ApplicationEditPolicyService {
     boolean canAddScales = false;
     boolean approved = LEGACY_APPROVED_STATUSES.contains(status);
 
-    if (!readOnly && !exemptionApprover) {
+    if (canEditAsApplicationApproverOrSubmitter) {
       // The branch order is intentional: legacy treated a dual-role industry user as industry.
       if (industryUser) {
         if (!(context.hasCompletePermit() || (approved && context.hasScaleBeforeApproval()))) {
@@ -143,17 +145,14 @@ public class ApplicationEditPolicyService {
             canAddPackages = true;
           }
         }
-      } else if (applicationApprover && !context.hasCompletePermit()) {
+      } else if (!context.hasCompletePermit()) {
         canEditPackages = true;
         canAddPackages = true;
         canAddScales = true;
       }
     }
 
-    if (!readOnly
-        && !exemptionApprover
-        && (applicationApprover || industryUser)
-        && context.ministerialItemOverrideEligible()) {
+    if (canEditAsApplicationApproverOrSubmitter && context.ministerialItemOverrideEligible()) {
       canEditPackages = true;
       canAddPackages = true;
       canAddScales = true;
@@ -179,15 +178,14 @@ public class ApplicationEditPolicyService {
     }
 
     boolean canChangeAgent =
-        !readOnly
-            && !exemptionApprover
+        applicationApprover
             && !industryUser
             && actionAllowed
             && context.agentChangeablePermit()
             && authorizationService.canPerformAction(parsedRoles, ACTION_CHANGE_APPLICANT_TYPE);
 
     boolean canUpdatePackageNumber =
-        !readOnly
+        canEditAsApplicationApproverOrSubmitter
             && ((industryUser && "NEW".equals(status))
                 || (!industryUser
                     && applicationApprover
@@ -210,24 +208,24 @@ public class ApplicationEditPolicyService {
 
   /**
    * Existing remarks stay editable after the application details lock, except on an Expired
-   * application or for Read Only.
+   * application. Needs Create application in the application's own region.
    */
   public void requireRemarkUpdate(
       Authentication authentication,
       ApplicationDetailsRpcService applicationService,
       Long applicationNumber) {
-    Set<String> roles = normalizeRoles(sessionService.parseRolesFromPrincipal(authentication));
-    boolean readOnly = !roles.contains(ROLE_ADMIN) && isPureReadOnlyRole(roles);
     ApplicationDetailsRpcService.ApplicationEditContext context =
         applicationService == null || applicationNumber == null || applicationNumber < 1
             ? null
             : applicationService.getApplicationEditContext(applicationNumber).orElse(null);
     require(
-        !readOnly
-            && context != null
+        context != null
             && applicationNumber.equals(context.applicationNumber())
             && "P".equals(normalizeCode(context.jurisdictionCode()))
-            && !APPLICATION_STATUS_EXPIRED.equals(normalizeCode(context.applicationStatusCode())),
+            && !APPLICATION_STATUS_EXPIRED.equals(normalizeCode(context.applicationStatusCode()))
+            && authorizationService.canPerformAction(
+                sessionService.rolesForOrgUnit(authentication, context.orgUnitNumber()),
+                ACTION_CREATE_APPLICATION),
         "Remark editing is not allowed by the application edit policy.");
   }
 
