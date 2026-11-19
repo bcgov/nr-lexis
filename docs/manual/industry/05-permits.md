@@ -11,14 +11,14 @@ the issued permit.
    **Permits** tab.
 2. Complete the permit: what is being shipped, the applicant, the shipping
    details and any documents.
-3. Select **Email review request** to tell the regional export office the
-   request is ready.
+3. Save it. Once it has shipping details and a package with scale, LEXIS
+   offers to email the regional export office that the request is ready.
 4. Export office staff review the request, confirm the fee in lieu and
    record the payment or invoice.
 5. Staff set the permit to **Complete** and normally email the owner that
    it is approved.
-6. Select **Print permit** to get the permit as a PDF, ready for your
-   federal export permit application.
+6. Select **Download PDF** to get the permit, ready for your federal export
+   permit application.
 
 ## Permit statuses
 
@@ -73,12 +73,15 @@ A permit record has these tabs: **Permit**, **Applicant**, **Shipping**,
    - **Estimated shipping date**;
    - **Customs port of export**. If the port isn't listed, choose **Other**
      and enter the **Other port of export name**.
-6. Select **Save changes**.
+6. Select **Save permit** at the top of the page. If a required field is
+   empty, LEXIS names the tabs to complete and shows on each tab how many
+   fields it still needs. After this first save, each tab has its own
+   **Edit** and **Save changes**.
 7. On the **Scale** tab, check each package's **Summary of scale**. To leave
    a scale line off this permit, select **Edit scale selection**, clear its
    **Include in permit** tick and save.
 8. Add any documents the export office needs on the **Documents** tab.
-9. Select **Email review request**.
+9. Send the review request when LEXIS offers it (see below).
 
 ![A permit request: the Permit tab](images/05-permit.png)
 
@@ -138,21 +141,22 @@ Then add what is being shipped, on the saved permit's **Scale** tab:
 
 ### Send the request for review
 
-Saving a permit doesn't tell anyone. The export office starts its review
-when you send the request.
+The export office starts its review when you send the request. Each time
+you save any tab of an **Active** permit that has shipping details and a
+package with scale, LEXIS asks **Send permit [number] for review?**
 
-1. Select **Email review request** at the top of the permit. It is available
-   once the permit has an application, a package and scale (a package and
-   scale for a Blanket OIC permit).
-2. **Send to** is the regional export office. **Copy to** starts with the
-   agent's or the owner's email address on file. Change it or clear it.
-3. Select **Send request**.
+1. **Send to** is the regional export office. **Copy to** starts with the
+   agent's email address on the permit, or the owner's if there is no
+   agent. Change it or clear it.
+2. Select **Send request**.
 
-LEXIS confirms that the request was sent. Until the permit is issued it
-stays **Active**, shown as **(Pending)** beside its number.
+LEXIS confirms **Review request sent**. You get an email when the permit is
+issued. Until then it stays **Active**, shown as **(Pending)** beside its
+number.
 
-> **If LEXIS says the email was not sent**, contact the regional export
-> office yourself. It has not been told about your request.
+> **If you select Cancel, or LEXIS says the request was not sent**, the
+> export office doesn't know the permit is ready. Send the request the next
+> time you save, or contact the office yourself.
 
 ### Check the fees
 
@@ -178,7 +182,7 @@ gives the permit number and lists its packages. If you are the agent, watch
 the status in **My permits**.
 
 1. Open the permit from **My permits** or **Provincial › Permit search**.
-2. Select **Print permit** at the top of the permit. It is there on every
+2. Select **Download PDF** at the top of the permit. It is there on every
    tab once the permit is **Complete**.
 
 The permit downloads as a PDF. The second page is the detailed summary by
@@ -200,8 +204,8 @@ cancelled or replaced it, if any.
   applicant, shipping and scale. If you change something after sending the
   review request, let the export office know.
 - On a **Complete** permit you can still select **Edit shipping details**
-  and change the purchaser, country, transport and shipping date, then print
-  the permit again. You can't change the port of export.
+  and change the purchaser, country, transport and shipping date, then
+  download the permit again. You can't change the port of export.
 - For any other change to an issued permit, contact the regional export
   office. Staff may need to cancel and reissue the permit and its invoice.
   The replacement invoices are listed on the **GBMS** tab.

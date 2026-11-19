@@ -17,6 +17,7 @@ import {
   Edit,
   Enterprise,
   Receipt,
+  Save,
   TrashCan,
 } from '@carbon/icons-react'
 import { Cardboard, Invoice } from '@carbon/pictograms-react'
@@ -43,6 +44,7 @@ import {
   TableHeader,
   TableRow,
   Tabs,
+  Tag,
   TextArea,
   TextInput,
   Tile,
@@ -371,8 +373,26 @@ const isStorableText = (value: string, storedValue: string | null | undefined): 
 // Legacy allows an approver to move a permit to EXP; once expired, the record is read-only.
 const EDITABLE_PERMIT_STATUS_CODES = new Set(['ACT', 'COM', 'CAN', 'EXP'])
 const SERVER_ASSIGNED_PAYMENT_PENDING_STATUS = 'PPD'
-const REVIEW_REQUEST_NOT_SENT_MESSAGE =
-  'Email was not sent. Warning: Regional Office must be otherwise notified.'
+const reviewRequestSentResult = (permitNumber: string): PermitActionResult => ({
+  kind: 'success',
+  title: 'Review request sent',
+  message: `Permit ${permitNumber} was sent to the regional office. You'll get an email when it's issued.`,
+  source: 'email',
+})
+const REVIEW_REQUEST_FAILED_RESULT: PermitActionResult = {
+  kind: 'error',
+  title: 'Review request not sent',
+  message:
+    "The email couldn't be sent. Save the permit again to retry, or contact your regional export office.",
+  source: 'email',
+}
+const REVIEW_REQUEST_CANCELLED_RESULT: PermitActionResult = {
+  kind: 'warning',
+  title: 'Review request not sent',
+  message:
+    "The regional office won't know this permit is ready. Send the request the next time you save, or contact the office.",
+  source: 'email',
+}
 
 /**
  * Whether permit details stay editable in a status: expired and cancelled permits are read-only,
@@ -394,6 +414,12 @@ const SHIPPING_PERMIT_FIELDS = new Set<PermitDetailFormField>([
   'estimatedShippingDate',
   'portOfExport',
   'otherPortOfExport',
+])
+const PERMIT_CLIENT_FIELDS = new Set<PermitDetailFormField>([
+  'ownerClientNumber',
+  'ownerClientLocation',
+  'agentClientNumber',
+  'agentClientLocation',
 ])
 const PERMIT_DETAIL_TABS = [
   { id: 'permit', label: 'Permit', icon: Certificate },
@@ -966,6 +992,20 @@ const optionalIntegerValue = (value: string): number | null => {
   return Number.isInteger(parsedValue) ? parsedValue : null
 }
 
+/** Whether a required Shipping field is blank. */
+const shippingFieldsMissing = (form: PermitDetailForm): boolean =>
+  (
+    [
+      'destinationCompanyName',
+      'destinationCountry',
+      'transportType',
+      'transportName',
+      'estimatedShippingDate',
+      'portOfExport',
+      ...(form.portOfExport.trim().toUpperCase() === 'OT' ? (['otherPortOfExport'] as const) : []),
+    ] as const
+  ).some((field) => !form[field].trim())
+
 const buildPermitDetailForm = (permitDetail: ProvincialPermitDetail): PermitDetailForm => ({
   permitNumber: detailValue(permitDetail.permitNumber),
   permitStatus: detailValue(permitDetail.permitStatusCode),
@@ -1230,6 +1270,14 @@ const serverSaveError = (
     : sectionSaveError(subject, source, distinct[0] || message || fallback)
 }
 
+/** The tab that holds a permit form field. */
+const permitFieldTab = (field: PermitDetailFormField): PermitDetailTabId =>
+  SHIPPING_PERMIT_FIELDS.has(field)
+    ? 'shipping'
+    : PERMIT_CLIENT_FIELDS.has(field)
+      ? 'owner'
+      : 'permit'
+
 /** The tabs a blocked save needs completed, as on the create pages. */
 const tabsToCompleteResult = (tabIds: readonly PermitDetailTabId[]): PermitActionResult => {
   const labels = PERMIT_DETAIL_TABS.filter(({ id }) => tabIds.includes(id)).map(
@@ -1422,8 +1470,9 @@ const ProvincialPermitDetailsPage = () => {
   const [permitReviewRequestCopyTo, setPermitReviewRequestCopyTo] = useState('')
   const [showPermitReviewRequestCopyToError, setShowPermitReviewRequestCopyToError] =
     useState(false)
-  const [permitReviewRequestErrorMessage, setPermitReviewRequestErrorMessage] = useState('')
-  // The sent result shows on the page once the review request dialog has closed.
+  // Set by a successful save; a submitter's ready permit then offers the review request.
+  const [permitReviewCheckDue, setPermitReviewCheckDue] = useState(false)
+  // The review request's outcome shows on the page once its dialog has closed.
   const permitReviewRequestResultRef = useRef<PermitActionResult | null>(null)
   // INTENTIONAL_LEGACY_DIVERGENCE(MINISTERIAL_SCALE_SELECTION_EDIT): selection stays local until Save changes.
   const [ministerialScaleSelectionDraft, setMinisterialScaleSelectionDraft] = useState<Record<
@@ -1623,9 +1672,9 @@ const ProvincialPermitDetailsPage = () => {
     agentClientLookupRequestRef.current += 1
     setOwnerEditClientData(null)
     setAgentEditClientData(null)
+    setPermitReviewCheckDue(false)
     setPermitReviewRequestOpen(false)
     setPermitReviewRequestCopyTo('')
-    setPermitReviewRequestErrorMessage('')
     permitReviewRequestResultRef.current = null
     setOwnerClientLocations([])
     setAgentClientLocations([])
@@ -2427,6 +2476,7 @@ const ProvincialPermitDetailsPage = () => {
     canReviewPermits ||
     (provincialSubmitter && permitStatusCode === SERVER_ASSIGNED_PAYMENT_PENDING_STATUS)
   const canCorrectPermitSubmitDate = canSavePermit && canReviewPermits && permitStatusCode === 'ACT'
+  const permitStatusSelectShown = canEditPermitStatus || !provincialSubmitter
   const canEditShipping = canMutatePermit
   const canEditPermitClients =
     canSavePermit && !invoiceMaterialLocked && (detail?.blanketOic === true || ministerialPermit)
@@ -2743,7 +2793,7 @@ const ProvincialPermitDetailsPage = () => {
     isSavingBoicPackage ||
     isDeletingBoicPackageNumber !== null
   // A new permit's Shipping tab saves the whole permit, as its other tabs do.
-  const isSavingShippingAction = permitEditSection === 'newPermit' ? isPermitBusy : isSavingShipping
+  const editingNewPermit = permitEditSection === 'newPermit'
   // Switching package while a scale change saves would show rows that are about to change.
   const normalPermitPackageSelectionBusy = isUpdatingScaleId !== null || isSavingScaleSelection
   const blanketOicScaleActionsDisabled =
@@ -2775,13 +2825,10 @@ const ProvincialPermitDetailsPage = () => {
     permitStatusCode === 'ACT' &&
     !isPermitTablesLoading &&
     !!tabsData &&
+    // A Blanket OIC permit's application comes with its package.
     (detail?.blanketOic ? !!detail.oicApplicationNumber : tabsData.applications.length > 0) &&
     tabsData.packages.length > 0 &&
     tabsData.items.length > 0
-  // A Blanket OIC permit has no application to select; its application comes with its package.
-  const permitReviewNotReadyMessage = detail?.blanketOic
-    ? 'An active permit requires a package and scale detail before review can be requested.'
-    : 'An active permit requires an application, package, and scale detail before review can be requested.'
   const totalFeeVolume = tabsData?.totalFeeVolume
   const calculatedPermitFee = (tabsData?.fees ?? []).reduce((total, row) => total + row.amount, 0)
   // A fee row without an amount means the permit's calculated fee has no amount either.
@@ -3202,22 +3249,17 @@ const ProvincialPermitDetailsPage = () => {
   const hasShippingValidationError = Object.entries(permitFieldErrors).some(
     ([field, error]) => !!error && SHIPPING_PERMIT_FIELDS.has(field as PermitDetailFormField),
   )
+  const permitTabErrorCounts = useMemo(() => {
+    const counts: Partial<Record<PermitDetailTabId, number>> = {}
+    for (const [field, error] of Object.entries(permitFieldErrors)) {
+      if (!error) continue
+      const tab = permitFieldTab(field as PermitDetailFormField)
+      counts[tab] = (counts[tab] ?? 0) + 1
+    }
+    return counts
+  }, [permitFieldErrors])
   // Every permit save needs these Shipping fields, including a save from another tab.
-  const shippingRequiredFieldsMissing =
-    !!permitForm &&
-    (
-      [
-        'destinationCompanyName',
-        'destinationCountry',
-        'transportType',
-        'transportName',
-        'estimatedShippingDate',
-        'portOfExport',
-        ...(permitForm.portOfExport.trim().toUpperCase() === 'OT'
-          ? (['otherPortOfExport'] as const)
-          : []),
-      ] as const
-    ).some((field) => !permitForm[field].trim())
+  const shippingRequiredFieldsMissing = !!permitForm && shippingFieldsMissing(permitForm)
   const permitFieldError = (field: PermitDetailFormField): string | undefined => {
     if (!showPermitValidationErrors) return undefined
     if (
@@ -4642,10 +4684,7 @@ const ProvincialPermitDetailsPage = () => {
         permitEditSection === 'newPermit' &&
         (hasPermitValidationError || hasShippingValidationError)
       ) {
-        const tabsToComplete: PermitDetailTabId[] = [
-          ...(hasPermitValidationError ? (['permit'] as const) : []),
-          ...(hasShippingValidationError ? (['shipping'] as const) : []),
-        ]
+        const tabsToComplete = PERMIT_DETAIL_TAB_IDS.filter((id) => permitTabErrorCounts[id])
         setShowPermitValidationErrors(true)
         if (!tabsToComplete.includes(activePermitTabId)) selectPermitTab(tabsToComplete[0])
         setActionResult(tabsToCompleteResult(tabsToComplete))
@@ -4823,6 +4862,7 @@ const ProvincialPermitDetailsPage = () => {
       permitTablesErrorMessage,
       selectPermitTab,
       shippingRequiredFieldsMissing,
+      permitTabErrorCounts,
       tabsData,
     ],
   )
@@ -5817,12 +5857,20 @@ const ProvincialPermitDetailsPage = () => {
     [beginPermitRouteWork, canSendPermitApproval, detail?.permitNumber, permitNumber],
   )
 
+  // A tab's save that succeeds checks whether the permit is now ready for review.
+  const saveThenCheckReview = useCallback(
+    async (save: () => Promise<boolean>): Promise<boolean> => {
+      const onSamePermit = beginPermitRouteWork()
+      const saved = await save()
+      if (saved && onSamePermit()) setPermitReviewCheckDue(true)
+      return saved
+    },
+    [beginPermitRouteWork],
+  )
+
   const onOpenPermitReviewRequest = useCallback(async () => {
     const resolvedPermitNumber = String(detail?.permitNumber ?? permitNumber ?? '').trim()
-    if (!resolvedPermitNumber || !permitReviewReady || isSendingPermitEmail) {
-      return
-    }
-    clearActionNotifications()
+    if (!resolvedPermitNumber || isSendingPermitEmail) return
     setIsSendingPermitEmail(true)
     const onSamePermit = beginPermitRouteWork()
     let defaults = { regionalEmailAddress: '', copyToEmailAddress: '' }
@@ -5837,26 +5885,31 @@ const ProvincialPermitDetailsPage = () => {
     setPermitReviewRequestSendTo(defaults.regionalEmailAddress.trim())
     setPermitReviewRequestCopyTo(defaults.copyToEmailAddress.trim())
     setShowPermitReviewRequestCopyToError(false)
-    setPermitReviewRequestErrorMessage('')
     setPermitReviewRequestOpen(true)
+  }, [beginPermitRouteWork, detail?.permitNumber, isSendingPermitEmail, permitNumber])
+
+  // A submitter's save offers the review request once the saved permit is Active with shipping
+  // details and a package with scale, as in legacy.
+  useEffect(() => {
+    if (!permitReviewCheckDue || isPermitTablesLoading || isPermitBusy) return
+    // eslint-disable-next-line @eslint-react/set-state-in-effect
+    setPermitReviewCheckDue(false)
+    if (permitReviewReady && detail && !shippingFieldsMissing(buildPermitDetailForm(detail))) {
+      void onOpenPermitReviewRequest()
+    }
   }, [
-    beginPermitRouteWork,
-    clearActionNotifications,
-    detail?.permitNumber,
-    isSendingPermitEmail,
-    permitNumber,
+    detail,
+    isPermitBusy,
+    isPermitTablesLoading,
+    onOpenPermitReviewRequest,
+    permitReviewCheckDue,
     permitReviewReady,
   ])
 
-  // A failure shows in the dialog, which stays open to retry; an invalid copy recipient shows on
-  // its field.
+  // The outcome shows on the page once the dialog closes. An invalid copy recipient keeps the
+  // dialog open with the error on its field.
   const onSendPermitReviewRequest = useCallback(async (): Promise<boolean> => {
-    setPermitReviewRequestErrorMessage('')
     const resolvedPermitNumber = String(detail?.permitNumber ?? permitNumber ?? '').trim()
-    if (!resolvedPermitNumber || !permitReviewReady) {
-      setPermitReviewRequestErrorMessage(permitReviewNotReadyMessage)
-      return false
-    }
     const copyTo = normalizeTrimmedText(permitReviewRequestCopyTo)
     if (copyTo && !isValidEmail(copyTo)) {
       setShowPermitReviewRequestCopyToError(true)
@@ -5865,22 +5918,14 @@ const ProvincialPermitDetailsPage = () => {
     }
     setIsSendingPermitEmail(true)
     const onSamePermit = beginPermitRouteWork()
+    let sent = false
     try {
       const result = await sendPermitReviewRequestEmail(resolvedPermitNumber, copyTo)
       if (!onSamePermit()) return false
-      if (!result.success) {
-        setPermitReviewRequestErrorMessage(result.message || REVIEW_REQUEST_NOT_SENT_MESSAGE)
-        return false
-      }
-      permitReviewRequestResultRef.current = {
-        kind: 'success',
-        title: result.message || 'Review request email sent.',
-        message: copyTo ? `A copy was sent to ${copyTo}.` : '',
-        source: 'email',
-      }
+      sent = result.success
       // The server returns a date only when this request records the first Blanket OIC request.
       // It sets both the Submit date and the received (request) date to that day.
-      if (result.permitRequestDate) {
+      if (sent && result.permitRequestDate) {
         setDetail((current) =>
           current
             ? {
@@ -5900,22 +5945,17 @@ const ProvincialPermitDetailsPage = () => {
             : current,
         )
       }
-      return true
     } catch (error) {
       console.error(error)
-      if (onSamePermit()) setPermitReviewRequestErrorMessage(REVIEW_REQUEST_NOT_SENT_MESSAGE)
-      return false
+      if (!onSamePermit()) return false
     } finally {
       if (onSamePermit()) setIsSendingPermitEmail(false)
     }
-  }, [
-    beginPermitRouteWork,
-    detail?.permitNumber,
-    permitNumber,
-    permitReviewNotReadyMessage,
-    permitReviewReady,
-    permitReviewRequestCopyTo,
-  ])
+    permitReviewRequestResultRef.current = sent
+      ? reviewRequestSentResult(resolvedPermitNumber)
+      : REVIEW_REQUEST_FAILED_RESULT
+    return true
+  }, [beginPermitRouteWork, detail?.permitNumber, permitNumber, permitReviewRequestCopyTo])
 
   const onRemoveDocument = useCallback(
     async (row: PermitDocumentRow) => {
@@ -6190,7 +6230,7 @@ const ProvincialPermitDetailsPage = () => {
         size="md"
         disabled={isSavingPermitDetails || isRefreshingPermitForEdit}
         renderIcon={isSavingPermitDetails ? PendingIcon : undefined}
-        onClick={() => void onSavePermit()}
+        onClick={() => void saveThenCheckReview(onSavePermit)}
       >
         {isSavingPermitDetails
           ? 'Saving…'
@@ -6202,7 +6242,7 @@ const ProvincialPermitDetailsPage = () => {
   )
 
   const renderPermitEditActions = () =>
-    detail && canSavePermit && isEditingPermit ? (
+    detail && canSavePermit && isEditingPermit && !editingNewPermit ? (
       <div className="legacy-search-actions">
         <Button
           kind="tertiary"
@@ -6217,7 +6257,7 @@ const ProvincialPermitDetailsPage = () => {
           size="md"
           disabled={isSavingPermitDetails || isRefreshingPermitForEdit}
           renderIcon={isSavingPermitDetails ? PendingIcon : undefined}
-          onClick={() => void onSavePermit()}
+          onClick={() => void saveThenCheckReview(onSavePermit)}
         >
           {isSavingPermitDetails
             ? 'Saving…'
@@ -6383,6 +6423,94 @@ const ProvincialPermitDetailsPage = () => {
     )
   }
 
+  // Provincial Submitters see the status as text unless they can change it (Payment pending).
+  const renderPermitStatusField = () =>
+    detail && (
+      <RecordField
+        label="Status"
+        value={displayValue(
+          formatPermitStatus(detail.permitStatusCode, detail.permitStatusDescription),
+        )}
+        edit={
+          permitStatusSelectShown
+            ? () => (
+                <Select
+                  id="permit-permitStatus"
+                  labelText={requiredLabel('Status')}
+                  aria-required="true"
+                  value={permitForm?.permitStatus ?? ''}
+                  invalid={!!permitFieldError('permitStatus')}
+                  invalidText={permitFieldError('permitStatus')}
+                  onChange={(event) => setPermitFormField('permitStatus', event.target.value)}
+                  disabled={
+                    !canEditPermitStatus ||
+                    isPermitOptionsLoading ||
+                    permitStatusOptions.length === 0
+                  }
+                >
+                  <SelectItem value="" text="Select a permit status" />
+                  {editablePermitStatusOptions.map((option) => (
+                    <SelectItem key={option.value} value={option.value} text={option.label} />
+                  ))}
+                </Select>
+              )
+            : undefined
+        }
+      />
+    )
+
+  // Provincial Submitters never edit the permit dates, so they stay text in edit mode.
+  const renderPermitDateFields = () =>
+    detail && (
+      <>
+        <RecordField
+          label="Submit date"
+          value={detail.applicationDate}
+          edit={
+            provincialSubmitter
+              ? undefined
+              : () =>
+                  renderPermitDateInput(
+                    'permitSubmitDate',
+                    'Submit date',
+                    !canCorrectPermitSubmitDate,
+                    requiresCompletionSubmitDate && canCorrectPermitSubmitDate,
+                  )
+          }
+        />
+        <RecordField
+          label="Issued date"
+          value={detail.issueDate}
+          edit={
+            provincialSubmitter
+              ? undefined
+              : () =>
+                  renderPermitDateInput(
+                    'permitIssueDate',
+                    'Issued date',
+                    !canReviewPermits || invoiceMaterialLocked,
+                    requiresPermitCompletionDates && canReviewPermits && !invoiceMaterialLocked,
+                  )
+          }
+        />
+        <RecordField
+          label="Expiry date"
+          value={detail.expiryDate}
+          edit={
+            provincialSubmitter
+              ? undefined
+              : () =>
+                  renderPermitDateInput(
+                    'permitExpiryDate',
+                    'Expiry date',
+                    !canReviewPermits || invoiceMaterialLocked,
+                    requiresPermitCompletionDates && canReviewPermits && !invoiceMaterialLocked,
+                  )
+          }
+        />
+      </>
+    )
+
   // Blanket OIC uses its full name in both record modes.
   const permitExemptionType = detail?.blanketOic ? 'Blanket OIC' : detail?.exemptionTypeDescription
 
@@ -6408,35 +6536,7 @@ const ProvincialPermitDetailsPage = () => {
     return (
       <>
         <RecordFieldGrid editing={isReviewedPermitEdit}>
-          <RecordFieldRow>
-            <RecordField
-              label="Status"
-              value={displayValue(
-                formatPermitStatus(detail.permitStatusCode, detail.permitStatusDescription),
-              )}
-              edit={() => (
-                <Select
-                  id="permit-permitStatus"
-                  labelText={requiredLabel('Status')}
-                  aria-required="true"
-                  value={permitForm?.permitStatus ?? ''}
-                  invalid={!!permitFieldError('permitStatus')}
-                  invalidText={permitFieldError('permitStatus')}
-                  onChange={(event) => setPermitFormField('permitStatus', event.target.value)}
-                  disabled={
-                    !canEditPermitStatus ||
-                    isPermitOptionsLoading ||
-                    permitStatusOptions.length === 0
-                  }
-                >
-                  <SelectItem value="" text="Select a permit status" />
-                  {editablePermitStatusOptions.map((option) => (
-                    <SelectItem key={option.value} value={option.value} text={option.label} />
-                  ))}
-                </Select>
-              )}
-            />
-          </RecordFieldRow>
+          <RecordFieldRow>{renderPermitStatusField()}</RecordFieldRow>
           <RecordFieldRow>
             <RecordField label="Exemption number" value={permitExemptionLink} />
             <RecordField label="Exemption type" value={permitExemptionType} />
@@ -6482,44 +6582,7 @@ const ProvincialPermitDetailsPage = () => {
               }
             />
           </RecordFieldRow>
-          <RecordFieldRow>
-            <RecordField
-              label="Submit date"
-              value={detail.applicationDate}
-              edit={() =>
-                renderPermitDateInput(
-                  'permitSubmitDate',
-                  'Submit date',
-                  !canCorrectPermitSubmitDate,
-                  requiresCompletionSubmitDate && canCorrectPermitSubmitDate,
-                )
-              }
-            />
-            <RecordField
-              label="Issued date"
-              value={detail.issueDate}
-              edit={() =>
-                renderPermitDateInput(
-                  'permitIssueDate',
-                  'Issued date',
-                  !canReviewPermits || invoiceMaterialLocked,
-                  requiresPermitCompletionDates && canReviewPermits && !invoiceMaterialLocked,
-                )
-              }
-            />
-            <RecordField
-              label="Expiry date"
-              value={detail.expiryDate}
-              edit={() =>
-                renderPermitDateInput(
-                  'permitExpiryDate',
-                  'Expiry date',
-                  !canReviewPermits || invoiceMaterialLocked,
-                  requiresPermitCompletionDates && canReviewPermits && !invoiceMaterialLocked,
-                )
-              }
-            />
-          </RecordFieldRow>
+          <RecordFieldRow>{renderPermitDateFields()}</RecordFieldRow>
           <RecordFieldRow>
             <RecordField
               label="Total exemption volume (m³)"
@@ -6589,33 +6652,7 @@ const ProvincialPermitDetailsPage = () => {
     if (!detail) return null
     return (
       <RecordFieldGrid editing={isEditingPermit && !!permitForm}>
-        <RecordFieldRow>
-          <RecordField
-            label="Status"
-            value={displayValue(
-              formatPermitStatus(detail.permitStatusCode, detail.permitStatusDescription),
-            )}
-            edit={() => (
-              <Select
-                id="permit-permitStatus"
-                labelText={requiredLabel('Status')}
-                aria-required="true"
-                value={permitForm?.permitStatus ?? ''}
-                invalid={!!permitFieldError('permitStatus')}
-                invalidText={permitFieldError('permitStatus')}
-                onChange={(event) => setPermitFormField('permitStatus', event.target.value)}
-                disabled={
-                  !canEditPermitStatus || isPermitOptionsLoading || permitStatusOptions.length === 0
-                }
-              >
-                <SelectItem value="" text="Select a permit status" />
-                {editablePermitStatusOptions.map((option) => (
-                  <SelectItem key={option.value} value={option.value} text={option.label} />
-                ))}
-              </Select>
-            )}
-          />
-        </RecordFieldRow>
+        <RecordFieldRow>{renderPermitStatusField()}</RecordFieldRow>
         <RecordFieldRow>
           <RecordField
             label="Permit number"
@@ -6631,44 +6668,7 @@ const ProvincialPermitDetailsPage = () => {
           <RecordField label="Exemption type" value={permitExemptionType} />
           <RecordField label="Region" span="wide" value={detail.region ?? detail.orgUnitNumber} />
         </RecordFieldRow>
-        <RecordFieldRow>
-          <RecordField
-            label="Submit date"
-            value={detail.applicationDate}
-            edit={() =>
-              renderPermitDateInput(
-                'permitSubmitDate',
-                'Submit date',
-                !canCorrectPermitSubmitDate,
-                requiresCompletionSubmitDate && canCorrectPermitSubmitDate,
-              )
-            }
-          />
-          <RecordField
-            label="Issued date"
-            value={detail.issueDate}
-            edit={() =>
-              renderPermitDateInput(
-                'permitIssueDate',
-                'Issued date',
-                !canReviewPermits || invoiceMaterialLocked,
-                requiresPermitCompletionDates && canReviewPermits && !invoiceMaterialLocked,
-              )
-            }
-          />
-          <RecordField
-            label="Expiry date"
-            value={detail.expiryDate}
-            edit={() =>
-              renderPermitDateInput(
-                'permitExpiryDate',
-                'Expiry date',
-                !canReviewPermits || invoiceMaterialLocked,
-                requiresPermitCompletionDates && canReviewPermits && !invoiceMaterialLocked,
-              )
-            }
-          />
-        </RecordFieldRow>
+        <RecordFieldRow>{renderPermitDateFields()}</RecordFieldRow>
       </RecordFieldGrid>
     )
   }
@@ -7102,7 +7102,7 @@ const ProvincialPermitDetailsPage = () => {
                       size="md"
                       disabled={isSavingPermit || isRefreshingPermitForEdit}
                       renderIcon={isSavingPermit ? PendingIcon : undefined}
-                      onClick={() => void onSavePermit()}
+                      onClick={() => void saveThenCheckReview(onSavePermit)}
                     >
                       {isSavingPermit
                         ? 'Saving…'
@@ -7431,7 +7431,7 @@ const ProvincialPermitDetailsPage = () => {
               size="md"
               disabled={isSavingScaleSelection || !canEditNormalPermitScaleRows}
               renderIcon={isSavingScaleSelection ? PendingIcon : undefined}
-              onClick={() => void onSaveScaleSelection()}
+              onClick={() => void saveThenCheckReview(onSaveScaleSelection)}
             >
               {isSavingScaleSelection ? 'Saving…' : 'Save changes'}
             </Button>
@@ -7695,39 +7695,36 @@ const ProvincialPermitDetailsPage = () => {
             ) : undefined
           }
           actions={
-            detailMatchesRoute && (canRequestPermitReview || canOpenPermitReport) ? (
+            detailMatchesRoute && editingNewPermit && canSavePermit ? (
               <>
-                {canRequestPermitReview && (
-                  <DisabledButtonTooltip
-                    disabled={!permitReviewReady}
-                    description={
-                      isPermitTablesLoading
-                        ? 'Checking permit review readiness…'
-                        : permitReviewNotReadyMessage
-                    }
-                  >
-                    <Button
-                      kind="tertiary"
-                      size="md"
-                      disabled={isSendingPermitEmail || !permitReviewReady}
-                      onClick={() => void onOpenPermitReviewRequest()}
-                    >
-                      Email review request
-                    </Button>
-                  </DisabledButtonTooltip>
-                )}
-                {canOpenPermitReport && (
-                  <Button
-                    kind="primary"
-                    size="md"
-                    disabled={isOpeningPermitReport}
-                    renderIcon={isOpeningPermitReport ? PendingIcon : undefined}
-                    onClick={() => void onOpenPermitReport()}
-                  >
-                    {isOpeningPermitReport ? 'Opening…' : 'Print permit'}
-                  </Button>
-                )}
+                <Button
+                  kind="tertiary"
+                  size="md"
+                  disabled={isPermitBusy}
+                  onClick={permitEditSections.cancelEditing}
+                >
+                  Cancel
+                </Button>
+                <Button
+                  kind="primary"
+                  size="md"
+                  disabled={isPermitBusy || isRefreshingPermitForEdit}
+                  renderIcon={isPermitBusy ? PendingIcon : Save}
+                  onClick={() => void saveThenCheckReview(onSavePermit)}
+                >
+                  {isPermitBusy ? 'Saving…' : 'Save permit'}
+                </Button>
               </>
+            ) : detailMatchesRoute && canOpenPermitReport ? (
+              <Button
+                kind="primary"
+                size="md"
+                disabled={isOpeningPermitReport}
+                renderIcon={isOpeningPermitReport ? PendingIcon : undefined}
+                onClick={() => void onOpenPermitReport()}
+              >
+                {isOpeningPermitReport ? 'Downloading…' : 'Download PDF'}
+              </Button>
             ) : undefined
           }
         />
@@ -7860,11 +7857,36 @@ const ProvincialPermitDetailsPage = () => {
                 contained
                 className="application-tabs__list application-detail-tab-list"
               >
-                {permitDetailTabs.map(({ id, label, icon }) => (
-                  <Tab key={id} renderIcon={icon}>
-                    {label}
-                  </Tab>
-                ))}
+                {permitDetailTabs.map(({ id, label, icon }) => {
+                  // A new permit's tabs count the required fields its first save still needs.
+                  const outstanding =
+                    editingNewPermit && showPermitValidationErrors
+                      ? (permitTabErrorCounts[id] ?? 0)
+                      : 0
+                  return (
+                    <Tab
+                      key={id}
+                      renderIcon={outstanding ? undefined : icon}
+                      aria-label={
+                        outstanding
+                          ? `${label}, ${outstanding} required ${outstanding === 1 ? 'field' : 'fields'} outstanding`
+                          : undefined
+                      }
+                    >
+                      {label}
+                      {outstanding > 0 && (
+                        <Tag
+                          className="permit-tab-error-count"
+                          type="red"
+                          size="sm"
+                          aria-hidden="true"
+                        >
+                          {outstanding}
+                        </Tag>
+                      )}
+                    </Tab>
+                  )
+                })}
               </TabList>
               <ContiguousTabPanels order={permitDetailTabs.map(({ id }) => id)}>
                 <TabPanel key="permit" className="application-detail-tab-panel">
@@ -7878,7 +7900,9 @@ const ProvincialPermitDetailsPage = () => {
                       {isReviewedPermitEdit ? (
                         <Tile className="ministerial-permit-details">
                           <DetailCardTitle icon={Certificate}>Permit details</DetailCardTitle>
-                          <RequiredFieldsLegend />
+                          {(permitStatusSelectShown || detail.blanketOic) && (
+                            <RequiredFieldsLegend />
+                          )}
                           {renderReviewedPermitFields()}
                           {isMinisterialPermitEdit && renderFederalPermitNotice()}
                           {renderPermitEditActions()}
@@ -7890,7 +7914,7 @@ const ProvincialPermitDetailsPage = () => {
                           <DetailCardTitle icon={Certificate}>
                             {usesReviewedPermitFlow ? 'Permit details' : 'Permit summary'}
                           </DetailCardTitle>
-                          <RequiredFieldsLegend />
+                          {permitStatusSelectShown && <RequiredFieldsLegend />}
                           {renderPermitSummaryFields()}
                         </Tile>
                       ) : ministerialPermit ? (
@@ -8277,7 +8301,7 @@ const ProvincialPermitDetailsPage = () => {
                               )}
                             </>
                           )}
-                          {renderPermitClientEditActions()}
+                          {!editingNewPermit && renderPermitClientEditActions()}
                         </Tile>
                       </Column>
                     )}
@@ -8309,12 +8333,12 @@ const ProvincialPermitDetailsPage = () => {
                               />
                             )}
                             {renderShippingFields()}
-                            {canEditShipping && (
+                            {canEditShipping && !editingNewPermit && (
                               <div className="legacy-search-actions">
                                 <Button
                                   kind="tertiary"
                                   size="md"
-                                  disabled={isSavingShippingAction}
+                                  disabled={isSavingShipping}
                                   onClick={permitEditSections.cancelEditing}
                                 >
                                   Cancel
@@ -8322,15 +8346,11 @@ const ProvincialPermitDetailsPage = () => {
                                 <Button
                                   kind="primary"
                                   size="md"
-                                  disabled={isSavingShippingAction || isRefreshingPermitForEdit}
-                                  renderIcon={isSavingShippingAction ? PendingIcon : undefined}
-                                  onClick={() =>
-                                    void (permitEditSection === 'newPermit'
-                                      ? onSavePermit()
-                                      : onSaveShipping())
-                                  }
+                                  disabled={isSavingShipping || isRefreshingPermitForEdit}
+                                  renderIcon={isSavingShipping ? PendingIcon : undefined}
+                                  onClick={() => void saveThenCheckReview(onSaveShipping)}
                                 >
-                                  {isSavingShippingAction
+                                  {isSavingShipping
                                     ? 'Saving…'
                                     : usesReviewedPermitFlow
                                       ? 'Save changes'
@@ -9052,23 +9072,20 @@ const ProvincialPermitDetailsPage = () => {
       {permitReviewRequestOpen && (
         <ConfirmationModal
           open
-          title={`Email permit ${detail?.permitNumber ?? permitNumber ?? ''} review request?`}
-          description="An email notification of your Request for Permit to Transport Unmanufactured Timber from BC will be sent to the regional office on your behalf."
+          title={`Send permit ${detail?.permitNumber ?? permitNumber ?? ''} for review?`}
+          description="Your changes were saved. An email will tell the regional office this permit is ready for review."
           confirmLabel="Send request"
           pendingLabel="Sending…"
-          errorTitle="Review request email not sent."
-          errorMessage={permitReviewRequestErrorMessage}
+          restoreFocusAfterAction={false}
           onError={() => undefined}
           onClose={() => {
             setPermitReviewRequestOpen(false)
-            setPermitReviewRequestErrorMessage('')
-            const result = permitReviewRequestResultRef.current
+            setActionResult(permitReviewRequestResultRef.current ?? REVIEW_REQUEST_CANCELLED_RESULT)
             permitReviewRequestResultRef.current = null
-            if (result) setActionResult(result)
           }}
           onConfirm={async () => {
             if (!(await onSendPermitReviewRequest())) {
-              throw new Error('Review request email was not sent.')
+              throw new Error('Review request was not sent.')
             }
           }}
         >
@@ -9088,7 +9105,7 @@ const ProvincialPermitDetailsPage = () => {
               !!normalizeTrimmedText(permitReviewRequestCopyTo) &&
               !isValidEmail(normalizeTrimmedText(permitReviewRequestCopyTo))
             }
-            invalidText="Enter one valid email address."
+            invalidText={fieldErrorText('Enter a valid email address.')}
             onChange={(event) => {
               setShowPermitReviewRequestCopyToError(false)
               setPermitReviewRequestCopyTo(event.target.value)
@@ -9156,7 +9173,7 @@ const ProvincialPermitDetailsPage = () => {
               disabled: blanketOicScaleActionsDisabled || !canEditBlanketOicScaleRows,
               renderIcon: isSavingBoicScale ? PendingIcon : undefined,
               onClick: async () => {
-                if (await onAddBlanketOicScale()) return
+                if (await saveThenCheckReview(onAddBlanketOicScale)) return
                 focusFirstPanelError('.permit-scale-panel', '[data-scale-error]')
               },
             },
@@ -9271,7 +9288,7 @@ const ProvincialPermitDetailsPage = () => {
               disabled: isLoadingBoicPackage || isSavingBoicPackage,
               renderIcon: isSavingBoicPackage ? PendingIcon : undefined,
               onClick: async () => {
-                if (await onSaveBlanketOicPackage()) return
+                if (await saveThenCheckReview(onSaveBlanketOicPackage)) return
                 focusFirstPanelError('.permit-package-panel', '[data-package-error]')
               },
             },

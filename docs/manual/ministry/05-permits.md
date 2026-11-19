@@ -36,8 +36,9 @@ history, **GBMS**.
 <!-- roles: administrator, application-approver -->
 ### Find permit requests waiting for review
 
-When a client selects **Email review request**, LEXIS emails your regional
-mailbox with the permit number. To list requests, use **Provincial › Permit
+When a client saves an **Active** permit that has shipping details and a
+package with scale, LEXIS offers to email your regional mailbox with the
+permit number. The client can decline. To list requests, use **Provincial › Permit
 search** with **Permit status** set to **Active**, and your **Region**.
 Active permits show **(Pending)** beside the number.
 
@@ -193,7 +194,7 @@ never entered by hand: they follow the permit's status.
 
 ### Print a permit
 
-Select **Print permit** at the top of a **Complete** permit. The PDF has
+Select **Download PDF** at the top of a **Complete** permit. The PDF has
 the permit on the first page and the detailed summary by timber mark on the
 second.
 
@@ -202,7 +203,7 @@ second.
 
 - A client can change an **Active** permit and send a new review request.
 - On a **Complete** permit a client can still change the shipping details,
-  except the port of export, and print the permit again.
+  except the port of export, and download the permit again.
 - A client can't change the dates, the fee or the receipt number. A client
   can change the status only of a **Payment pending** permit.
 <!-- /roles -->
