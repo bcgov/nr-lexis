@@ -380,7 +380,7 @@ class ApplicationEditPolicyServiceTest {
 
   @Test
   void approverUpdatesExistingRemarksAfterTheDetailsLock() {
-    when(sessionService.parseRolesFromPrincipal(authentication))
+    when(sessionService.rolesForOrgUnit(authentication, null))
         .thenReturn(List.of("LEXIS_APPLICATION_APPROVER"));
     context("PMT", TODAY.minusDays(30), true, true, true);
 
@@ -393,7 +393,7 @@ class ApplicationEditPolicyServiceTest {
 
   @Test
   void readOnlyCannotUpdateRemarks() {
-    when(sessionService.parseRolesFromPrincipal(authentication))
+    when(sessionService.rolesForOrgUnit(authentication, null))
         .thenReturn(List.of("LEXIS_READ_ONLY"));
     context("PMT", TODAY.minusDays(30), true, true, true);
 
@@ -405,8 +405,38 @@ class ApplicationEditPolicyServiceTest {
   }
 
   @Test
+  void readOnlyInTheApplicationsRegionCannotUpdateRemarksWithAnApproverGrantElsewhere() {
+    Long skeena = 1908L;
+    when(applicationService.getApplicationEditContext(APPLICATION_NUMBER))
+        .thenReturn(
+            Optional.of(
+                new ApplicationEditContext(
+                    APPLICATION_NUMBER,
+                    "PMT",
+                    "P",
+                    "H",
+                    12L,
+                    TODAY.minusDays(30),
+                    true,
+                    true,
+                    true,
+                    null,
+                    false,
+                    false,
+                    skeena)));
+    when(sessionService.rolesForOrgUnit(authentication, skeena))
+        .thenReturn(List.of("LEXIS_READ_ONLY"));
+
+    assertThatThrownBy(
+            () ->
+                policyService.requireRemarkUpdate(
+                    authentication, applicationService, APPLICATION_NUMBER))
+        .hasMessageContaining("Remark editing");
+  }
+
+  @Test
   void remarksOnAnExpiredApplicationCannotBeUpdated() {
-    when(sessionService.parseRolesFromPrincipal(authentication))
+    when(sessionService.rolesForOrgUnit(authentication, null))
         .thenReturn(List.of("LEXIS_APPLICATION_APPROVER"));
     context("EXP", TODAY.minusDays(30), true, true, false);
 

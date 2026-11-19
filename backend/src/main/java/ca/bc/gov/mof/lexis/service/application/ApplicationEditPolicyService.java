@@ -214,12 +214,16 @@ public class ApplicationEditPolicyService {
       Authentication authentication,
       ApplicationDetailsRpcService applicationService,
       Long applicationNumber) {
-    Set<String> roles = normalizeRoles(sessionService.parseRolesFromPrincipal(authentication));
-    boolean readOnly = !roles.contains(ROLE_ADMIN) && isPureReadOnlyRole(roles);
     ApplicationDetailsRpcService.ApplicationEditContext context =
         applicationService == null || applicationNumber == null || applicationNumber < 1
             ? null
             : applicationService.getApplicationEditContext(applicationNumber).orElse(null);
+    Set<String> roles =
+        context == null
+            ? Set.of()
+            : normalizeRoles(
+                sessionService.rolesForOrgUnit(authentication, context.orgUnitNumber()));
+    boolean readOnly = !roles.contains(ROLE_ADMIN) && isPureReadOnlyRole(roles);
     require(
         !readOnly
             && context != null
