@@ -77,7 +77,6 @@ const capabilitiesFor = (scenario: ManualScenario): LexisSessionCapabilities => 
     welcomeTarget: null,
     legacyPath: null,
     actionRegions: {},
-    accessDeniedReason: null,
   }
   if (scenario === 'federalReadOnly') {
     return {

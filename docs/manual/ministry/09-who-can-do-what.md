@@ -15,9 +15,9 @@ Administrator is province-wide.
 | Administrator | Everything in LEXIS, in every region: reviewing applications, offers, exemptions and their approval, permits, federal applications and reports, plus the **Admin** menu, publishing notifications and **Print approved exemption**. | <!-- roles: administrator -->
 
 <!-- roles: application-approver, exemption-approver, read-only -->
-Application Approver and Exemption Approver can't be held together. An
-account granted both gets no access until one is removed. Read Only can be
-held with one approver role.
+Application Approver and Exemption Approver can be held together. Each
+gives you its own actions in its own regions. Read Only can be held with
+either or both.
 <!-- /roles -->
 
 ## Regions
