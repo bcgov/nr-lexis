@@ -114,13 +114,17 @@ The four search screens work the same way.
 3. The number of records found shows above the results. Select a column
    heading to sort, where the heading allows it. Use the pager under the
    table to change page or show 10, 25, 50, 100 or 200 rows.
-4. Select the number in the first column to open the record.
+4. Select the record number to open it. Ctrl-click (Command-click on a
+   Mac) opens it in a new tab using your active Business BCeID sign-in.
+   If prompted, choose the organization for this record and select **Continue**.
 
 ![Application search with results](images/01-application-search.png)
 
 **Clear all** empties the filters and the results.
 
-Dates are typed or picked as year-month-day, for example `2026-09-28`.
+Type dates as year-month-day, for example `2026-09-28`. Press Tab to move
+to the next field, Down Arrow to enter the calendar, or Escape to close it.
+Both ends of a date range share one calendar.
 
 When you open a record from a search, the **Back to** link above its title
 returns you to the same results. Your search is also kept if you reload the
@@ -133,7 +137,8 @@ or tabs.
 
 - A record opens for reading. Select the edit button on a card, for
   example **Edit application details** or **Edit offer**, to change it,
-  then **Save changes** or **Cancel**. You edit one card at a time.
+  then **Save changes** or **Cancel**. On applications, exemptions and
+  permits, a tab shows its save confirmation above the card you edited.
 - An edit button appears only when you are allowed to change that card
   and the record's status still permits it.
 - Fields marked with a red asterisk (`*`) are required.
@@ -171,16 +176,10 @@ In the list, **Open** shows a PDF, image or text file in a new tab,
 **Download** saves a copy, and **Delete** removes the document where you are
 allowed to. Check with your regional export office which documents it needs.
 
-## Session time-out
+## Session time-out and logging out
 
-After **25 minutes** without activity you are logged out. A warning with a
-countdown appears **5 minutes** before that. Select **Stay logged in** to
-continue.
+LEXIS logs you out after **25 minutes** of inactivity across all LEXIS
+tabs in the same browser. At the **5-minute** warning, select **Stay logged in**.
 
-Unsaved changes are lost when you are logged out, so save your work before
-you step away.
-
-## Logging out
-
-Open your profile and select **Log out**. LEXIS doesn't ask about unsaved
-changes when you log out.
+Save your changes before stepping away or logging out. To log out, open
+your profile and select **Log out**. This closes the session immediately.

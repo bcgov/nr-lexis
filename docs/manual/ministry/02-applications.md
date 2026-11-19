@@ -104,7 +104,7 @@ The **Review** tab on an application does the same job for one application.
 ### Move an application to another list date
 
 Open the application's **Application** tab and select **Edit application
-details**. **List date** offers the next two list dates, today's date when
+details**. Find **List date** below **Application date**. It offers the next two list dates, today's date when
 today is a list date, and **No list date**. No email is sent.
 
 ### Enter an application for a client
@@ -115,7 +115,9 @@ fills in, with these differences:
 - **Client** is a search. Type at least three characters of the name,
   acronym or client number.
 - Tick **I'm an agent** to add **Agent information** for a different client.
-- **Region** lists your regions.
+- Choose the harvest **Region** before entering the **Scale** details.
+  It determines the species and end uses available. Enter **Average log
+  volume (m³)** with a decimal point, for example `1.2`.
 - **Advertising list date** also offers today's date, when today is a list
   date, and **No list date**.
 - There is no accuracy confirmation. **Save application** saves at once.
@@ -149,7 +151,8 @@ Active or Payment pending.
 <!-- roles: administrator, application-approver, exemption-approver -->
 ### Packages and the summary of scale
 
-Packages and their summary of scale are on the **Scale** tab.
+On the **Scale** tab, choose a package in **Selected package**. Its card
+shows **Comments**, or a dash when empty, and its **Summary of scale**.
 <!-- /roles -->
 
 <!-- roles: administrator, application-approver -->
@@ -158,7 +161,8 @@ Packages and their summary of scale are on the **Scale** tab.
    top diameter (rads)**. Select **Save package**.
 2. Under **Summary of scale**, select **Add scale** for each line: **Timber
    mark**, **Pieces**, **Species**, **Grade** and **Volume (m³)**. Select
-   **Save scale**.
+   **Save scale**. LEXIS capitalizes the timber mark as you type. Choose
+   the grade by its code.
 <!-- /roles -->
 
 <!-- roles: exemption-approver -->
