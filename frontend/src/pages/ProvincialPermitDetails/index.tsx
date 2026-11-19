@@ -1383,6 +1383,8 @@ const ProvincialPermitDetailsPage = () => {
   }, [])
   const [isRemovingDocumentId, setIsRemovingDocumentId] = useState<string | null>(null)
   const [permitReceiptWarningOpen, setPermitReceiptWarningOpen] = useState(false)
+  // Set once the user chooses to save as Payment pending, so closing the warning keeps the status.
+  const permitReceiptWarningAcceptedRef = useRef(false)
   const [permitReviewRequestOpen, setPermitReviewRequestOpen] = useState(false)
   const [permitReviewRequestSendTo, setPermitReviewRequestSendTo] = useState('')
   const [permitReviewRequestCopyTo, setPermitReviewRequestCopyTo] = useState('')
@@ -8862,12 +8864,21 @@ const ProvincialPermitDetailsPage = () => {
         <ConfirmationModal
           open
           title="Save as Payment pending?"
-          description="Receipt number should not be empty for a complete permit so it will be saved as Payment pending."
-          confirmLabel="Save"
-          cancelLabel="Discard"
+          description="To complete the permit, add the Receipt number on the Fees tab. Without a Receipt number, the permit is saved as Payment pending."
+          confirmLabel="Save as Payment pending"
           pendingLabel="Saving…"
-          onClose={() => setPermitReceiptWarningOpen(false)}
+          onClose={() => {
+            setPermitReceiptWarningOpen(false)
+            // Closing without saving drops the change to Complete, so a later save can't apply it.
+            if (!permitReceiptWarningAcceptedRef.current && permitBaselineForm) {
+              setPermitForm((current) =>
+                current ? { ...current, permitStatus: permitBaselineForm.permitStatus } : current,
+              )
+            }
+            permitReceiptWarningAcceptedRef.current = false
+          }}
           onConfirm={async () => {
+            permitReceiptWarningAcceptedRef.current = true
             await (permitEditSection === 'shipping' ? onSaveShipping(true) : onSavePermit(true))
           }}
         />

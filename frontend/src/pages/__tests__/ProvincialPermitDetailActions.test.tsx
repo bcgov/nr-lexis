@@ -11219,7 +11219,7 @@ describe('Provincial Permit Detail Action Smoke', () => {
     await userEvent.click(
       within(await screen.findByRole('dialog', { name: 'Save as Payment pending?' })).getByRole(
         'button',
-        { name: 'Save' },
+        { name: 'Save as Payment pending' },
       ),
     )
 
@@ -11272,7 +11272,7 @@ describe('Provincial Permit Detail Action Smoke', () => {
     await userEvent.click(
       within(await screen.findByRole('dialog', { name: 'Save as Payment pending?' })).getByRole(
         'button',
-        { name: 'Save' },
+        { name: 'Save as Payment pending' },
       ),
     )
 
@@ -11288,34 +11288,66 @@ describe('Provincial Permit Detail Action Smoke', () => {
     expect(mockedFetchPermitApprovalEmailDefault).not.toHaveBeenCalled()
   })
 
-  it('asks before saving a completed Interior permit without a receipt and sends nothing on Discard', async () => {
-    configureActivePermit()
-    renderPermitDetails()
-
+  const openPaymentPendingWarning = async () => {
     await userEvent.click(await screen.findByRole('button', { name: /Edit permit(?: details)?/ }))
     await userEvent.selectOptions(screen.getByLabelText('Status'), 'COM')
     await selectPermitDetailTab('Fees')
     await userEvent.clear(screen.getByLabelText('Receipt number'))
     await selectPermitDetailTab('Permit')
     await userEvent.click(screen.getByRole('button', { name: 'Save permit' }))
+    return screen.findByRole('dialog', { name: 'Save as Payment pending?' })
+  }
 
-    const warning = await screen.findByRole('dialog', { name: 'Save as Payment pending?' })
+  it('asks before saving a completed Interior permit without a receipt and sends nothing on Cancel', async () => {
+    configureActivePermit()
+    renderPermitDetails()
+
+    const warning = await openPaymentPendingWarning()
     expect(
       within(warning).getByText(
-        'Receipt number should not be empty for a complete permit so it will be saved as Payment pending.',
+        'To complete the permit, add the Receipt number on the Fees tab. Without a Receipt number, the permit is saved as Payment pending.',
       ),
     ).toBeVisible()
     expect(mockedUpdatePermitDetail).not.toHaveBeenCalled()
 
-    await userEvent.click(within(warning).getByRole('button', { name: 'Discard' }))
+    await userEvent.click(within(warning).getByRole('button', { name: 'Cancel' }))
     await waitFor(() =>
       expect(screen.queryByRole('dialog', { name: 'Save as Payment pending?' })).toBeNull(),
     )
     expect(mockedUpdatePermitDetail).not.toHaveBeenCalled()
     expect(mockedUpdatePermitShipping).not.toHaveBeenCalled()
-    expect(screen.getByLabelText('Status')).toHaveValue('COM')
+    expect(screen.getByLabelText('Status')).toHaveValue('ACT')
     expect(screen.getByRole('button', { name: 'Save permit' })).toBeEnabled()
   })
+
+  it.each([
+    { description: 'Cancel', close: { name: 'Cancel' } },
+    { description: 'the close button', close: { name: 'Close' } },
+  ])(
+    'does not complete the permit from a later Fees save after $description on the Payment pending warning',
+    async ({ close }) => {
+      configureActivePermit()
+      renderPermitDetails()
+
+      const warning = await openPaymentPendingWarning()
+      await userEvent.click(within(warning).getByRole('button', close))
+      await waitFor(() =>
+        expect(screen.queryByRole('dialog', { name: 'Save as Payment pending?' })).toBeNull(),
+      )
+
+      await selectPermitDetailTab('Fees')
+      await userEvent.type(screen.getByLabelText('Receipt number'), 'R-9')
+      await userEvent.click(getActiveSectionSaveButton())
+
+      await waitFor(() =>
+        expect(mockedUpdatePermitDetail).toHaveBeenCalledWith(
+          expect.objectContaining({ permitStatus: 'ACT', permitReceiptNo: 'R-9' }),
+        ),
+      )
+      expect(mockedUpdatePermitDetail).toHaveBeenCalledTimes(1)
+      expect(screen.queryByRole('dialog', { name: 'Save as Payment pending?' })).toBeNull()
+    },
+  )
 
   it('sends the request once the warning for a completed Interior permit without a receipt is accepted', async () => {
     configureActivePermit()
@@ -11328,7 +11360,7 @@ describe('Provincial Permit Detail Action Smoke', () => {
     await selectPermitDetailTab('Permit')
     await userEvent.click(screen.getByRole('button', { name: 'Save permit' }))
     const warning = await screen.findByRole('dialog', { name: 'Save as Payment pending?' })
-    await userEvent.click(within(warning).getByRole('button', { name: 'Save' }))
+    await userEvent.click(within(warning).getByRole('button', { name: 'Save as Payment pending' }))
 
     await waitFor(() =>
       expect(mockedUpdatePermitDetail).toHaveBeenCalledWith(
@@ -11355,7 +11387,7 @@ describe('Provincial Permit Detail Action Smoke', () => {
     await userEvent.type(screen.getByLabelText('Purchaser'), 'test-2026-10-19')
   }
 
-  it('asks before saving the shipping of a completed Interior permit without a receipt and sends nothing on Discard', async () => {
+  it('asks before saving the shipping of a completed Interior permit without a receipt and sends nothing on Cancel', async () => {
     mockedFetchProvincialPermitDetail.mockResolvedValue(completedPermitWithoutReceipt)
     renderPermitDetails()
 
@@ -11366,7 +11398,7 @@ describe('Provincial Permit Detail Action Smoke', () => {
     expect(mockedUpdatePermitShipping).not.toHaveBeenCalled()
     expect(mockedUpdatePermitDetail).not.toHaveBeenCalled()
 
-    await userEvent.click(within(warning).getByRole('button', { name: 'Discard' }))
+    await userEvent.click(within(warning).getByRole('button', { name: 'Cancel' }))
     await waitFor(() =>
       expect(screen.queryByRole('dialog', { name: 'Save as Payment pending?' })).toBeNull(),
     )
@@ -11403,7 +11435,7 @@ describe('Provincial Permit Detail Action Smoke', () => {
     await editCompletedPermitShipping()
     await userEvent.click(screen.getByRole('button', { name: 'Save shipping' }))
     const warning = await screen.findByRole('dialog', { name: 'Save as Payment pending?' })
-    await userEvent.click(within(warning).getByRole('button', { name: 'Save' }))
+    await userEvent.click(within(warning).getByRole('button', { name: 'Save as Payment pending' }))
 
     await waitFor(() =>
       expect(mockedUpdatePermitDetail).toHaveBeenCalledWith(
@@ -11443,7 +11475,7 @@ describe('Provincial Permit Detail Action Smoke', () => {
     await userEvent.click(
       within(await screen.findByRole('dialog', { name: 'Save as Payment pending?' })).getByRole(
         'button',
-        { name: 'Save' },
+        { name: 'Save as Payment pending' },
       ),
     )
 
@@ -11863,7 +11895,7 @@ describe('Provincial Permit Detail Action Smoke', () => {
         await userEvent.click(
           within(await screen.findByRole('dialog', { name: 'Save as Payment pending?' })).getByRole(
             'button',
-            { name: 'Save' },
+            { name: 'Save as Payment pending' },
           ),
         )
       }
