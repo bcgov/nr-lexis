@@ -55,6 +55,11 @@ value**, **Valid offer** and **Offer approved**.
 7. Select **Save offer**. The new offer record opens with its number in the
    title.
 
+A company can have one offer on each package, or one offer on an application
+with no packages. A withdrawn offer still counts. If the company already has
+one, LEXIS doesn't save the new offer and shows **This company already has an offer on this package** (or **on this
+application with no package**). Open the existing offer to change it.
+
 LEXIS emails the applicant (the agent, when the application has one) and
 copies the regional office mailbox. If the applicant has no email address on
 file, the notice on the record says no email was sent, and you need to

@@ -1,6 +1,7 @@
 package ca.bc.gov.mof.lexis.service.offer;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -42,6 +43,7 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.aop.framework.ProxyFactory;
 import org.springframework.dao.DataAccessResourceFailureException;
+import org.springframework.dao.DuplicateKeyException;
 import org.springframework.transaction.TransactionDefinition;
 import org.springframework.transaction.annotation.AnnotationTransactionAttributeSource;
 import org.springframework.transaction.interceptor.TransactionInterceptor;
@@ -512,6 +514,37 @@ class PurchaseOfferOracleServiceTest {
     assertThat(transactionManager.commits).isZero();
     assertThat(transactionManager.rollbacks).isEqualTo(1);
     verifyNoInteractions(clientEmailResolver, notificationService);
+  }
+
+  @Test
+  void addOfferShouldExplainADuplicateCompanyOfferAndRollBack() {
+    stubProvincialApplication(1000456L);
+    when(repository.insertOffer(any(PurchaseOfferRepository.PurchaseOfferInsertRecord.class)))
+        .thenThrow(duplicateKey("EPO_CO_UK"));
+    RecordingTransactionManager transactionManager = new RecordingTransactionManager();
+
+    PurchaseOfferService.CreateOfferResult response =
+        transactionalService(transactionManager)
+            .addOffer(validCreateRequest(1000456L, null), "idir\\jsmith");
+
+    assertThat(response.success()).isFalse();
+    assertThat(response.errors())
+        .containsExactly(
+            "This company already has an offer on this application with no package. Edit that offer instead.");
+    assertThat(transactionManager.commits).isZero();
+    assertThat(transactionManager.rollbacks).isEqualTo(1);
+    verifyNoInteractions(clientEmailResolver, notificationService);
+  }
+
+  @Test
+  void addOfferShouldRethrowADuplicateKeyOnAnyOtherConstraint() {
+    stubProvincialApplication(1000456L);
+    DuplicateKeyException primaryKeyCollision = duplicateKey("EPO_PK");
+    when(repository.insertOffer(any(PurchaseOfferRepository.PurchaseOfferInsertRecord.class)))
+        .thenThrow(primaryKeyCollision);
+
+    assertThatThrownBy(() -> service.addOffer(validCreateRequest(1000456L, null), "idir\\jsmith"))
+        .isSameAs(primaryKeyCollision);
   }
 
   @Test
@@ -1713,6 +1746,29 @@ class PurchaseOfferOracleServiceTest {
   }
 
   @Test
+  void updateOfferShouldExplainADuplicateCompanyOfferOnThePackage() {
+    when(repository.findUpdateSourceByOfferNumber(81001L))
+        .thenReturn(Optional.of(updateSource(1000456L, "PKG-903", "P")));
+    stubProvincialApplicationWithPackage(1000456L, "PKG-904");
+    when(repository.updateOffer(any(PurchaseOfferRepository.PurchaseOfferUpdateRecord.class)))
+        .thenThrow(duplicateKey("EPO_CO_UK"));
+
+    PurchaseOfferService.CreateOfferResult response =
+        service.updateOffer(
+            new PurchaseOfferService.CreateOfferRequest(
+                1000456L, 81001L, "PKG-904", null, null, null, null, null, null, null,
+                null, null, null, null, null, null, null, null, null, null),
+            "idir\\jsmith");
+
+    assertThat(response.success()).isFalse();
+    assertThat(response.exportPurchaseOfferNumber()).isEqualTo(81001L);
+    assertThat(response.errors())
+        .containsExactly(
+            "This company already has an offer on this package. Edit that offer instead.");
+    verifyNoInteractions(notificationService);
+  }
+
+  @Test
   void updateOfferShouldPreserveRawSelectedPackageNumber() {
     String paddedPackageNumber = "PKG-903  ";
     when(repository.findUpdateSourceByOfferNumber(81001L))
@@ -2521,6 +2577,11 @@ class PurchaseOfferOracleServiceTest {
         listingDate,
         "R2",
         LocalDate.of(2026, 3, 15));
+  }
+
+  private static DuplicateKeyException duplicateKey(String constraintName) {
+    return new DuplicateKeyException(
+        "CallableStatementCallback; ORA-00001: unique constraint (THE." + constraintName + ") violated");
   }
 
   private PurchaseOfferService.CreateOfferRequest validCreateRequest(

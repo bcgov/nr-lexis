@@ -59,6 +59,12 @@ If the application can't take your offer, the reason shows under
 | … is no longer accepting offers | The final date for receipt of offers has passed. |
 | … does not have a valid listing date | Contact the regional export office. |
 
+Your company can have one offer on each package, or one offer on an
+application with no packages. A withdrawn offer still counts. If you already
+have one, LEXIS doesn't save the new offer and shows **This company already
+has an offer on this package** (or **on this application with no package**).
+Open your existing offer to change it.
+
 ### Who is told about your offer
 
 When you save, LEXIS emails the applicant and copies the regional export

@@ -904,6 +904,9 @@ public class OfferDetailsRpcController {
     if (normalized.contains("could not be resolved")) {
       return "offering_client_unavailable";
     }
+    if (normalized.contains("already has an offer")) {
+      return "duplicate_company_offer";
+    }
     if (normalized.contains("required")) {
       return "required_value_missing";
     }
