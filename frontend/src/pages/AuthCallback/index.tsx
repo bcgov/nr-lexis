@@ -1,6 +1,7 @@
 import { Loading } from '@carbon/react'
 import { useEffect } from 'react'
 import { clearLoginDestination } from '@/context/auth/login-destination'
+import { rememberCompletedLoginProvider } from '@/context/auth/login-provider'
 import { completeOidcLogin } from '@/service/oidc-service'
 
 const AuthCallback = () => {
@@ -8,7 +9,9 @@ const AuthCallback = () => {
     let mounted = true
     void completeOidcLogin()
       .then(() => {
-        if (mounted) window.location.replace('/')
+        if (!mounted) return
+        rememberCompletedLoginProvider()
+        window.location.replace('/')
       })
       .catch(() => {
         if (mounted) {

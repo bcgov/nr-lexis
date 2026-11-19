@@ -12,6 +12,7 @@ import { AppToastNotification } from '@/components/AppToastNotification'
 import SessionTimeoutWarning from '@/components/SessionTimeoutWarning'
 import { AuthContext } from '@/context/auth/AuthContext'
 import { clearLoginDestination } from '@/context/auth/login-destination'
+import { forgetLoginProvider, setPendingLoginProvider } from '@/context/auth/login-provider'
 import {
   allowedRegions,
   normalizeAction,
@@ -320,6 +321,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
         clearAllPageDataCache()
         clearPersistedSearchState()
         clearLoginDestination()
+        forgetLoginProvider()
         authenticatedSessionRef.current = false
         if (reason === 'idle-timeout') {
           markSessionExpiredLoginNotice()
@@ -531,10 +533,10 @@ export function AuthProvider({ children }: AuthProviderProps) {
   }, [capabilities.authenticated, expireSession, idleTimerVersion])
 
   const login = useCallback(
-    async (provider: LoginProvider = 'idir') => {
+    async (provider: LoginProvider = 'idir', { sessionChecked = false } = {}) => {
       sessionExpiryInFlightRef.current = false
 
-      if (isOidcConfigured) {
+      if (isOidcConfigured && !sessionChecked) {
         await refresh()
         if (authenticatedSessionRef.current) {
           return
@@ -545,6 +547,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
       apiService.clearCachedGetData()
       clearPersistedSearchState()
       if (isOidcConfigured) {
+        setPendingLoginProvider(provider)
         await startOidcLogin(provider)
         return
       }
@@ -568,6 +571,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
       clearAllPageDataCache()
       clearPersistedSearchState()
       clearLoginDestination()
+      forgetLoginProvider()
       authenticatedSessionRef.current = false
 
       setCapabilities(DEFAULT_CAPABILITIES)

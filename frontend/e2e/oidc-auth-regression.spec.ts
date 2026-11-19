@@ -10,8 +10,13 @@ import {
 // Exercise the real public callback and oidc-client-ts exchange. Only the identity
 // provider and backend responses are synthetic; no application auth bypass is used.
 for (const provider of [
-  { button: /log in with idir/i, hint: 'azureidir', label: 'IDIR' },
-  { button: /log in with business bceid/i, hint: 'bceidbusiness', label: 'Business BCeID' },
+  { button: /log in with idir/i, hint: 'azureidir', label: 'IDIR', id: 'idir' },
+  {
+    button: /log in with business bceid/i,
+    hint: 'bceidbusiness',
+    label: 'Business BCeID',
+    id: 'business-bceid',
+  },
 ]) {
   test(`OIDC ${provider.label} login completes PKCE and stores a tab-scoped session`, async ({
     page,
@@ -133,11 +138,14 @@ for (const provider of [
       (key) => ({
         session: JSON.parse(sessionStorage.getItem(key)!),
         persistent: localStorage.getItem(key),
+        lastProvider: localStorage.getItem('lexis.last-login-provider'),
       }),
       `oidc.user:${issuer}:${clientId}`,
     )
     expect(storedSession.session.profile.identity_provider).toBe(provider.hint)
     expect(storedSession.session.refresh_token).toBe('synthetic-refresh-token')
     expect(storedSession.persistent).toBeNull()
+    // Only the provider's name is shared with other tabs.
+    expect(storedSession.lastProvider).toBe(provider.id)
   })
 }

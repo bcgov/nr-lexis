@@ -95,10 +95,13 @@ describe('AuthProvider logout', () => {
     clearSessionExpiredLoginNotice()
     clearActiveForestClientNumber()
     window.sessionStorage.removeItem('lexis.login-destination')
+    window.sessionStorage.removeItem('lexis.pending-login-provider')
+    window.localStorage.removeItem('lexis.last-login-provider')
   })
 
   it('signs out of OIDC', async () => {
     markSessionExpiredLoginNotice()
+    window.localStorage.setItem('lexis.last-login-provider', 'idir')
     setActiveForestClientNumber('00012345')
     window.sessionStorage.setItem(
       'lexis.search-state.v1.provincial-review',
@@ -125,6 +128,7 @@ describe('AuthProvider logout', () => {
     expect(window.sessionStorage.getItem('lexis.search-state.v1.provincial-review')).toBeNull()
     expect(window.sessionStorage.getItem('unrelated')).toBe('keep')
     expect(window.sessionStorage.getItem('lexis.login-destination')).toBeNull()
+    expect(window.localStorage.getItem('lexis.last-login-provider')).toBeNull()
   })
 
   it('uses the REPT 25 minute idle timeout', () => {
@@ -187,6 +191,9 @@ describe('AuthProvider logout', () => {
     expect(authMocks.startOidcLogin).toHaveBeenCalledWith('idir')
     expect(mockedFetchSessionCapabilities).not.toHaveBeenCalled()
     expect(window.sessionStorage.getItem('lexis.login-destination')).toBe('/provincial/offers/123')
+    // The provider is shared with other tabs only once the sign-in completes.
+    expect(window.sessionStorage.getItem('lexis.pending-login-provider')).toBe('idir')
+    expect(window.localStorage.getItem('lexis.last-login-provider')).toBeNull()
   })
 
   it('keeps the saved destination when a stored session can no longer be renewed', async () => {
@@ -248,6 +255,7 @@ describe('AuthProvider logout', () => {
   })
 
   it('expires authenticated sessions after 25 minutes of inactivity', async () => {
+    window.localStorage.setItem('lexis.last-login-provider', 'idir')
     window.history.replaceState({}, document.title, '/provincial/review')
     window.sessionStorage.setItem(
       'lexis.search-state.v1.provincial-review',
@@ -288,6 +296,7 @@ describe('AuthProvider logout', () => {
     expect(window.location.pathname).toBe('/')
     expect(hasSessionExpiredLoginNotice()).toBe(true)
     expect(window.sessionStorage.getItem('lexis.search-state.v1.provincial-review')).toBeNull()
+    expect(window.localStorage.getItem('lexis.last-login-provider')).toBeNull()
   })
 
   it('resets the 25 minute inactivity timer when the user interacts with the page', async () => {

@@ -23,6 +23,7 @@ vi.mock('@/pages/Unauthorized', () => ({ default: () => <h1>No assigned role</h1
 
 const mockedUseAuth = vi.mocked(useAuth)
 const destinationKey = 'lexis.login-destination'
+const lastProviderKey = 'lexis.last-login-provider'
 const offerLink = '/provincial/offers/123?tab=details#offer-details'
 const app = () => (
   <StrictMode>
@@ -42,6 +43,7 @@ describe('Signed-out deep links', () => {
 
   afterEach(() => {
     window.history.replaceState({}, '', '/')
+    window.localStorage.removeItem(lastProviderKey)
   })
 
   it.each([
@@ -230,6 +232,60 @@ describe('Signed-out deep links', () => {
     expect(await screen.findByText('Unable to start the login flow.')).toBeVisible()
     expect(window.sessionStorage.getItem(destinationKey)).toBeNull()
     errorSpy.mockRestore()
+  })
+
+  it.each(['idir', 'business-bceid'] as const)(
+    'signs a signed-out tab in with %s, the provider last used, without showing the login page',
+    async (provider) => {
+      const login = vi.fn(() => new Promise<void>(() => undefined))
+      mockedUseAuth.mockReturnValue(createLoggedOutTestAuthContext({ login }))
+      window.localStorage.setItem(lastProviderKey, provider)
+      window.history.replaceState({}, '', offerLink)
+      render(app())
+
+      await waitFor(() => expect(login).toHaveBeenCalledWith(provider, { sessionChecked: true }))
+      expect(login).toHaveBeenCalledTimes(1)
+      expect(window.sessionStorage.getItem(destinationKey)).toBe(offerLink)
+      expect(screen.queryByRole('button', { name: 'Log in with IDIR' })).not.toBeInTheDocument()
+      expect(screen.queryByRole('heading', { name: 'Offer details' })).not.toBeInTheDocument()
+    },
+  )
+
+  it('shows the login page when the tab already tried to sign in by itself', async () => {
+    const login = vi.fn().mockResolvedValue(undefined)
+    mockedUseAuth.mockReturnValue(createLoggedOutTestAuthContext({ login }))
+    window.localStorage.setItem(lastProviderKey, 'idir')
+    window.sessionStorage.setItem('lexis.automatic-login-attempted', 'true')
+    window.history.replaceState({}, '', offerLink)
+    render(app())
+
+    expect(await screen.findByRole('button', { name: 'Log in with IDIR' })).toBeVisible()
+    expect(login).not.toHaveBeenCalled()
+  })
+
+  it('shows the login page when the automatic sign-in cannot start', async () => {
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => undefined)
+    const login = vi.fn().mockRejectedValue(new Error('provider unavailable'))
+    mockedUseAuth.mockReturnValue(createLoggedOutTestAuthContext({ login }))
+    window.localStorage.setItem(lastProviderKey, 'idir')
+    window.history.replaceState({}, '', offerLink)
+    render(app())
+
+    expect(await screen.findByRole('button', { name: 'Log in with IDIR' })).toBeVisible()
+    expect(login).toHaveBeenCalledTimes(1)
+    expect(window.sessionStorage.getItem(destinationKey)).toBeNull()
+    errorSpy.mockRestore()
+  })
+
+  it('shows the login page at the site root even when a provider is remembered', async () => {
+    const login = vi.fn().mockResolvedValue(undefined)
+    mockedUseAuth.mockReturnValue(createLoggedOutTestAuthContext({ login }))
+    window.localStorage.setItem(lastProviderKey, 'idir')
+    window.history.replaceState({}, '', '/')
+    render(app())
+
+    expect(await screen.findByRole('button', { name: 'Log in with IDIR' })).toBeVisible()
+    expect(login).not.toHaveBeenCalled()
   })
 
   it('starts a fresh root login without reusing an abandoned destination', async () => {
