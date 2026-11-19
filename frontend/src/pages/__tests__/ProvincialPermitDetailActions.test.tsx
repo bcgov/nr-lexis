@@ -8772,9 +8772,11 @@ describe('Provincial Permit Detail Action Smoke', () => {
         await userEvent.selectOptions(screen.getByLabelText('Status'), targetStatus)
         await userEvent.click(getActiveSectionSaveButton())
 
-        const notice = (await screen.findByText('Permit details saved.')).closest(
-          '.app-inline-notification',
-        )
+        // A save that completes the permit reports at page level.
+        const notice =
+          targetStatus === 'COM'
+            ? (await screen.findByText('Permit 777 completed.')).closest('.permit-page-result')
+            : (await screen.findByText('Permit details saved.')).closest('.app-inline-notification')
         await waitFor(() => expect(notice).toHaveFocus())
         expect(
           screen.queryByRole('button', { name: /Edit permit(?: details)?/ }),
@@ -12098,7 +12100,11 @@ describe('Provincial Permit Detail Action Smoke', () => {
           }),
         )
       })
-      expect(await screen.findByText('Permit details saved.')).toBeInTheDocument()
+      expect(
+        await screen.findByText(
+          targetStatus === 'COM' ? 'Permit 777 completed.' : 'Permit details saved.',
+        ),
+      ).toBeInTheDocument()
       expect(screen.queryByRole('dialog', { name: 'Email permit 777 approval?' })).toBeNull()
       expect(mockedFetchPermitApprovalEmailDefault).not.toHaveBeenCalled()
     },
@@ -12575,6 +12581,55 @@ describe('Provincial Permit Detail Action Smoke', () => {
     expect(mockedUpdatePermitDetail).toHaveBeenCalledTimes(1)
     expect(mockedSendPermitApprovalEmail).toHaveBeenCalledTimes(1)
   })
+
+  it.each([
+    {
+      description: 'was sent once the approval email is sent',
+      button: 'Send approval',
+      outcome: 'The confirmation email was sent to the client (owner@example.test).',
+    },
+    {
+      description: 'was not sent when the approval email is cancelled',
+      button: 'Cancel',
+      outcome: 'The confirmation email was not sent to the client.',
+    },
+  ])(
+    'reports a completed permit at page level and says the confirmation email $description',
+    async ({ button, outcome }) => {
+      const activePermit = {
+        ...permitDetail,
+        permitStatusCode: 'ACT',
+        permitStatusDescription: 'Active',
+      }
+      mockedFetchProvincialPermitDetail
+        .mockResolvedValueOnce(activePermit)
+        .mockResolvedValueOnce(activePermit)
+        .mockResolvedValue(permitDetail)
+      renderPermitDetails()
+
+      await userEvent.click(await screen.findByRole('button', { name: /Edit permit(?: details)?/ }))
+      await userEvent.selectOptions(screen.getByLabelText('Status'), 'COM')
+      await userEvent.click(getActiveSectionSaveButton())
+
+      const dialog = await screen.findByRole('dialog', { name: 'Email permit 777 approval?' })
+      const notice = screen.getByText('Permit 777 completed.').closest('.permit-page-result')
+      expect(notice).toHaveTextContent('The confirmation email was not sent to the client.')
+      expect(notice?.closest('[role="tabpanel"]')).toBeNull()
+      expect(screen.queryByText('Permit details saved.')).not.toBeInTheDocument()
+
+      await userEvent.click(within(dialog).getByRole('button', { name: button }))
+
+      await waitFor(() =>
+        expect(screen.queryByRole('dialog', { name: 'Email permit 777 approval?' })).toBeNull(),
+      )
+      await waitFor(() =>
+        expect(
+          screen.getByText('Permit 777 completed.').closest('.permit-page-result'),
+        ).toHaveTextContent(outcome),
+      )
+      expect(mockedSendPermitApprovalEmail).toHaveBeenCalledTimes(button === 'Cancel' ? 0 : 1)
+    },
+  )
 
   it('offers the approval email again when a reviewer saves an unchanged completed permit', async () => {
     renderPermitDetails()

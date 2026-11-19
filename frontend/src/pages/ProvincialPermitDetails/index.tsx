@@ -260,7 +260,11 @@ type PermitActionResult = ActionResult & {
   source?: PermitActionResultSource
   /** Moves focus to the notice, for a save that removes the control focus would return to. */
   focusOnReveal?: boolean
+  /** The save that completed the permit; its notice says whether the client was emailed. */
+  completion?: boolean
 }
+
+const COMPLETION_EMAIL_NOT_SENT = 'The confirmation email was not sent to the client.'
 const SECTION_SAVE_RESULT_SOURCES = new Set<PermitActionResultSource>([
   'permit',
   'applications',
@@ -3613,12 +3617,20 @@ const ProvincialPermitDetailsPage = () => {
       } catch (error) {
         console.error(error)
         if (!onSamePermit()) return
-        setActionResult({
-          kind: 'error',
-          title: 'Approval email unavailable.',
-          message: 'Unable to resolve the permit applicant notification email.',
-          source: 'email',
-        })
+        setActionResult((current) =>
+          current?.completion
+            ? {
+                ...current,
+                kind: 'warning',
+                message: `${current.message} Unable to resolve the permit applicant notification email.`,
+              }
+            : {
+                kind: 'error',
+                title: 'Approval email unavailable.',
+                message: 'Unable to resolve the permit applicant notification email.',
+                source: 'email',
+              },
+        )
       } finally {
         if (onSamePermit()) setIsSendingPermitEmail(false)
       }
@@ -4135,7 +4147,27 @@ const ProvincialPermitDetailsPage = () => {
         const editButtonRemoved =
           !permitDetailsEditableInStatus(savedPermitStatus, provincialSubmitter) ||
           (resultSource === 'fees' && (savedPermitStatus === 'PPD' || savedPermitStatus === 'COM'))
-        setActionResult(editButtonRemoved ? { ...savedResult, focusOnReveal: true } : savedResult)
+        const offersApprovalEmail =
+          canReviewPermits && !permitDetailRefreshFailed && savedPermitStatus === 'COM'
+        // A save that completes the permit says so at page level, with the email's outcome.
+        const completedNow =
+          savedPermitStatus === 'COM' &&
+          detailValue(detail.permitStatusCode).trim().toUpperCase() !== 'COM'
+        setActionResult(
+          completedNow
+            ? {
+                kind: savedResult.kind,
+                title: `Permit ${confirmedRequest.permitNumber} completed.`,
+                message: [offersApprovalEmail ? COMPLETION_EMAIL_NOT_SENT : '', savedResult.message]
+                  .filter(Boolean)
+                  .join(' '),
+                source: 'email',
+                completion: true,
+              }
+            : editButtonRemoved
+              ? { ...savedResult, focusOnReveal: true }
+              : savedResult,
+        )
         refreshLoadedPermitFees()
         // A status change can cancel or create GBMS invoices, so their history is read again.
         loadPermitGbmsEvents({
@@ -4143,7 +4175,7 @@ const ProvincialPermitDetailsPage = () => {
           receiptNumber: persistedUpdatedDetail.receiptNumber,
           blanketOic: persistedUpdatedDetail.blanketOic,
         })
-        if (canReviewPermits && !permitDetailRefreshFailed && savedPermitStatus === 'COM') {
+        if (offersApprovalEmail) {
           void onOpenPermitApprovalEmail(
             String(confirmedRequest.permitNumber),
             beginPermitRouteWork(),
@@ -5740,7 +5772,7 @@ const ProvincialPermitDetailsPage = () => {
         return false
       }
       // A failure shows in the dialog, which stays open to retry.
-      setActionResult(null)
+      setActionResult((current) => (current?.completion ? current : null))
       setPermitApprovalEmailErrorMessage('')
       const clientEmail = normalizeTrimmedText(approvalEmailAddress)
       if (!isValidEmail(clientEmail)) {
@@ -5753,12 +5785,22 @@ const ProvincialPermitDetailsPage = () => {
         const result = await sendPermitApprovalEmail(resolvedPermitNumber, clientEmail)
         if (!onSamePermit()) return false
         if (result.success) {
-          setActionResult({
-            kind: 'success',
-            title: 'Permit approval email sent.',
-            message: `Sent to the applicant (${clientEmail}).`,
-            source: 'email',
-          })
+          setActionResult((current) =>
+            current?.completion
+              ? {
+                  ...current,
+                  message: current.message.replace(
+                    COMPLETION_EMAIL_NOT_SENT,
+                    `The confirmation email was sent to the client (${clientEmail}).`,
+                  ),
+                }
+              : {
+                  kind: 'success',
+                  title: 'Permit approval email sent.',
+                  message: `Sent to the applicant (${clientEmail}).`,
+                  source: 'email',
+                },
+          )
           return true
         }
         setPermitApprovalEmailErrorMessage(result.message || 'Permit email could not be sent.')
