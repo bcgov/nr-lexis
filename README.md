@@ -154,8 +154,7 @@ contract and [gateway/README.md](gateway/README.md) for gateway responsibilities
 
 ## CI regression
 
-The weekly `Regression` GitHub Actions trigger is paused while the FAM team fixes the TEST IDIR
-regression account for Keycloak. Manual dispatch remains available to verify recovery. It reads
+The `Regression` GitHub Actions workflow runs weekly against TEST and by manual dispatch. It reads
 TEST IDIR credentials from GitHub `test` environment secrets, creates its own lifecycle records and
 resolves external reference keys at runtime. Playwright uses a reporter that suppresses sensitive
 output. Business BCeID browser regression is intentionally not scheduled because repeated automated
@@ -173,6 +172,7 @@ the next deployment. If the variable is unset, PROD and DEV default to off and T
 
 ## Component docs
 
+- [docs/manual/](docs/manual/README.md) - End-user manuals for industry (Business BCeID) and ministry (IDIR) users, updated with the code.
 - [docs/architecture.md](docs/architecture.md) - Runtime architecture and legacy-to-modern shifts.
 - [docs/intentional-legacy-divergences.md](docs/intentional-legacy-divergences.md) - Business-approved differences from legacy behaviour and their searchable code markers.
 - [docs/legacy-bug-register.md](docs/legacy-bug-register.md) - Legacy defects, modern corrections and proposed procedure changes deferred pending a business request.

@@ -1108,7 +1108,9 @@ test.describe('FSPTS-aligned LEXIS shell', () => {
       ),
     ).toBe('8px')
     const reportIssueTooltip = collapsedSupport
-      .locator('.csp-side-nav__tooltip')
+      .locator('.csp-side-nav__tooltip', {
+        has: page.getByRole('link', { name: 'Report an issue', exact: true }),
+      })
       .getByRole('tooltip')
     await collapsedReportIssue.hover()
     await expect(reportIssueTooltip).toHaveText('Report an issue')

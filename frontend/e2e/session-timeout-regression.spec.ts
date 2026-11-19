@@ -7,6 +7,7 @@ import {
   type SyntheticOidcSession,
 } from './utils'
 import { getWithAuth } from './utils/regression-auth'
+import { redirectExternalLogoutToLoginShell } from './utils/logout'
 import { gotoWithRecovery } from './utils/navigation'
 
 const SESSION_IDLE_WARNING_DELAY_MS = 20 * 60 * 1000
@@ -78,20 +79,12 @@ const installSyntheticLexisApi = async (
 }
 
 const installSyntheticLogoutRedirect = async (page: Page, sessionState: SyntheticSessionState) => {
-  const loginUrl = new URL('/', E2E_BASE_URL).toString()
-
-  await page.route('**/protocol/openid-connect/logout**', async (route) => {
-    const request = new URL(route.request().url())
-    expect(request.searchParams.get('id_token_hint')).toMatch(/^eyJ[^.]+\.[^.]+\.[^.]+$/)
-    expect(request.searchParams.get('post_logout_redirect_uri')).toBe(new URL(E2E_BASE_URL).origin)
+  await redirectExternalLogoutToLoginShell(page, (endSessionUrl) => {
+    expect(endSessionUrl.searchParams.get('id_token_hint')).toMatch(/^eyJ[^.]+\.[^.]+\.[^.]+$/)
+    expect(endSessionUrl.searchParams.get('post_logout_redirect_uri')).toBe(
+      new URL(E2E_BASE_URL).origin,
+    )
     sessionState.authenticated = false
-    await route.fulfill({
-      status: 302,
-      headers: {
-        location: loginUrl,
-      },
-      body: '',
-    })
   })
 }
 

@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState, type MouseEvent, type ReactN
 import {
   ChartColumn,
   Close,
+  DocumentPdf,
   Email,
   Folder,
   Logout,
@@ -32,7 +33,7 @@ import { useAuth } from '@/context/auth/useAuth'
 import { useTheme } from '@/context/theme/useTheme'
 import type { NavigationRoleScope, RouteActionMatch } from '@/routes/routeAccessTypes'
 import { fetchNotifications } from '@/service/notification-service'
-import { REPORT_ISSUE_HREF } from '@/utils/support'
+import { REPORT_ISSUE_HREF, userManualsForRoles } from '@/utils/support'
 
 type LayoutProps = {
   children: ReactNode
@@ -810,6 +811,30 @@ function Layout({ children }: LayoutProps) {
             >
               Support
             </p>
+            {userManualsForRoles(capabilities.roles).map((userManual) => (
+              <SideNavigationTooltip
+                key={userManual.href}
+                enabled={isSideNavCollapsed}
+                label={userManual.label}
+              >
+                {(descriptionId) => (
+                  <a
+                    href={userManual.href}
+                    download
+                    className="cds--side-nav__link csp-side-nav__link"
+                    aria-label={isSideNavCollapsed ? userManual.label : undefined}
+                    aria-describedby={descriptionId}
+                  >
+                    <span className="cds--side-nav__icon csp-side-nav__icon" aria-hidden="true">
+                      <DocumentPdf size={20} />
+                    </span>
+                    <span className="cds--side-nav__link-text csp-side-nav__link-text">
+                      {userManual.label}
+                    </span>
+                  </a>
+                )}
+              </SideNavigationTooltip>
+            ))}
             <SideNavigationTooltip enabled={isSideNavCollapsed} label="Report an issue">
               {(descriptionId) => (
                 <a

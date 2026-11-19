@@ -464,6 +464,7 @@ const installPermitParityFixtures = async (
             body = [{ code: 'W', description: 'Utility' }]
           }
           break
+        case '/api/lexis/rpc/application-details/client-locations':
         case '/api/lexis/rpc/exemption-details/client-locations':
           body = [
             { locationCode: '03', locationName: 'Owner office', selected: true },
@@ -622,7 +623,7 @@ test.describe('Provincial permit parity regressions', () => {
     await expect(save).toBeEnabled()
     await expect(page.getByLabel('Issued date', { exact: true })).toBeDisabled()
     await expect(page.getByLabel('Expiry date', { exact: true })).toBeDisabled()
-    await expect(page.getByLabel('Submit date', { exact: true })).toBeEnabled()
+    await expect(page.getByLabel('Submit date', { exact: true })).toBeDisabled()
     await selectTab(page, 'Shipping')
     const country = page.getByRole('combobox', { name: 'Final destination country', exact: true })
     await expect(country).toHaveValue('United States')
@@ -661,13 +662,10 @@ test.describe('Provincial permit parity regressions', () => {
     await page
       .getByRole('option', { name: 'Owner Forestry Ltd. (OFL) · 00067890', exact: true })
       .click()
-    await expect(
-      page.getByRole('region', { name: 'Applicant details', exact: true }),
-    ).toContainText('1 Owner Street')
+    const applicantPanel = page.getByRole('tabpanel', { name: 'Applicant', exact: true })
+    await expect(applicantPanel).toContainText('1 Owner Street')
     await page.getByLabel('Client location', { exact: true }).selectOption('04')
-    await expect(
-      page.getByRole('region', { name: 'Applicant details', exact: true }),
-    ).toContainText('4 Mill Road')
+    await expect(applicantPanel).toContainText('4 Mill Road')
 
     await page
       .getByRole('tab', { name: 'Shipping, 3 required fields outstanding', exact: true })
@@ -1134,8 +1132,8 @@ test.describe('Provincial permit parity regressions', () => {
         body: expect.objectContaining({ permitStatus: 'COM' }),
       }),
     )
-    // The blank receipt is left out of the request, so the server saves it as Payment pending.
-    expect(fixture.writes[0]?.body).not.toHaveProperty('permitReceiptNo')
+    // The blank receipt is sent explicitly, so the server saves it as Payment pending.
+    expect(fixture.writes[0]?.body).toHaveProperty('permitReceiptNo', '')
   })
 
   test('opens the Blanket OIC package form as a right panel without hiding the package card', async ({
@@ -1312,7 +1310,7 @@ test.describe('Provincial permit parity regressions', () => {
     await panel.getByRole('button', { name: 'Save package', exact: true }).click()
 
     await expect(panel).toHaveCount(0)
-    await expect(page.getByRole('button', { name: 'Create package', exact: true })).toBeFocused()
+    await expect(page.getByRole('button', { name: 'Edit package', exact: true })).toBeFocused()
     await expect(page.getByText('Package saved.', { exact: true })).toBeVisible()
     await expect(page.getByRole('heading', { name: 'Package BOIC-NEW', exact: true })).toBeVisible()
     expect(fixture.writes).toEqual([
