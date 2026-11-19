@@ -372,10 +372,6 @@ const requiredDropdownRef =
 const optionName = (option: ApplicationCodeOption | null): string =>
   option ? option.description || option.code : ''
 
-// A grade lists without its "Grade" prefix, so typing its code selects it.
-const gradeName = (option: ApplicationCodeOption | null): string =>
-  optionName(option).replace(/^Grade\s+/i, '')
-
 const findOption = (
   options: ApplicationCodeOption[],
   code: string,
@@ -2158,7 +2154,7 @@ function ProvincialApplicationItemsPanel({
                     titleText={requiredLabel('Grade')}
                     label=""
                     items={gradeOptions}
-                    itemToString={gradeName}
+                    itemToString={(option) => option?.code ?? ''}
                     selectedItem={findOption(gradeOptions, scaleForm.gradeCode)}
                     disabled={scaleFieldsDisabled || !scaleForm.speciesCode}
                     invalid={!!scaleFieldError('scaleGradeCode')}

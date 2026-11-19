@@ -76,9 +76,9 @@ const getReadOnlyField = (container: HTMLElement, label: string): HTMLElement =>
 describe.sequential('Provincial Application Detail Actions - application', () => {
   beforeEach(setupApplicationDetailTests)
 
-  const renderApplicationDetailPage = () =>
+  const renderApplicationDetailPage = (path = '/provincial/application/321') =>
     render(
-      <MemoryRouter initialEntries={['/provincial/application/321']}>
+      <MemoryRouter initialEntries={[path]}>
         <Routes>
           <Route
             path="/provincial/application/:applicationNumber"
@@ -227,6 +227,16 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
     expect(
       screen.queryByRole('link', { name: 'Back to Application search' }),
     ).not.toBeInTheDocument()
+  })
+
+  it('returns a new tab opened from Application search to its filtered results', async () => {
+    renderApplicationDetailPage(
+      '/provincial/application/321?region=1903&fromApplicationSearch=true&tab=items',
+    )
+    expect(await screen.findByRole('link', { name: 'Back to Application search' })).toHaveAttribute(
+      'href',
+      '/provincial/application?region=1903',
+    )
   })
 
   it('focuses the title when a record opens with focus lost', async () => {
@@ -411,10 +421,9 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
     expect(
       within(pageHeader as HTMLElement).getByText('Author: idir\\application-author'),
     ).toBeInTheDocument()
-    expect(screen.getByRole('link', { name: 'Back to Application search' })).toHaveAttribute(
-      'href',
-      '/provincial/application',
-    )
+    expect(
+      screen.queryByRole('link', { name: 'Back to Application search' }),
+    ).not.toBeInTheDocument()
     const status = within(pageHeader as HTMLElement).getByText('Approved')
     expect(status).toHaveClass('lexis-status-tag')
     expect(status).toHaveAttribute('data-status-variant', 'positive')

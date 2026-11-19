@@ -1450,6 +1450,7 @@ class OraclePermitDetailsRpcServiceTest {
         .extracting(corePackage -> corePackage.packageNumber())
         .containsExactly("MIN-1", "MIN-2");
     assertThat(response.packageList().get(0).packageDetails()).isNull();
+    assertThat(response.packageList().get(0).comments()).isEqualTo("Notes for MIN-1");
     assertThat(response.packageList().get(1).scaleList())
         .extracting(scale -> scale.id())
         .containsExactly("m2-unassigned");
@@ -10310,7 +10311,7 @@ class OraclePermitDetailsRpcServiceTest {
             5.0d,
             2.0d,
             "ACT",
-            "",
+            "Notes for " + packageNumber,
             "N",
             packageGrowth,
             "T"),

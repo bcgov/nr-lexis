@@ -51,6 +51,21 @@ export const landingPageReturnTo = (route: string): DetailReturnTo => ({
 export const readDetailReturnTo = (state: unknown): DetailReturnTo | undefined =>
   isRecord(state) ? readDetailReturnTarget(state.returnTo) : undefined
 
+// A link opened in a new tab loses router state during sign-in. Preserve its search filters in the URL.
+export const APPLICATION_SEARCH_ORIGIN_PARAM = 'fromApplicationSearch'
+
+export const applicationSearchReturnTo = (params: URLSearchParams): DetailReturnTo | undefined => {
+  if (params.get(APPLICATION_SEARCH_ORIGIN_PARAM) !== 'true') return undefined
+  const filters = new URLSearchParams(params)
+  filters.delete(APPLICATION_SEARCH_ORIGIN_PARAM)
+  filters.delete('tab')
+  const query = filters.toString()
+  return {
+    label: 'Application search',
+    to: query ? `/provincial/application?${query}` : '/provincial/application',
+  }
+}
+
 export const withDetailReturnTo = (
   state: unknown,
   returnTo: DetailReturnTo,

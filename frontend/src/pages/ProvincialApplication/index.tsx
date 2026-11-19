@@ -71,9 +71,11 @@ import {
   parsePageSizeParam,
   parsePositiveIntParam,
   parseSortDirectionParam,
+  searchParamsWithValue,
   toCarbonSortDirection,
   type IdTextOption,
 } from '@/pages/shared/search-query-utils'
+import { APPLICATION_SEARCH_ORIGIN_PARAM } from '@/pages/shared/detail-navigation'
 import { useSearchFilterDraft } from '@/pages/shared/useSearchFilterDraft'
 import { usePersistedSearchParams } from '@/pages/shared/usePersistedSearchParams'
 import { useDefaultRegionPreference } from '@/pages/shared/useDefaultRegionPreference'
@@ -253,6 +255,11 @@ const ProvincialApplicationPage = () => {
   const navigate = useNavigate()
   const { capabilities, canPerform } = useAuth()
   const [searchParams, setSearchParams] = usePersistedSearchParams('provincial-applications')
+  const applicationResultParams = searchParamsWithValue(
+    searchParams,
+    APPLICATION_SEARCH_ORIGIN_PARAM,
+    'true',
+  )
   const [allRegionOptions, setAllRegionOptions] = useState<IdTextOption[]>([])
   const regionOptions = useAllowedRegionOptions(allRegionOptions, '/applicationSearch', 'id')
   const { defaultRegion: defaultZone, preferenceLoading } = useDefaultRegionPreference(
@@ -1089,7 +1096,10 @@ const ProvincialApplicationPage = () => {
                       <TableCell>
                         <Link
                           className="cds--link"
-                          to={withCurrentSearch(`/provincial/application/${row.applicationNumber}`)}
+                          to={appendSearchParamsToPath(
+                            `/provincial/application/${row.applicationNumber}`,
+                            applicationResultParams,
+                          )}
                           state={{
                             returnTo: {
                               label: 'Application search',

@@ -36,10 +36,6 @@ const normalizeCode = (value: string): string => value.trim().toUpperCase()
 const optionName = (option: ApplicationCodeOption | null): string =>
   option ? option.description || option.code : ''
 
-// A grade lists without its "Grade" prefix, so typing its code selects it.
-const gradeName = (option: ApplicationCodeOption | null): string =>
-  optionName(option).replace(/^Grade\s+/i, '')
-
 const findOption = (
   options: ApplicationCodeOption[],
   code: string,
@@ -164,7 +160,7 @@ export default function BlanketOicScaleCodeFields({
         titleText={requiredLabel('Grade')}
         label=""
         items={gradeOptions}
-        itemToString={gradeName}
+        itemToString={(option) => option?.code ?? ''}
         selectedItem={findOption(gradeOptions, normalizeCode(value.gradeCode))}
         disabled={disabled || gradeAwaitsSpecies || gradeAvailability !== 'available'}
         invalid={!!fieldErrors?.gradeCode}

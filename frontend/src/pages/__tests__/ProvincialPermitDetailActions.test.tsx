@@ -7829,7 +7829,7 @@ describe('Provincial Permit Detail Action Smoke', () => {
     await userEvent.click(await screen.findByRole('button', { name: 'Add scale' }))
     await userEvent.type(await screen.findByLabelText('Timber mark'), 'TM-NEW')
     await chooseDropdownOption(await screen.findByRole('combobox', { name: 'Species' }), 'Alder')
-    await chooseDropdownOption(screen.getByRole('combobox', { name: 'Grade' }), 'Utility')
+    await chooseDropdownOption(screen.getByRole('combobox', { name: 'Grade' }), 'W')
     await userEvent.type(screen.getByLabelText('Pieces'), '12')
     await userEvent.clear(screen.getByLabelText('Volume (m³)'))
     await userEvent.type(screen.getByLabelText('Volume (m³)'), '1.5')
@@ -7957,7 +7957,7 @@ describe('Provincial Permit Detail Action Smoke', () => {
     const panel = await screen.findByRole('complementary', { name: 'Add scale' })
     await userEvent.type(within(panel).getByLabelText('Timber mark'), 'TM-RETRY')
     await chooseDropdownOption(within(panel).getByRole('combobox', { name: 'Species' }), 'Hemlock')
-    await chooseDropdownOption(within(panel).getByRole('combobox', { name: 'Grade' }), 'Sawlog')
+    await chooseDropdownOption(within(panel).getByRole('combobox', { name: 'Grade' }), 'A')
     await userEvent.type(within(panel).getByLabelText('Pieces'), '4')
     await userEvent.clear(within(panel).getByLabelText('Volume (m³)'))
     await userEvent.type(within(panel).getByLabelText('Volume (m³)'), '1.5')
@@ -8012,7 +8012,7 @@ describe('Provincial Permit Detail Action Smoke', () => {
     await userEvent.type(within(panel).getByLabelText('Timber mark'), 'TM-BAD')
     await userEvent.type(within(panel).getByLabelText('Pieces'), '4')
     await chooseDropdownOption(within(panel).getByRole('combobox', { name: 'Species' }), 'Hemlock')
-    await chooseDropdownOption(within(panel).getByRole('combobox', { name: 'Grade' }), 'Sawlog')
+    await chooseDropdownOption(within(panel).getByRole('combobox', { name: 'Grade' }), 'A')
     const volume = within(panel).getByLabelText('Volume (m³)')
     await userEvent.clear(volume)
     await userEvent.type(volume, '2.5')
@@ -8075,7 +8075,7 @@ describe('Provincial Permit Detail Action Smoke', () => {
     await userEvent.type(within(panel).getByLabelText('Timber mark'), 'TM-EXACT')
     await userEvent.type(within(panel).getByLabelText('Pieces'), '1')
     await chooseDropdownOption(within(panel).getByRole('combobox', { name: 'Species' }), 'Hemlock')
-    await chooseDropdownOption(within(panel).getByRole('combobox', { name: 'Grade' }), 'Sawlog')
+    await chooseDropdownOption(within(panel).getByRole('combobox', { name: 'Grade' }), 'A')
     const volume = within(panel).getByLabelText('Volume (m³)')
 
     await userEvent.clear(volume)
@@ -8108,7 +8108,7 @@ describe('Provincial Permit Detail Action Smoke', () => {
     await userEvent.type(timberMark, 'ek123a')
     expect(timberMark).toHaveValue('EK123A')
     await chooseDropdownOption(within(panel).getByRole('combobox', { name: 'Species' }), 'Hemlock')
-    await chooseDropdownOption(within(panel).getByRole('combobox', { name: 'Grade' }), 'Sawlog')
+    await chooseDropdownOption(within(panel).getByRole('combobox', { name: 'Grade' }), 'A')
     await userEvent.clear(within(panel).getByLabelText('Volume (m³)'))
     await userEvent.type(within(panel).getByLabelText('Volume (m³)'), '1.5')
 
@@ -8248,7 +8248,7 @@ describe('Provincial Permit Detail Action Smoke', () => {
     expect(screen.getByLabelText('Timber mark')).toHaveValue('')
     await chooseDropdownOption(await screen.findByRole('combobox', { name: 'Species' }), 'Hemlock')
     await userEvent.type(screen.getByLabelText('Timber mark'), 'TM-NEW')
-    await chooseDropdownOption(screen.getByRole('combobox', { name: 'Grade' }), 'Sawlog')
+    await chooseDropdownOption(screen.getByRole('combobox', { name: 'Grade' }), 'A')
     await userEvent.type(screen.getByLabelText('Pieces'), '4')
     await userEvent.clear(screen.getByLabelText('Volume (m³)'))
     await userEvent.type(screen.getByLabelText('Volume (m³)'), '1.5')
@@ -8347,7 +8347,7 @@ describe('Provincial Permit Detail Action Smoke', () => {
     await userEvent.click(await screen.findByRole('button', { name: 'Add scale' }))
     await userEvent.type(screen.getByLabelText('Timber mark'), 'TM-PAD')
     await chooseDropdownOption(screen.getByRole('combobox', { name: 'Species' }), 'Hemlock')
-    await chooseDropdownOption(screen.getByRole('combobox', { name: 'Grade' }), 'Sawlog')
+    await chooseDropdownOption(screen.getByRole('combobox', { name: 'Grade' }), 'A')
     await userEvent.type(screen.getByLabelText('Pieces'), '4')
     await userEvent.clear(screen.getByLabelText('Volume (m³)'))
     await userEvent.type(screen.getByLabelText('Volume (m³)'), '1.5')
@@ -8494,7 +8494,7 @@ describe('Provincial Permit Detail Action Smoke', () => {
     await userEvent.click(await screen.findByRole('button', { name: 'Add scale' }))
     await userEvent.type(await screen.findByLabelText('Timber mark'), 'TM-NEW')
     await chooseDropdownOption(await screen.findByRole('combobox', { name: 'Species' }), 'Alder')
-    await chooseDropdownOption(screen.getByRole('combobox', { name: 'Grade' }), 'Utility')
+    await chooseDropdownOption(screen.getByRole('combobox', { name: 'Grade' }), 'W')
     await userEvent.type(screen.getByLabelText('Pieces'), '12')
     await userEvent.clear(screen.getByLabelText('Volume (m³)'))
     await userEvent.type(screen.getByLabelText('Volume (m³)'), '1.5')
@@ -10267,6 +10267,42 @@ describe('Provincial Permit Detail Action Smoke', () => {
     expect(mockedUpdatePermitDetail).not.toHaveBeenCalled()
   })
 
+  it('keeps the last application attached when its removal would prevent completion', async () => {
+    configureMinisterialActivePermit({ receiptNumber: null })
+    mockedFetchProvincialPermitDetailTabs.mockResolvedValue(completablePermitTabs)
+    renderPermitDetails()
+    await userEvent.click(await screen.findByRole('button', { name: 'Edit permit details' }))
+    await userEvent.click(
+      await screen.findByRole('checkbox', { name: 'Include application 1000456 in permit' }),
+    )
+    await userEvent.selectOptions(screen.getByLabelText('Status'), 'COM')
+    await userEvent.click(getActiveSectionSaveButton())
+
+    await screen.findByText(
+      'At least one application is required before a permit can be completed.',
+    )
+    expect(screen.queryByRole('dialog', { name: 'Save as Payment pending?' })).toBeNull()
+    expect(mockedUpdatePermitApplications).not.toHaveBeenCalled()
+    expect(mockedUpdatePermitDetail).not.toHaveBeenCalled()
+  })
+
+  it('reports a failed table load instead of reporting missing scales on completion', async () => {
+    configureActivePermit()
+    mockedFetchProvincialPermitDetailTabs.mockRejectedValue(new Error('tables unavailable'))
+    renderPermitDetails()
+    await userEvent.click(await screen.findByRole('button', { name: /Edit permit(?: details)?/ }))
+    await userEvent.selectOptions(screen.getByLabelText('Status'), 'COM')
+    await userEvent.click(getActiveSectionSaveButton())
+
+    await screen.findByText(
+      'Unable to retrieve permit table details. Reload the permit before completing it.',
+    )
+    expect(
+      screen.queryByText('At least one package is required before a permit can be completed.'),
+    ).toBeNull()
+    expect(mockedUpdatePermitDetail).not.toHaveBeenCalled()
+  })
+
   it('lists each error of a refused permit save on its own line', async () => {
     configureActivePermit()
     mockedUpdatePermitDetail.mockResolvedValue({
@@ -11560,6 +11596,31 @@ describe('Provincial Permit Detail Action Smoke', () => {
     expect(mockedUpdatePermitDetail).toHaveBeenCalledTimes(1)
     await waitFor(() =>
       expect(screen.queryByRole('dialog', { name: 'Save as Payment pending?' })).toBeNull(),
+    )
+  })
+
+  it('keeps the saved status on a later receipt save after the Payment pending save is refused', async () => {
+    configureActivePermit()
+    mockedUpdatePermitDetail.mockResolvedValueOnce({
+      success: false,
+      message: 'The permit could not be updated.',
+      errors: [],
+      warnings: [],
+      source: 'api',
+    })
+    renderPermitDetails()
+    const warning = await openPaymentPendingWarning()
+    await userEvent.click(within(warning).getByRole('button', { name: 'Save as Payment pending' }))
+    await screen.findByText('The permit could not be updated.')
+    expect(screen.getByLabelText('Status')).toHaveValue('ACT')
+
+    await selectPermitDetailTab('Fees')
+    await userEvent.type(screen.getByLabelText('Receipt number'), 'R-9')
+    await userEvent.click(getActiveSectionSaveButton())
+    await waitFor(() =>
+      expect(mockedUpdatePermitDetail).toHaveBeenLastCalledWith(
+        expect.objectContaining({ permitStatus: 'ACT', permitReceiptNo: 'R-9' }),
+      ),
     )
   })
 

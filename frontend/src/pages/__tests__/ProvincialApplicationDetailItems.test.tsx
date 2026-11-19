@@ -105,7 +105,7 @@ const fillNewScale = async (
 ) => {
   fireEvent.change(controls.getByLabelText('Timber mark'), { target: { value: 'TM002' } })
   await chooseDropdownOption(controls.getByRole('combobox', { name: 'Species' }), 'Douglas-fir')
-  await chooseDropdownOption(controls.getByRole('combobox', { name: 'Grade' }), 'Sawlog')
+  await chooseDropdownOption(controls.getByRole('combobox', { name: 'Grade' }), '1')
   fireEvent.change(controls.getByLabelText('Pieces'), { target: { value: pieces } })
   fireEvent.change(controls.getByLabelText('Volume (m³)'), { target: { value: volume } })
 }
@@ -3478,15 +3478,15 @@ describe.sequential('Provincial Application Detail Actions - items', () => {
     expect(await screen.findByRole('option', { name: 'Hemlock' })).toBeInTheDocument()
     expect(screen.getByRole('option', { name: 'Douglas-fir' })).toBeInTheDocument()
     await userEvent.click(screen.getByRole('option', { name: 'Hemlock' }))
-    await chooseDropdownOption(grade, 'Sawlog')
+    await chooseDropdownOption(grade, '1')
 
     // A different species starts with no grade, then saves with the species chosen.
     await chooseDropdownOption(species, 'Douglas-fir')
-    expect(grade).not.toHaveTextContent('Sawlog')
+    expect(grade).not.toHaveTextContent('1')
     await waitFor(() =>
       expect(mockedFetchApplicationGradeCodes).toHaveBeenLastCalledWith('12', 'FI'),
     )
-    await chooseDropdownOption(grade, 'Sawlog')
+    await chooseDropdownOption(grade, '1')
     fireEvent.change(drawer.getByLabelText('Timber mark'), { target: { value: 'TM002' } })
     fireEvent.change(drawer.getByLabelText('Pieces'), { target: { value: '2' } })
     fireEvent.change(drawer.getByLabelText('Volume (m³)'), { target: { value: '8.0' } })

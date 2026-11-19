@@ -1416,8 +1416,7 @@ const ProvincialPermitDetailsPage = () => {
   }, [])
   const [isRemovingDocumentId, setIsRemovingDocumentId] = useState<string | null>(null)
   const [permitReceiptWarningOpen, setPermitReceiptWarningOpen] = useState(false)
-  // Set once the user chooses to save as Payment pending, so closing the warning keeps the status.
-  const permitReceiptWarningAcceptedRef = useRef(false)
+  const paymentPendingSaveSucceededRef = useRef(false)
   const [permitReviewRequestOpen, setPermitReviewRequestOpen] = useState(false)
   const [permitReviewRequestSendTo, setPermitReviewRequestSendTo] = useState('')
   const [permitReviewRequestCopyTo, setPermitReviewRequestCopyTo] = useState('')
@@ -4154,9 +4153,7 @@ const ProvincialPermitDetailsPage = () => {
             ? {
                 kind: savedResult.kind,
                 title: `Permit ${confirmedRequest.permitNumber} completed.`,
-                message: [offersApprovalEmail ? COMPLETION_EMAIL_NOT_SENT : '', savedResult.message]
-                  .filter(Boolean)
-                  .join(' '),
+                message: [COMPLETION_EMAIL_NOT_SENT, savedResult.message].filter(Boolean).join(' '),
                 source: 'email',
                 completion: true,
               }
@@ -4665,30 +4662,35 @@ const ProvincialPermitDetailsPage = () => {
         setActionResult(tabsToCompleteResult(['shipping']))
         return false
       }
-      // A permit completes with an application, a package and a scale. The saved ones are known
-      // unless this save changes them.
-      if (
-        completingPermit &&
-        !hasPermitValidationError &&
-        detail &&
-        tabsData &&
-        !isPermitTablesLoading &&
-        !ministerialApplicationSelectionDirty &&
-        !ministerialScaleSelectionDirty
-      ) {
+      if (completingPermit && !hasPermitValidationError && detail) {
+        if (!permitTablesAvailable) {
+          const message = permitTablesErrorMessage
+            ? `${permitTablesErrorMessage} Reload the permit before completing it.`
+            : 'Permit applications and scales are still loading. Try saving again when they are ready.'
+          setActionResult(sectionSaveError(resultSubject, resultSource, message))
+          return false
+        }
         const hasApplication = detail.blanketOic
           ? detail.oicApplicationNumber != null
-          : tabsData.applications.length > 0
+          : ministerialApplicationSelectionDirty
+            ? ministerialApplicationRows.some((row) => row.checked)
+            : tabsData.applications.length > 0
+        // Changing the applications also changes their packages and scales on the server.
+        // Removing the last application leaves neither, regardless of the previously loaded rows.
+        const hasPackage = ministerialApplicationSelectionDirty
+          ? hasApplication
+          : tabsData.packages.length > 0
+        const hasScale = ministerialApplicationSelectionDirty
+          ? hasApplication
+          : tabsData.items.some(
+              (row) => ministerialScaleSelectionDraft?.[row.id] ?? row.includedInPermit,
+            )
         const missing = [
           hasApplication
             ? ''
             : 'At least one application is required before a permit can be completed.',
-          tabsData.packages.length > 0
-            ? ''
-            : 'At least one package is required before a permit can be completed.',
-          tabsData.items.some((row) => row.includedInPermit)
-            ? ''
-            : 'At least one scale detail is required before a permit can be completed.',
+          hasPackage ? '' : 'At least one package is required before a permit can be completed.',
+          hasScale ? '' : 'At least one scale detail is required before a permit can be completed.',
         ]
         if (missing.some(Boolean)) {
           setActionResult(serverSaveError(resultSubject, resultSource, missing, undefined, ''))
@@ -4815,7 +4817,10 @@ const ProvincialPermitDetailsPage = () => {
       savePermitMutation,
       completingPermit,
       detail,
-      isPermitTablesLoading,
+      ministerialApplicationRows,
+      ministerialScaleSelectionDraft,
+      permitTablesAvailable,
+      permitTablesErrorMessage,
       selectPermitTab,
       shippingRequiredFieldsMissing,
       tabsData,
@@ -8652,6 +8657,13 @@ const ProvincialPermitDetailsPage = () => {
                                     value={selectedNormalPermitPackage.averageTopDiameter}
                                   />
                                 </RecordFieldRow>
+                                <RecordFieldRow>
+                                  <RecordField
+                                    label="Comments"
+                                    span="full"
+                                    value={selectedNormalPermitPackage.comments}
+                                  />
+                                </RecordFieldRow>
                               </RecordFieldGrid>
                             ) : selectedNormalPermitPackage ? (
                               <DetailFieldTile
@@ -8699,6 +8711,13 @@ const ProvincialPermitDetailsPage = () => {
                                       value: displayValue(
                                         selectedNormalPermitPackage.averageTopDiameter,
                                       ),
+                                    },
+                                  ],
+                                  [
+                                    {
+                                      label: 'Comments',
+                                      span: 'full',
+                                      value: displayValue(selectedNormalPermitPackage.comments),
                                     },
                                   ],
                                 ]}
@@ -8998,16 +9017,17 @@ const ProvincialPermitDetailsPage = () => {
           onClose={() => {
             setPermitReceiptWarningOpen(false)
             // Closing without saving drops the change to Complete, so a later save can't apply it.
-            if (!permitReceiptWarningAcceptedRef.current && permitBaselineForm) {
+            if (!paymentPendingSaveSucceededRef.current && permitBaselineForm) {
               setPermitForm((current) =>
                 current ? { ...current, permitStatus: permitBaselineForm.permitStatus } : current,
               )
             }
-            permitReceiptWarningAcceptedRef.current = false
+            paymentPendingSaveSucceededRef.current = false
           }}
           onConfirm={async () => {
-            permitReceiptWarningAcceptedRef.current = true
-            await (permitEditSection === 'shipping' ? onSaveShipping(true) : onSavePermit(true))
+            paymentPendingSaveSucceededRef.current = await (permitEditSection === 'shipping'
+              ? onSaveShipping(true)
+              : onSavePermit(true))
           }}
         />
       )}

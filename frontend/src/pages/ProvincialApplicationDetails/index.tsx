@@ -82,7 +82,11 @@ import {
 import type { ProvincialApplicationDetail } from '@/interfaces/LexisDetails'
 import { useLatestRequestGuard } from '@/pages/shared/useLatestRequestGuard'
 import { displayValue } from '@/pages/shared/detail-page-utils'
-import { landingPageReturnTo, readDetailReturnTo } from '@/pages/shared/detail-navigation'
+import {
+  applicationSearchReturnTo,
+  landingPageReturnTo,
+  readDetailReturnTo,
+} from '@/pages/shared/detail-navigation'
 import {
   fetchProvincialApplicationDetail,
   releaseApplicationEditLock,
@@ -793,10 +797,11 @@ const ProvincialApplicationDetailsPage = () => {
   const { applicationNumber } = useParams()
   const [searchParams] = useSearchParams()
   const navigationState = location.state as ApplicationCreationNavigationState | null
-  const fallbackReturnTo = canPerform('/applicationSearch')
-    ? { label: 'Application search', to: '/provincial/application' }
-    : landingPageReturnTo(defaultRoute)
-  const detailReturnTo = readDetailReturnTo(navigationState) ?? fallbackReturnTo
+  const detailReturnTo =
+    readDetailReturnTo(navigationState) ??
+    (canPerform('/applicationSearch')
+      ? applicationSearchReturnTo(searchParams)
+      : landingPageReturnTo(defaultRoute))
   const createdApplicationNumber =
     navigationState?.applicationCreationNotice?.applicationNumber.trim()
   const openedFromApplicationCreate =
@@ -4147,11 +4152,11 @@ const ProvincialApplicationDetailsPage = () => {
         loading={isRefreshingDetail}
         loadingDescription="Refreshing provincial application detail…"
       />
-      {!openedFromApplicationCreate && (
+      {!openedFromApplicationCreate && detailReturnTo && (
         <Column sm={4} md={8} lg={16}>
           <DetailBreadcrumb
-            label={fallbackReturnTo.label}
-            to={fallbackReturnTo.to}
+            label={detailReturnTo.label}
+            to={detailReturnTo.to}
             returnTo={detailReturnTo}
           />
         </Column>
