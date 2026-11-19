@@ -1213,6 +1213,39 @@ const sectionSaveError = (
   focusOnReveal: true,
 })
 
+/** A refused save: one error reads as the message, several list one per line. */
+const serverSaveError = (
+  subject: string,
+  source: PermitActionResultSource,
+  errors: string[],
+  message: string | undefined,
+  fallback: string,
+): PermitActionResult => {
+  const distinct = [...new Set(errors.map((error) => error.trim()).filter(Boolean))]
+  return distinct.length > 1
+    ? {
+        ...sectionSaveError(subject, source, ''),
+        items: distinct.map((error) => ({ id: error, text: '' })),
+      }
+    : sectionSaveError(subject, source, distinct[0] || message || fallback)
+}
+
+/** The tabs a blocked save needs completed, as on the create pages. */
+const tabsToCompleteResult = (tabIds: readonly PermitDetailTabId[]): PermitActionResult => {
+  const labels = PERMIT_DETAIL_TABS.filter(({ id }) => tabIds.includes(id)).map(
+    ({ label }) => label,
+  )
+  return {
+    kind: 'error',
+    title: 'Cannot save yet.',
+    message:
+      labels.length > 1
+        ? `Complete the required fields in ${labels.slice(0, -1).join(', ')} and ${labels.at(-1)} tabs.`
+        : `Complete the required fields in the ${labels[0]} tab.`,
+    focusOnReveal: true,
+  }
+}
+
 /** Every error a save returned, in one message. */
 const serverErrorText = (errors: string[], message: string | undefined, fallback: string): string =>
   [...new Set(errors.map((error) => error.trim()).filter(Boolean))].join(' ') || message || fallback
@@ -3170,6 +3203,22 @@ const ProvincialPermitDetailsPage = () => {
   const hasShippingValidationError = Object.entries(permitFieldErrors).some(
     ([field, error]) => !!error && SHIPPING_PERMIT_FIELDS.has(field as PermitDetailFormField),
   )
+  // Every permit save needs these Shipping fields, including a save from another tab.
+  const shippingRequiredFieldsMissing =
+    !!permitForm &&
+    (
+      [
+        'destinationCompanyName',
+        'destinationCountry',
+        'transportType',
+        'transportName',
+        'estimatedShippingDate',
+        'portOfExport',
+        ...(permitForm.portOfExport.trim().toUpperCase() === 'OT'
+          ? (['otherPortOfExport'] as const)
+          : []),
+      ] as const
+    ).some((field) => !permitForm[field].trim())
   const permitFieldError = (field: PermitDetailFormField): string | undefined => {
     if (!showPermitValidationErrors) return undefined
     if (
@@ -3968,10 +4017,12 @@ const ProvincialPermitDetailsPage = () => {
         }
         if (!result.success) {
           setActionResult(
-            sectionSaveError(
+            serverSaveError(
               resultSubject,
               resultSource,
-              serverErrorText(result.errors, result.message, 'Unable to save permit.'),
+              result.errors,
+              result.message,
+              'Unable to save permit.',
             ),
           )
           return false
@@ -4232,10 +4283,12 @@ const ProvincialPermitDetailsPage = () => {
         }
         if (!result.success) {
           setActionResult(
-            sectionSaveError(
+            serverSaveError(
               'Shipping details',
               resultSource,
-              serverErrorText(result.errors, result.message, 'Unable to save shipping.'),
+              result.errors,
+              result.message,
+              'Unable to save shipping.',
             ),
           )
           return false
@@ -4558,18 +4611,61 @@ const ProvincialPermitDetailsPage = () => {
         setActionResult(sectionSaveError(resultSubject, resultSource, permitOptionsSaveError))
         return false
       }
-      // A new permit's first save also checks Shipping fields nobody has touched yet, and opens the
-      // first tab with an error.
+      // A new permit's first save also checks Shipping fields nobody has touched yet. It names the
+      // tabs to complete and opens the first of them, unless the open tab is one.
       if (
         permitEditSection === 'newPermit' &&
         (hasPermitValidationError || hasShippingValidationError)
       ) {
-        showPermitFieldErrors(
-          Object.values(permitFieldErrors).find((error): error is string => !!error) ??
-            'Please fix validation errors before saving the permit.',
-          hasPermitValidationError ? 'permit' : 'shipping',
-        )
+        const tabsToComplete: PermitDetailTabId[] = [
+          ...(hasPermitValidationError ? (['permit'] as const) : []),
+          ...(hasShippingValidationError ? (['shipping'] as const) : []),
+        ]
+        setShowPermitValidationErrors(true)
+        if (!tabsToComplete.includes(activePermitTabId)) selectPermitTab(tabsToComplete[0])
+        setActionResult(tabsToCompleteResult(tabsToComplete))
         return false
+      }
+      // The server refuses any permit save while required Shipping fields are blank, so a save
+      // from another tab says so before the Payment pending warning and before anything is sent.
+      if (
+        permitEditSection !== 'newPermit' &&
+        !permitShippingUnsaved &&
+        !hasPermitValidationError &&
+        shippingRequiredFieldsMissing
+      ) {
+        setActionResult(tabsToCompleteResult(['shipping']))
+        return false
+      }
+      // A permit completes with an application, a package and a scale. The saved ones are known
+      // unless this save changes them.
+      if (
+        completingPermit &&
+        !hasPermitValidationError &&
+        detail &&
+        tabsData &&
+        !isPermitTablesLoading &&
+        !ministerialApplicationSelectionDirty &&
+        !ministerialScaleSelectionDirty
+      ) {
+        const hasApplication = detail.blanketOic
+          ? detail.oicApplicationNumber != null
+          : tabsData.applications.length > 0
+        const missing = [
+          hasApplication
+            ? ''
+            : 'At least one application is required before a permit can be completed.',
+          tabsData.packages.length > 0
+            ? ''
+            : 'At least one package is required before a permit can be completed.',
+          tabsData.items.some((row) => row.includedInPermit)
+            ? ''
+            : 'At least one scale detail is required before a permit can be completed.',
+        ]
+        if (missing.some(Boolean)) {
+          setActionResult(serverSaveError(resultSubject, resultSource, missing, undefined, ''))
+          return false
+        }
       }
       // The server saves a completed Interior permit with no receipt as Payment pending, so the
       // user confirms before anything is sent.
@@ -4689,6 +4785,12 @@ const ProvincialPermitDetailsPage = () => {
       permitShippingUnsaved,
       permitStatusTransitionDraft,
       savePermitMutation,
+      completingPermit,
+      detail,
+      isPermitTablesLoading,
+      selectPermitTab,
+      shippingRequiredFieldsMissing,
+      tabsData,
     ],
   )
 
@@ -7314,6 +7416,9 @@ const ProvincialPermitDetailsPage = () => {
     const selectedPackageFeeSummary = detail.blanketOic
       ? selectedBlanketOicPackageFeeSummary
       : selectedNormalPermitPackageFeeSummary
+    // A Blanket OIC fee override replaces the calculated fee, so its rates are left blank too.
+    const feeOverrideHidesRates = (row: { amountDisplay: string }): boolean =>
+      detail.blanketOic && feeOverrideContext?.overrideEnabled === true && !row.amountDisplay.trim()
     return (
       <>
         {feeSummaryStatus === null && packageOptions.length > 0 && selectedPackage && (
@@ -7432,8 +7537,8 @@ const ProvincialPermitDetailsPage = () => {
                   {showDisplayedMinistryFeeColumn && (
                     <TableHeader>{usesReviewedPermitFlow ? 'EWB' : 'EWB$'}</TableHeader>
                   )}
-                  <TableHeader>{usesReviewedPermitFlow ? 'FIL' : 'FIL%'}</TableHeader>
-                  <TableHeader>{usesReviewedPermitFlow ? 'MF' : 'MF%'}</TableHeader>
+                  <TableHeader>Fee in lieu %</TableHeader>
+                  <TableHeader>Multiplication factor</TableHeader>
                   <TableHeader>Fee (CAD)</TableHeader>
                 </TableRow>
               </TableHead>
@@ -7455,8 +7560,12 @@ const ProvincialPermitDetailsPage = () => {
                     {showDisplayedMinistryFeeColumn && (
                       <TableCell>{displayTableValue(row.ewb)}</TableCell>
                     )}
-                    <TableCell>{displayTableValue(row.filPercent)}</TableCell>
-                    <TableCell>{displayTableValue(row.mfPercent)}</TableCell>
+                    <TableCell>
+                      {displayTableValue(feeOverrideHidesRates(row) ? '' : row.filPercent)}
+                    </TableCell>
+                    <TableCell>
+                      {displayTableValue(feeOverrideHidesRates(row) ? '' : row.mfPercent)}
+                    </TableCell>
                     <TableCell>
                       {row.amountDisplay.trim()
                         ? `$${formatAmount(row.amount)}`
