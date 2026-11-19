@@ -494,27 +494,26 @@ class ApplicationDetailsRpcControllerTest {
   }
 
   @Test
-  void removeDocumentShouldAllowScopedIndustryForPermittedApplication() {
-    TestingAuthenticationToken authentication =
-        authenticatedWithActions(
-            "bceid\\submitter",
-            List.of("LEXIS_PROVINCIAL_SUBMITTER_00077881"));
-    when(serviceProvider.getIfAvailable()).thenReturn(service);
-    when(service.getDocumentDetails(1000456L))
-        .thenReturn(List.of(directApplicationDocument(55L, "test.pdf", "", "Uploaded")));
-    when(service.getApplicationSummarySnapshot(1000456L))
-        .thenReturn(Optional.of(summarySnapshotWithStatus("PMT")));
-    when(service.removeDocument(55L)).thenReturn(true);
-
-    ResponseEntity<ApplicationDetailsRpcController.RemoveDocumentResponseDto> response =
-        controller.removeDocument("55", "1000456", authentication);
-
-    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+  void removeDocumentShouldAllowScopedIndustryForNewApplication() {
+    assertThat(removeIndustryDocument("NEW", false).getStatusCode()).isEqualTo(HttpStatus.OK);
     verify(service).removeDocument(55L);
   }
 
   @Test
   void removeDocumentShouldAllowScopedIndustryForExpiredApplication() {
+    assertThat(removeIndustryDocument("EXP", false).getStatusCode()).isEqualTo(HttpStatus.OK);
+    verify(service).removeDocument(55L);
+  }
+
+  @Test
+  void removeDocumentShouldRejectScopedIndustryOnceOnCompletePermit() {
+    assertThat(removeIndustryDocument("PMT", true).getStatusCode())
+        .isEqualTo(HttpStatus.FORBIDDEN);
+    verify(service, never()).removeDocument(any());
+  }
+
+  private ResponseEntity<ApplicationDetailsRpcController.RemoveDocumentResponseDto>
+      removeIndustryDocument(String applicationStatusCode, boolean onCompletePermit) {
     TestingAuthenticationToken authentication =
         authenticatedWithActions(
             "bceid\\submitter",
@@ -523,14 +522,26 @@ class ApplicationDetailsRpcControllerTest {
     when(service.getDocumentDetails(1000456L))
         .thenReturn(List.of(directApplicationDocument(55L, "test.pdf", "", "Uploaded")));
     when(service.getApplicationSummarySnapshot(1000456L))
-        .thenReturn(Optional.of(summarySnapshotWithStatus("EXP")));
-    when(service.removeDocument(55L)).thenReturn(true);
-
-    ResponseEntity<ApplicationDetailsRpcController.RemoveDocumentResponseDto> response =
-        controller.removeDocument("55", "1000456", authentication);
-
-    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
-    verify(service).removeDocument(55L);
+        .thenReturn(Optional.of(summarySnapshotWithStatus(applicationStatusCode)));
+    when(service.getApplicationEditContext(1000456L))
+        .thenReturn(
+            Optional.of(
+                new ApplicationDetailsRpcService.ApplicationEditContext(
+                    1000456L,
+                    applicationStatusCode,
+                    "P",
+                    "LOG",
+                    null,
+                    null,
+                    false,
+                    false,
+                    onCompletePermit,
+                    null,
+                    false)));
+    if (!onCompletePermit) {
+      when(service.removeDocument(55L)).thenReturn(true);
+    }
+    return controller.removeDocument("55", "1000456", authentication);
   }
 
   @Test

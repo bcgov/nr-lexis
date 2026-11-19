@@ -1,13 +1,13 @@
 import { Checkbox } from '@carbon/react'
-import { useId } from 'react'
+import { useId, useState } from 'react'
 
 import ConfirmationModal from '@/components/ConfirmationModal'
 import { AppNotification } from '@/components/AppNotification'
+import { fieldErrorText } from '@/utils/field-error'
 import { requiredLabel } from '@/utils/required-label'
 
-const APPLICATION_ACCURACY_DESCRIPTION =
-  'Checking "I Agree" confirms that I have submitted accurate application details'
-const APPLICATION_ACCURACY_LABEL = 'I Agree'
+const APPLICATION_ACCURACY_LABEL = 'I confirm the application details are accurate'
+const APPLICATION_ACCURACY_ERROR = 'Confirm the application details are accurate to save.'
 type ApplicationAccuracyConfirmationProps = {
   open: boolean
   confirmed: boolean
@@ -38,20 +38,27 @@ const ApplicationAccuracyConfirmation = ({
   warningMessage,
 }: ApplicationAccuracyConfirmationProps) => {
   const checkboxId = `application-accuracy-${useId().replaceAll(':', '')}`
+  const [showConfirmationError, setShowConfirmationError] = useState(false)
 
+  // Save stays enabled; without the tick it shows the error on the checkbox and keeps the dialog.
   const confirm = async () => {
-    if (!confirmed || busy) return
+    if (busy) return
+    if (!confirmed) {
+      setShowConfirmationError(true)
+      document.getElementById(checkboxId)?.focus()
+      throw new Error(APPLICATION_ACCURACY_ERROR)
+    }
     await onConfirm()
   }
 
   return (
     <ConfirmationModal
       open={open}
-      title="Confirm application accuracy"
-      description={APPLICATION_ACCURACY_DESCRIPTION}
+      title="Confirm application details"
       confirmLabel={confirmLabel}
       pendingLabel={pendingLabel}
-      confirmDisabled={!confirmed || busy}
+      confirmDisabled={busy}
+      initialFocusSelector={`#${checkboxId}`}
       onConfirm={confirm}
       onClose={onClose}
       onError={onError}
@@ -73,6 +80,8 @@ const ApplicationAccuracyConfirmation = ({
         aria-required="true"
         checked={confirmed}
         disabled={busy}
+        invalid={showConfirmationError && !confirmed}
+        invalidText={fieldErrorText(APPLICATION_ACCURACY_ERROR)}
         onChange={(_, { checked }) => onConfirmedChange(Boolean(checked))}
       />
     </ConfirmationModal>

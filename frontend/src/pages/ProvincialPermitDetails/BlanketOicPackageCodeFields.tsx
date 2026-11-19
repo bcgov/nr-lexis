@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { DismissibleTag, Dropdown, FilterableMultiSelect } from '@carbon/react'
+import { Dropdown, FilterableMultiSelect } from '@carbon/react'
+import SelectedItemTags from '@/components/SelectedItemTags'
 import { fieldErrorText } from '@/utils/field-error'
 import { markRequired, requiredLabel } from '@/utils/required-label'
 import {
@@ -82,7 +83,6 @@ export default function BlanketOicPackageCodeFields({
   const [endUseAvailability, setEndUseAvailability] = useState<ReferenceAvailability>('idle')
   const [ageClassAvailability, setAgeClassAvailability] = useState<ReferenceAvailability>('loading')
   const lastAvailabilityRef = useRef<BlanketOicPackageOptionsStatus | null>(null)
-  const speciesFieldRef = useRef<HTMLDivElement>(null)
   const availabilityChangeRef = useRef(onAvailabilityChange)
   const onChangeRef = useRef(onChange)
   const valueRef = useRef(value)
@@ -248,25 +248,10 @@ export default function BlanketOicPackageCodeFields({
     BLANKET_OIC_PRODUCT_TYPE_OPTIONS.find((option) => option.value === value.productType) ??
     (value.productType ? { value: value.productType, label: value.productType } : null)
 
-  const removeSpecies = (speciesCode: string) => {
-    const index = selectedSpeciesCodes.indexOf(speciesCode)
-    const remaining = selectedSpeciesCodes.filter((code) => code !== speciesCode)
-    onChange('speciesCodes', remaining.join(', '))
-    // Keep keyboard users in place: the next tag, or the field once no tags remain.
-    requestAnimationFrame(() => {
-      const field = speciesFieldRef.current
-      const tagButtons = field?.querySelectorAll<HTMLButtonElement>(
-        '.boic-package-species__tags button',
-      )
-      const next = tagButtons?.[Math.min(index, tagButtons.length - 1)]
-      ;(next ?? field?.querySelector<HTMLInputElement>('input'))?.focus()
-    })
-  }
-
   return (
     <div className="blanket-oic-package-code-fields">
       <div className="legacy-search-grid permit-panel-form__pair">
-        <div className="boic-package-species" ref={speciesFieldRef}>
+        <div className="boic-package-species">
           <FilterableMultiSelect<SpeciesListItem>
             id="boicPackageSpeciesList"
             titleText={requiredLabel('Species list')}
@@ -282,18 +267,18 @@ export default function BlanketOicPackageCodeFields({
               onChange('speciesCodes', selectedItems.map((item) => item.id).join(', '))
             }
           />
-          <div className="boic-package-species__tags" aria-live="polite">
-            {selectedSpeciesCodes.map((speciesCode) => (
-              <DismissibleTag
-                key={speciesCode}
-                type="gray"
-                text={speciesCode}
-                title={`Remove ${speciesCode}`}
-                disabled={disabled}
-                onClose={() => removeSpecies(speciesCode)}
-              />
-            ))}
-          </div>
+          <SelectedItemTags
+            items={selectedSpeciesCodes}
+            itemKey={(speciesCode) => speciesCode}
+            itemText={(speciesCode) => speciesCode}
+            disabled={disabled}
+            onRemove={(speciesCode) =>
+              onChange(
+                'speciesCodes',
+                selectedSpeciesCodes.filter((code) => code !== speciesCode).join(', '),
+              )
+            }
+          />
         </div>
         <Dropdown<ApplicationCodeOption | null>
           id="boicPackageEndUse"

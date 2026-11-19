@@ -2096,7 +2096,7 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
     expect(screen.queryByLabelText('Exemption term (years)')).not.toBeInTheDocument()
 
     await userEvent.click(screen.getByRole('button', { name: 'Save changes' }))
-    expect(screen.queryByRole('dialog', { name: 'Confirm application accuracy' })).toBeNull()
+    expect(screen.queryByRole('dialog', { name: 'Confirm application details' })).toBeNull()
 
     await waitFor(() => {
       expect(mockedUpdateApplicationSummary).toHaveBeenCalledWith({
@@ -2463,9 +2463,13 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
     )
     await userEvent.click(ownerControls.getByRole('button', { name: 'Save changes' }))
     const accuracyDialog = await screen.findByRole('dialog', {
-      name: 'Confirm application accuracy',
+      name: 'Confirm application details',
     })
-    await userEvent.click(within(accuracyDialog).getByRole('checkbox', { name: 'I Agree' }))
+    await userEvent.click(
+      within(accuracyDialog).getByRole('checkbox', {
+        name: 'I confirm the application details are accurate',
+      }),
+    )
     await userEvent.click(within(accuracyDialog).getByRole('button', { name: 'Save changes' }))
 
     await waitFor(() =>
@@ -2547,9 +2551,13 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
     })
     await userEvent.click(ownerControls.getByRole('button', { name: 'Save changes' }))
     const accuracyDialog = await screen.findByRole('dialog', {
-      name: 'Confirm application accuracy',
+      name: 'Confirm application details',
     })
-    await userEvent.click(within(accuracyDialog).getByRole('checkbox', { name: 'I Agree' }))
+    await userEvent.click(
+      within(accuracyDialog).getByRole('checkbox', {
+        name: 'I confirm the application details are accurate',
+      }),
+    )
     await userEvent.click(within(accuracyDialog).getByRole('button', { name: 'Save changes' }))
 
     await waitFor(() =>
@@ -2657,9 +2665,13 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
     await userEvent.click(screen.getByRole('button', { name: 'Save changes' }))
 
     const accuracyDialog = screen.getByRole('dialog', {
-      name: 'Confirm application accuracy',
+      name: 'Confirm application details',
     })
-    await userEvent.click(within(accuracyDialog).getByRole('checkbox', { name: 'I Agree' }))
+    await userEvent.click(
+      within(accuracyDialog).getByRole('checkbox', {
+        name: 'I confirm the application details are accurate',
+      }),
+    )
     await userEvent.click(within(accuracyDialog).getByRole('button', { name: 'Save changes' }))
 
     await waitFor(() => {
@@ -2688,19 +2700,23 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
     await selectApplicationSummaryTile()
     fireEvent.change(screen.getByLabelText('Exemption term (days)'), { target: { value: '31' } })
     await userEvent.click(screen.getByRole('button', { name: 'Save changes' }))
-    const dialog = screen.getByRole('dialog', { name: 'Confirm application accuracy' })
-    await userEvent.click(within(dialog).getByRole('checkbox', { name: 'I Agree' }))
+    const dialog = screen.getByRole('dialog', { name: 'Confirm application details' })
+    await userEvent.click(
+      within(dialog).getByRole('checkbox', {
+        name: 'I confirm the application details are accurate',
+      }),
+    )
     await userEvent.click(within(dialog).getByRole('button', { name: 'Save changes' }))
     expect(await screen.findByText('The application was saved.')).toBeVisible()
     await waitFor(() =>
       expect(
-        screen.queryByRole('dialog', { name: 'Confirm application accuracy' }),
+        screen.queryByRole('dialog', { name: 'Confirm application details' }),
       ).not.toBeInTheDocument(),
     )
     await selectApplicationSummaryTile()
     fireEvent.change(screen.getByLabelText('Exemption term (days)'), { target: { value: '31' } })
     await userEvent.click(screen.getByRole('button', { name: 'Save changes' }))
-    expect(screen.getByRole('dialog', { name: 'Confirm application accuracy' })).toBeVisible()
+    expect(screen.getByRole('dialog', { name: 'Confirm application details' })).toBeVisible()
     expect(screen.queryByText('The application was saved.')).not.toBeInTheDocument()
     expect(mockedUpdateApplicationSummary).toHaveBeenCalledTimes(1)
   })
@@ -2724,19 +2740,27 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
     await selectApplicationSummaryTile()
     fireEvent.change(screen.getByLabelText('Exemption term (days)'), { target: { value: '31' } })
     await userEvent.click(screen.getByRole('button', { name: 'Save changes' }))
-    const dialog = screen.getByRole('dialog', { name: 'Confirm application accuracy' })
-    await userEvent.click(within(dialog).getByRole('checkbox', { name: 'I Agree' }))
+    const dialog = screen.getByRole('dialog', { name: 'Confirm application details' })
+    await userEvent.click(
+      within(dialog).getByRole('checkbox', {
+        name: 'I confirm the application details are accurate',
+      }),
+    )
     await userEvent.click(within(dialog).getByRole('button', { name: 'Save changes' }))
     expect(await within(dialog).findByText('Unable to save application summary.')).toBeVisible()
     await userEvent.click(within(dialog).getByRole('button', { name: 'Cancel' }))
     expect(screen.getByText('Unable to save application summary.')).toBeVisible()
     await userEvent.click(screen.getByRole('button', { name: 'Save changes' }))
-    const reopened = screen.getByRole('dialog', { name: 'Confirm application accuracy' })
+    const reopened = screen.getByRole('dialog', { name: 'Confirm application details' })
     expect(mockedUpdateApplicationSummary).toHaveBeenCalledTimes(1)
     expect(
       within(reopened).queryByText('Unable to save application summary.'),
     ).not.toBeInTheDocument()
-    expect(within(reopened).getByRole('checkbox', { name: 'I Agree' })).not.toBeChecked()
+    expect(
+      within(reopened).getByRole('checkbox', {
+        name: 'I confirm the application details are accurate',
+      }),
+    ).not.toBeChecked()
   })
 
   it('validates application item edits before saving', async () => {
@@ -3157,7 +3181,7 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
     fireEvent.change(screen.getByLabelText('Exemption term (days)'), { target: { value: '31' } })
     await userEvent.click(screen.getByRole('button', { name: 'Save changes' }))
     expect(
-      screen.queryByRole('dialog', { name: 'Confirm application accuracy' }),
+      screen.queryByRole('dialog', { name: 'Confirm application details' }),
     ).not.toBeInTheDocument()
     expect(await summaryControls.findByText('Select a valid list date')).toBeVisible()
     expect(mockedUpdateApplicationSummary).not.toHaveBeenCalled()
@@ -3165,8 +3189,12 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
     await userEvent.click(within(listDate).getByRole('radio', { name: 'Jan 25, 2026' }))
     expect(summaryControls.queryByText('Select a valid list date')).not.toBeInTheDocument()
     await userEvent.click(screen.getByRole('button', { name: 'Save changes' }))
-    const dialog = screen.getByRole('dialog', { name: 'Confirm application accuracy' })
-    await userEvent.click(within(dialog).getByRole('checkbox', { name: 'I Agree' }))
+    const dialog = screen.getByRole('dialog', { name: 'Confirm application details' })
+    await userEvent.click(
+      within(dialog).getByRole('checkbox', {
+        name: 'I confirm the application details are accurate',
+      }),
+    )
     await userEvent.click(within(dialog).getByRole('button', { name: 'Save changes' }))
 
     await waitFor(() => {
@@ -3210,8 +3238,12 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
 
     fireEvent.change(screen.getByLabelText('Exemption term (days)'), { target: { value: '31' } })
     await userEvent.click(screen.getByRole('button', { name: 'Save changes' }))
-    const dialog = screen.getByRole('dialog', { name: 'Confirm application accuracy' })
-    await userEvent.click(within(dialog).getByRole('checkbox', { name: 'I Agree' }))
+    const dialog = screen.getByRole('dialog', { name: 'Confirm application details' })
+    await userEvent.click(
+      within(dialog).getByRole('checkbox', {
+        name: 'I confirm the application details are accurate',
+      }),
+    )
     await userEvent.click(within(dialog).getByRole('button', { name: 'Save changes' }))
 
     await waitFor(() => {
@@ -3775,8 +3807,12 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
     await waitFor(() => expect(getSummaryComboBox(application, 'End use')).toBeEnabled())
     await chooseComboBoxOption(getSummaryComboBox(application, 'End use'), 'Lumber')
     await userEvent.click(application.getByRole('button', { name: 'Save changes' }))
-    const dialog = screen.getByRole('dialog', { name: 'Confirm application accuracy' })
-    await userEvent.click(within(dialog).getByRole('checkbox', { name: 'I Agree' }))
+    const dialog = screen.getByRole('dialog', { name: 'Confirm application details' })
+    await userEvent.click(
+      within(dialog).getByRole('checkbox', {
+        name: 'I confirm the application details are accurate',
+      }),
+    )
     await userEvent.click(within(dialog).getByRole('button', { name: 'Save changes' }))
 
     await waitFor(() => {
@@ -3820,17 +3856,20 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
     await userEvent.click(itemDetails.getByRole('button', { name: 'Save changes' }))
 
     const firstDialog = screen.getByRole('dialog', {
-      name: 'Confirm application accuracy',
+      name: 'Confirm application details',
     })
     const firstAcknowledgement = within(firstDialog).getByRole('checkbox', {
-      name: 'I Agree',
+      name: 'I confirm the application details are accurate',
     })
     const firstConfirm = within(firstDialog).getByRole('button', {
       name: 'Save changes',
     })
     expect(firstAcknowledgement).not.toBeChecked()
-    expect(firstConfirm).toBeDisabled()
+    expect(firstConfirm).toBeEnabled()
     await userEvent.click(firstConfirm)
+    expect(
+      await within(firstDialog).findByText('Confirm the application details are accurate to save'),
+    ).toBeVisible()
     expect(screen.queryByText('Review package volumes')).not.toBeInTheDocument()
     expect(mockedUpdateApplicationSummary).not.toHaveBeenCalled()
 
@@ -3839,10 +3878,10 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
     await userEvent.click(itemDetails.getByRole('button', { name: 'Save changes' }))
 
     const reopenedDialog = screen.getByRole('dialog', {
-      name: 'Confirm application accuracy',
+      name: 'Confirm application details',
     })
     const reopenedAcknowledgement = within(reopenedDialog).getByRole('checkbox', {
-      name: 'I Agree',
+      name: 'I confirm the application details are accurate',
     })
     expect(reopenedAcknowledgement).not.toBeChecked()
     await userEvent.click(reopenedAcknowledgement)
@@ -4258,8 +4297,12 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
     fireEvent.change(screen.getByLabelText('Exemption term (days)'), { target: { value: '31' } })
     await userEvent.click(screen.getByRole('button', { name: 'Save changes' }))
     expect(summaryControls.queryByText('Select a valid list date')).not.toBeInTheDocument()
-    const dialog = screen.getByRole('dialog', { name: 'Confirm application accuracy' })
-    await userEvent.click(within(dialog).getByRole('checkbox', { name: 'I Agree' }))
+    const dialog = screen.getByRole('dialog', { name: 'Confirm application details' })
+    await userEvent.click(
+      within(dialog).getByRole('checkbox', {
+        name: 'I confirm the application details are accurate',
+      }),
+    )
     await userEvent.click(within(dialog).getByRole('button', { name: 'Save changes' }))
 
     await waitFor(() => {

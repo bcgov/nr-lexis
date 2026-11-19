@@ -6473,16 +6473,17 @@ $notification-types: 'error', 'info', 'success', 'warning';
   display: none;
 }
 
-// A record form's region field names its regions after the count tag, in the value's colour.
-.region-multi-select--named .cds--text-input {
-  text-overflow: ellipsis;
-}
+// A multi-select's chosen items, as tags below the field.
+.selected-item-tags {
+  display: flex;
+  flex-wrap: wrap;
+  margin-block-start: 0.5rem;
 
-.region-multi-select--named .cds--text-input::placeholder {
-  color: var(--cds-text-primary);
-  opacity: 1;
-}
+  &:empty {
+    display: none;
+  }
 
-.region-multi-select--named .cds--text-input:disabled::placeholder {
-  color: var(--cds-text-disabled);
+  .cds--tag {
+    margin: 0 0.5rem 0.5rem 0;
+  }
 }

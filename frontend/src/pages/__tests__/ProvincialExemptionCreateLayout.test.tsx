@@ -108,7 +108,7 @@ describe('Provincial exemption create layout', () => {
     expect(feeRate.closest('.record-field')).toHaveClass('cds--lg:col-span-4')
   })
 
-  it('names the chosen regions and links the region error to its field', async () => {
+  it('lists the chosen regions as tags and links the region error to its field', async () => {
     renderCreatePage()
 
     await chooseBlanketOic()
@@ -126,7 +126,9 @@ describe('Provincial exemption create layout', () => {
       await screen.findByRole('option', { name: 'Kootenay-Boundary Natural Resource Region' }),
     )
     await userEvent.keyboard('{Escape}')
-    expect(region).toHaveAttribute('placeholder', 'Kootenay-Boundary Natural Resource Region')
+    expect(
+      screen.getByRole('button', { name: 'Remove Kootenay-Boundary Natural Resource Region' }),
+    ).toBeVisible()
     expect(region).not.toHaveAttribute('aria-invalid')
     expect(region).not.toHaveAttribute('aria-describedby')
   })

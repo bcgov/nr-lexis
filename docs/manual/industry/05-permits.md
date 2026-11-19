@@ -210,5 +210,6 @@ cancelled or replaced it, if any.
   office. Staff may need to cancel and reissue the permit and its invoice.
   The replacement invoices are listed on the **GBMS** tab.
 
-You can delete a document from a permit while it is **Active** or
-**Expired**.
+You can add documents to a permit in any status. You can delete a document
+added to the permit while it is **Active** or **Expired**; documents listed
+from its applications can't be deleted here.

@@ -2706,7 +2706,7 @@ describe('Provincial exemption edit context', () => {
     expect(printButton).toHaveFocus()
   })
 
-  it('names the chosen regions in the Blanket OIC Region field while editing', async () => {
+  it('lists the chosen regions as tags below the Blanket OIC Region field while editing', async () => {
     vi.mocked(fetchExemptionEditContext).mockResolvedValue({
       rateOverrideEnabled: false,
       fixedFeeRate: '',
@@ -2729,7 +2729,9 @@ describe('Provincial exemption edit context', () => {
     await userEvent.click(await screen.findByRole('button', { name: 'Edit exemption details' }))
     expect(
       screen.getByRole('combobox', { name: /^Region\s*Total items selected:\s*2/ }),
-    ).toHaveAttribute('placeholder', 'Region 1903, Region 1904')
+    ).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Remove Region 1903' })).toBeVisible()
+    expect(screen.getByRole('button', { name: 'Remove Region 1904' })).toBeVisible()
   })
 
   it.each(['B'])('keeps a cancelled %s exemption read-only', async (type) => {

@@ -133,6 +133,7 @@ import { useDocumentOpener } from '@/components/documents/useDocumentOpener'
 import DetailSidePanel from '@/components/DetailSidePanel'
 import IsoDatePicker from '../../components/IsoDatePicker'
 import SearchableSelect from '../../components/SearchableSelect'
+import SelectedItemTags from '@/components/SelectedItemTags'
 import ForestClientComboBox from '@/components/ForestClientComboBox'
 import { nonNegativeWholeNumberFieldError } from '@/pages/shared/application-term-utils'
 import {
@@ -663,7 +664,6 @@ const normalizeSummaryAgentFields = (
 
 const APPLICATION_STATUS_APPROVED = 'APP'
 const APPLICATION_STATUS_EXPIRED = 'EXP'
-const APPLICATION_STATUS_PERMITTED = 'PMT'
 const COMPLETE_PERMIT_STATUS_TEXT = 'COMPLETE'
 const APPLICATION_DOCUMENT_DELETE_ROLES = new Set([
   'ADMIN',
@@ -688,6 +688,7 @@ const isIndustryApplicationRole = (role: string): boolean => {
 const canDeleteApplicationDocuments = (
   detail: ProvincialApplicationDetail | null,
   roles: string[],
+  industryDocumentsLocked: boolean,
 ): boolean => {
   if (!detail) {
     return false
@@ -706,8 +707,10 @@ const canDeleteApplicationDocuments = (
     return status.length > 0
   }
 
+  // INTENTIONAL_LEGACY_DIVERGENCE(CLIENT_APPLICATION_DOCUMENTS): industry users add and delete
+  // documents until the application is on a Complete permit.
   const industryUser = detail.industryUser || normalizedRoles.some(isIndustryApplicationRole)
-  return industryUser && [APPLICATION_STATUS_PERMITTED, APPLICATION_STATUS_EXPIRED].includes(status)
+  return industryUser && status.length > 0 && !industryDocumentsLocked
 }
 
 const hasCompletePermit = (permitRows: ApplicationPermitRow[]): boolean =>
@@ -1270,16 +1273,19 @@ const ProvincialApplicationDetailsPage = () => {
   // Writes also need the application's region when the user's grant is regional.
   const applicationOrgUnit = detail?.orgUnitNumber ?? null
   const canUploadApplicationDocuments = canPerform('/fileApplicationUpload', applicationOrgUnit)
-  // Document deletion stays role-based, limited to the application's region for regional grants;
-  // it does not depend on holding the upload action.
-  const canDeleteDocuments =
-    canDeleteApplicationDocuments(detail, capabilities?.roles ?? []) &&
-    withinRegions(allowedRegions(capabilities, '/fileApplicationUpload'), applicationOrgUnit)
   const documentUploadUnavailableMessage = applicationDocumentUploadUnavailableMessage(
     detail,
     permitRows,
     permitLookupAvailability,
   )
+  // Document deletion stays role-based, limited to the application's region for regional grants;
+  // it does not depend on holding the upload action.
+  const canDeleteDocuments =
+    canDeleteApplicationDocuments(
+      detail,
+      capabilities?.roles ?? [],
+      !!documentUploadUnavailableMessage,
+    ) && withinRegions(allowedRegions(capabilities, '/fileApplicationUpload'), applicationOrgUnit)
   const documentUploadUnavailableMessageKey = `${detail?.applicationNumber ?? ''}:${documentUploadUnavailableMessage}`
   const showDocumentUploadUnavailableMessage = Boolean(
     documentUploadUnavailableMessage &&
@@ -1979,6 +1985,12 @@ const ProvincialApplicationDetailsPage = () => {
       ? fieldErrorText(summarySaveErrors.errors[field])
       : undefined
   const summarySpeciesCodesError = visibleSummaryFieldError('speciesCodes')
+  // A species change asks again about package volumes.
+  const onSummarySpeciesChange = (speciesCodes: string[]) => {
+    setSummaryForm((current) => (current ? { ...current, speciesCodes } : current))
+    setSummaryVolumeWarningAccepted(false)
+    setActionResult(withoutVolumeWarning)
+  }
   const applicationSpeciesMultiSelectOptions = useMemo(() => {
     const options = applicationSpeciesOptions.map((option) => ({
       id: option.code,
@@ -3811,18 +3823,18 @@ const ProvincialApplicationDetailsPage = () => {
             invalidText={
               <span id="applicationSummarySpecies-error">{summarySpeciesCodesError}</span>
             }
-            onChange={({ selectedItems }) => {
-              setSummaryForm((current) =>
-                current
-                  ? {
-                      ...current,
-                      speciesCodes: selectedItems.map((item) => item.id),
-                    }
-                  : current,
-              )
-              setSummaryVolumeWarningAccepted(false)
-              setActionResult(withoutVolumeWarning)
-            }}
+            onChange={({ selectedItems }) =>
+              onSummarySpeciesChange(selectedItems.map((item) => item.id))
+            }
+          />
+          <SelectedItemTags
+            items={summarySpeciesCodes}
+            itemKey={(code) => code}
+            itemText={(code) => code}
+            disabled={applicationSpeciesMultiSelectOptions.length === 0}
+            onRemove={(code) =>
+              onSummarySpeciesChange(summarySpeciesCodes.filter((selected) => selected !== code))
+            }
           />
           {summarySpeciesCodesError && applicationSpeciesMultiSelectOptions.length === 0 && (
             <p className="legacy-search-error" role="alert">

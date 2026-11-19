@@ -216,19 +216,6 @@
   }
 
   // Chosen species show as removable tags below the Species list.
-  .boic-package-species__tags {
-    display: flex;
-    flex-wrap: wrap;
-    margin-block-start: 0.5rem;
-
-    &:empty {
-      display: none;
-    }
-
-    .cds--tag {
-      margin: 0 0.5rem 0.5rem 0;
-    }
-  }
 }
 
 // A divider separates the package's fields from its Summary of scale, 32px from each.

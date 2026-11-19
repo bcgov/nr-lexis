@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react'
+import { render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { useState } from 'react'
 import { describe, expect, it, vi } from 'vitest'
@@ -146,47 +146,28 @@ describe('RegionMultiSelect', () => {
     expect(screen.getByTestId('selected-regions')).toBeEmptyDOMElement()
   })
 
-  it('names the chosen regions after the count tag when a form asks', async () => {
+  it('lists the chosen regions as tags below the field and removes one from its tag', async () => {
     const user = userEvent.setup()
-    const { rerender } = render(
-      <RegionMultiSelect
-        id="record-regions"
-        titleText="Region"
-        items={regions}
-        selectedItems={[]}
-        showSelectedNames
-        onChange={vi.fn()}
-      />,
-    )
-
-    const combobox = screen.getByRole('combobox', { name: /^Region/ })
-    expect(combobox).toHaveAttribute('placeholder', 'Select region(s)')
-    expect(document.querySelector('.region-multi-select')).not.toHaveClass(
-      'region-multi-select--named',
-    )
-
-    rerender(
+    const onChange = vi.fn()
+    render(
       <RegionMultiSelect
         id="record-regions"
         titleText="Region"
         items={regions}
         selectedItems={regions.slice(0, 2)}
-        showSelectedNames
-        onChange={vi.fn()}
+        onChange={onChange}
       />,
     )
+
+    const combobox = screen.getByRole('combobox', { name: /^Region/ })
     expect(combobox).toHaveAccessibleName(/^Region\s*Total items selected:\s*2/)
-    expect(combobox).toHaveAttribute(
-      'placeholder',
-      'Cariboo Natural Resource Region, Kootenay-Boundary Natural Resource Region',
-    )
-    expect(document.querySelector('.region-multi-select')).toHaveClass('region-multi-select--named')
-    await user.click(combobox)
-    await user.keyboard('{Escape}')
-    expect(combobox).toHaveAttribute(
-      'placeholder',
-      'Cariboo Natural Resource Region, Kootenay-Boundary Natural Resource Region',
-    )
+    expect(combobox).not.toHaveAttribute('placeholder')
+    const tags = document.querySelector('.selected-item-tags') as HTMLElement
+    expect(tags).toHaveTextContent(regions[0].text)
+    expect(tags).toHaveTextContent(regions[1].text)
+
+    await user.click(within(tags).getByRole('button', { name: `Remove ${regions[0].text}` }))
+    expect(onChange).toHaveBeenCalledWith([regions[1]])
   })
 
   it('links its error to the combobox', () => {

@@ -1,5 +1,6 @@
 import { FilterableMultiSelect } from '@carbon/react'
 import type { ReactNode } from 'react'
+import SelectedItemTags from '@/components/SelectedItemTags'
 import { fieldErrorText } from '@/utils/field-error'
 
 export type RegionMultiSelectOption = {
@@ -17,8 +18,6 @@ type RegionMultiSelectProps = {
   disabled?: boolean
   invalid?: boolean
   invalidText?: ReactNode
-  /** Names the chosen regions after the count tag, as a record form does. Filters show the count. */
-  showSelectedNames?: boolean
   onChange: (selectedItems: RegionMultiSelectOption[]) => void
 }
 
@@ -34,28 +33,20 @@ export default function RegionMultiSelect({
   disabled = false,
   invalid = false,
   invalidText,
-  showSelectedNames = false,
   onChange,
 }: RegionMultiSelectProps) {
   const errorText = fieldErrorText(invalidText)
   const errorId = `${id}-error-msg`
   const describedByError = invalid && !!errorText
-  const selectedNames = selectedItems.map(itemToString).join(', ')
   return (
-    <div
-      className={`region-multi-select${
-        showSelectedNames && selectedItems.length > 0 ? ' region-multi-select--named' : ''
-      }`}
-    >
+    <div className="region-multi-select">
       <FilterableMultiSelect
         id={id}
         titleText={titleText}
         items={items}
         itemToString={itemToString}
-        // With regions selected, the count tag stands alone, or a form names them beside it.
-        placeholder={
-          selectedItems.length === 0 ? placeholder : showSelectedNames ? selectedNames : undefined
-        }
+        // With regions selected, the count tag stands alone and the tags below name them.
+        placeholder={selectedItems.length === 0 ? placeholder : undefined}
         selectedItems={selectedItems}
         // Regions keep the order they are given, before and after being selected.
         sortItems={(regions) => [...regions]}
@@ -71,6 +62,13 @@ export default function RegionMultiSelect({
         onChange={({ selectedItems: nextSelectedItems }) => {
           onChange(nextSelectedItems)
         }}
+      />
+      <SelectedItemTags
+        items={selectedItems}
+        itemKey={(region) => region.id}
+        itemText={itemToString}
+        disabled={disabled}
+        onRemove={(region) => onChange(selectedItems.filter((item) => item.id !== region.id))}
       />
     </div>
   )
