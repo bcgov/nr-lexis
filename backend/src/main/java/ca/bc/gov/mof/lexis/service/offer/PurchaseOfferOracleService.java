@@ -33,6 +33,7 @@ import java.util.Locale;
 import java.util.Optional;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Profile;
+import org.springframework.dao.DuplicateKeyException;
 import org.springframework.data.domain.Page;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -70,6 +71,8 @@ public class PurchaseOfferOracleService implements PurchaseOfferService {
   private static final int OFFER_CONDITION_MAX_BYTES = 254;
   private static final double PURCHASE_OFFER_AMOUNT_MAX = 99_999.99d;
   private static final double OFFER_VOLUME_MAX = 9_999_999.99d;
+  // Unique on (PACKAGE_NUMBER, COMPANY_NAME, APPLICATION_NUMBER); a null package still matches.
+  private static final String COMPANY_OFFER_UNIQUE_KEY = "EPO_CO_UK";
 
   private final PurchaseOfferRepository repository;
   private final ApplicationNotificationRecipientResolver notificationRecipientResolver;
@@ -169,9 +172,28 @@ public class PurchaseOfferOracleService implements PurchaseOfferService {
           false, null, normalized.applicationNumber(), null, false, null, true, false, errors, warnings);
     }
 
-    Optional<PurchaseOfferRepository.PurchaseOfferInsertRow> inserted =
-        repository.insertOffer(
-            toInsertRecord(normalized, defaultMutationUser(userId), normalizedOfferVolume));
+    Optional<PurchaseOfferRepository.PurchaseOfferInsertRow> inserted;
+    try {
+      inserted =
+          repository.insertOffer(
+              toInsertRecord(normalized, defaultMutationUser(userId), normalizedOfferVolume));
+    } catch (DuplicateKeyException exception) {
+      if (!isDuplicateCompanyOffer(exception)) {
+        throw exception;
+      }
+      markRollbackOnly();
+      return new CreateOfferResult(
+          false,
+          null,
+          normalized.applicationNumber(),
+          null,
+          false,
+          null,
+          true,
+          false,
+          List.of(duplicateCompanyOfferMessage(normalized.packageNumber())),
+          warnings);
+    }
     Long offerNumber =
         inserted.map(PurchaseOfferRepository.PurchaseOfferInsertRow::exportPurchaseOfferNumber).orElse(null);
 
@@ -204,6 +226,17 @@ public class PurchaseOfferOracleService implements PurchaseOfferService {
         false,
         List.of(),
         withEmailWarning(warnings, email));
+  }
+
+  private static boolean isDuplicateCompanyOffer(DuplicateKeyException exception) {
+    String message = exception.getMessage();
+    return message != null && message.contains(COMPANY_OFFER_UNIQUE_KEY);
+  }
+
+  private static String duplicateCompanyOfferMessage(String packageNumber) {
+    return packageNumber == null
+        ? "This company already has an offer on this application with no package. Edit that offer instead."
+        : "This company already has an offer on this package. Edit that offer instead.";
   }
 
   private void markRollbackOnly() {
@@ -299,10 +332,29 @@ public class PurchaseOfferOracleService implements PurchaseOfferService {
           warnings);
     }
 
-    boolean persisted =
-        repository.updateOffer(
-            toUpdateRecord(
-                updated, current, defaultMutationUser(userId), normalizedOfferVolume));
+    boolean persisted;
+    try {
+      persisted =
+          repository.updateOffer(
+              toUpdateRecord(
+                  updated, current, defaultMutationUser(userId), normalizedOfferVolume));
+    } catch (DuplicateKeyException exception) {
+      if (!isDuplicateCompanyOffer(exception)) {
+        throw exception;
+      }
+      markRollbackOnly();
+      return new CreateOfferResult(
+          false,
+          null,
+          updated.applicationNumber(),
+          offerNumber,
+          false,
+          null,
+          false,
+          true,
+          List.of(duplicateCompanyOfferMessage(updated.packageNumber())),
+          warnings);
+    }
     if (!persisted) {
       return new CreateOfferResult(
           false,
