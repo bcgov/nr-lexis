@@ -8,6 +8,7 @@ import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.mockingDetails;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoMoreInteractions;
 
 import ca.bc.gov.mof.lexis.repository.oracle.OracleAggregateLockRepository.ColumnSnapshot;
 import ca.bc.gov.mof.lexis.repository.oracle.OracleAggregateLockRepository.RowSetSnapshot;
@@ -60,6 +61,48 @@ class OracleAggregateLockRepositoryTest {
                 "FROM EXPORT_PURCHASE_OFFER WHERE EXPORT_PURCHASE_OFFER_NUMBER = ? FOR UPDATE WAIT 30"),
             any(RowMapper.class),
             eq(1000L));
+  }
+
+  @Test
+  void rowOnlyLocksShouldUseTheSameRowLockAndReadNoChildRows() {
+    OracleAggregateLockRepository repository =
+        new OracleAggregateLockRepository(jdbcTemplate);
+    doReturn(List.of(Boolean.TRUE))
+        .when(jdbcTemplate)
+        .query(contains("FOR UPDATE WAIT 30"), any(RowMapper.class), eq("EX-1"));
+
+    assertThat(repository.lockExemptionRow("EX-1")).isTrue();
+    assertThat(repository.lockApplicationRow(10L)).isFalse();
+    assertThat(repository.lockPermitRow(100L)).isFalse();
+    assertThat(repository.lockOfferRow(1000L)).isFalse();
+
+    verify(jdbcTemplate)
+        .query(
+            eq("SELECT * FROM EXPORT_EXEMPTION WHERE EXEMPTION_NUMBER = ? FOR UPDATE WAIT 30"),
+            any(RowMapper.class),
+            eq("EX-1"));
+    verify(jdbcTemplate)
+        .query(
+            eq(
+                "SELECT * FROM EXPORT_EXEMPTION_APPLICATION "
+                    + "WHERE APPLICATION_NUMBER = ? FOR UPDATE WAIT 30"),
+            any(RowMapper.class),
+            eq(10L));
+    verify(jdbcTemplate)
+        .query(
+            eq(
+                "SELECT * FROM EXPORT_PERMIT_DETAIL "
+                    + "WHERE EXPORT_PERMIT_DETAIL_NUMBER = ? FOR UPDATE WAIT 30"),
+            any(RowMapper.class),
+            eq(100L));
+    verify(jdbcTemplate)
+        .query(
+            eq(
+                "SELECT * FROM EXPORT_PURCHASE_OFFER "
+                    + "WHERE EXPORT_PURCHASE_OFFER_NUMBER = ? FOR UPDATE WAIT 30"),
+            any(RowMapper.class),
+            eq(1000L));
+    verifyNoMoreInteractions(jdbcTemplate);
   }
 
   @Test
