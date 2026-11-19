@@ -1,5 +1,5 @@
 import { useRef, type MouseEvent } from 'react'
-import { Loading } from '@carbon/react'
+import { Loading, Tooltip } from '@carbon/react'
 import { CheckmarkFilled, Close, WarningFilled } from '@carbon/icons-react'
 import type { ApplicationUploadFile } from './applicationUploadFiles'
 
@@ -55,14 +55,16 @@ function ApplicationUploadFileList({
             )}
           </span>
           {item.status !== 'validating' && (
-            <button
-              type="button"
-              className="application-upload-file__remove"
-              aria-label={`Remove ${item.file.name}`}
-              onClick={(event) => removeFile(event, item.id)}
-            >
-              <Close size={16} aria-hidden="true" />
-            </button>
+            <Tooltip label={`Remove ${item.file.name}`} align="left">
+              <button
+                type="button"
+                className="application-upload-file__remove"
+                aria-label={`Remove ${item.file.name}`}
+                onClick={(event) => removeFile(event, item.id)}
+              >
+                <Close size={16} aria-hidden="true" />
+              </button>
+            </Tooltip>
           )}
         </li>
       ))}

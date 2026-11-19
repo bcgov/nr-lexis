@@ -70,8 +70,8 @@ export const validationResultNotice = (
   }
   return {
     kind: 'error',
-    title: `${failedCount} of ${files.length} files failed validation`,
-    subtitle: `Correct the failed ${failedCount === 1 ? 'file and add it' : 'files and add them'} again, or review the ${countLabel(validCount, 'valid file', 'valid files')} and create ${validCount === 1 ? 'its application' : 'their applications'}.`,
+    title: `${failedCount} of ${files.length} files can't be created`,
+    subtitle: `Correct the issues listed below in your files, then add them again. You can also review and create the valid ${validCount === 1 ? 'file' : 'files'} now.`,
   }
 }
 

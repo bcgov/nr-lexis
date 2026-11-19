@@ -16,8 +16,11 @@
 }
 
 // The page's actions are 15rem wide with their icon at the far end, or the row's width when the
-// row is narrower.
-.application-upload-page .admin-upload-fspts-button-row .cds--btn {
+// row is narrower. Labels sit left, as Carbon places them, with or without an icon.
+.app-shell
+  .application-upload-page
+  .admin-upload-fspts-button-row
+  .cds--btn:not(.cds--btn--icon-only) {
   min-inline-size: min(15rem, 100%);
   justify-content: space-between;
 }
