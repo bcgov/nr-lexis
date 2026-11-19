@@ -97,7 +97,12 @@ describe('AuthProvider logout', () => {
     window.sessionStorage.removeItem('lexis.login-destination')
     window.sessionStorage.removeItem('lexis.pending-login-provider')
     window.localStorage.removeItem('lexis.last-login-provider')
+    window.localStorage.removeItem('lexis.session-activity')
   })
+
+  // What a tab receives when the user is active in another tab of the same browser.
+  const otherTabActivity = (key = 'lexis.session-activity') =>
+    window.dispatchEvent(new StorageEvent('storage', { key, newValue: String(Date.now()) }))
 
   it('signs out of OIDC', async () => {
     markSessionExpiredLoginNotice()
@@ -330,6 +335,93 @@ describe('AuthProvider logout', () => {
 
     expect(authMocks.endOidcSession).toHaveBeenCalledTimes(1)
     expect(window.location.pathname).toBe('/')
+  })
+
+  it('stays signed in without a warning while the user is active in another tab', async () => {
+    window.history.replaceState({}, document.title, '/provincial/review')
+    renderProbe()
+
+    await waitFor(() => {
+      expect(screen.getByTestId('loading')).toHaveTextContent('false')
+    })
+
+    vi.useFakeTimers()
+    window.dispatchEvent(new Event('keydown'))
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(SESSION_IDLE_TIMEOUT_MS - SESSION_IDLE_WARNING_MS - 1)
+    })
+    otherTabActivity()
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(1)
+    })
+    expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument()
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(SESSION_IDLE_TIMEOUT_MS - 2)
+    })
+    expect(authMocks.endOidcSession).not.toHaveBeenCalled()
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(1)
+    })
+    expect(authMocks.endOidcSession).toHaveBeenCalledTimes(1)
+  })
+
+  it('closes the logout warning when the user is active in another tab', async () => {
+    renderProbe()
+
+    await waitFor(() => {
+      expect(screen.getByTestId('loading')).toHaveTextContent('false')
+    })
+
+    vi.useFakeTimers()
+    window.dispatchEvent(new Event('keydown'))
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(SESSION_IDLE_TIMEOUT_MS - SESSION_IDLE_WARNING_MS)
+    })
+    expect(
+      screen.getByRole('alertdialog', { name: 'You’re about to be logged out' }),
+    ).toBeInTheDocument()
+
+    await act(async () => {
+      otherTabActivity('lexis.ui.theme')
+    })
+    expect(screen.getByRole('alertdialog')).toBeInTheDocument()
+
+    await act(async () => {
+      otherTabActivity()
+    })
+    expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument()
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(SESSION_IDLE_WARNING_MS)
+    })
+    expect(authMocks.endOidcSession).not.toHaveBeenCalled()
+    expect(screen.getByTestId('is-logged-in')).toHaveTextContent('true')
+  })
+
+  it('tells other tabs about activity and renews its token on theirs', async () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date('2026-01-01T00:00:00Z'))
+    await act(async () => {
+      renderProbe()
+    })
+    expect(screen.getByTestId('loading')).toHaveTextContent('false')
+    authMocks.getOidcUser.mockClear()
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(60_000)
+      window.dispatchEvent(new MouseEvent('mousemove'))
+    })
+    expect(window.localStorage.getItem('lexis.session-activity')).toBe(String(Date.now()))
+    expect(authMocks.getOidcUser).toHaveBeenCalledOnce()
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(60_000)
+      otherTabActivity()
+    })
+    expect(authMocks.getOidcUser).toHaveBeenCalledTimes(2)
   })
 
   it('keeps the OIDC token fresh while the user remains active', async () => {

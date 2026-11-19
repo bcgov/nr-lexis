@@ -29,6 +29,20 @@ export const clearSessionExpiredLoginNotice = (): void => {
   window.sessionStorage.removeItem(SESSION_EXPIRED_LOGIN_NOTICE_KEY)
 }
 
+const SESSION_ACTIVITY_KEY = 'lexis.session-activity'
+
+/** Tells the browser's other tabs the user is active, so an idle tab doesn't end their sign-in. */
+export const recordSessionActivity = (): void => {
+  try {
+    window.localStorage.setItem(SESSION_ACTIVITY_KEY, String(Date.now()))
+  } catch {
+    // Without storage, each tab times out by itself.
+  }
+}
+
+export const isSessionActivityEvent = (event: StorageEvent): boolean =>
+  event.key === SESSION_ACTIVITY_KEY && event.newValue !== null
+
 export const redirectToLoginShell = (): void => {
   window.history.replaceState({}, document.title, '/')
   const event =

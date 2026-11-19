@@ -23,7 +23,9 @@ import {
 import { hasRole, isPureReadOnlyRole } from '@/context/auth/role-utils'
 import {
   clearSessionExpiredLoginNotice,
+  isSessionActivityEvent,
   markSessionExpiredLoginNotice,
+  recordSessionActivity,
   redirectToLoginShell,
   SESSION_EXPIRED_EVENT,
   SESSION_IDLE_WARNING_MS,
@@ -494,6 +496,20 @@ export function AuthProvider({ children }: AuthProviderProps) {
         SESSION_IDLE_TIMEOUT_MS - SESSION_IDLE_WARNING_MS,
       )
     }
+    const keepSessionAlive = (now: number) => {
+      if (now - lastKeepalive < SESSION_KEEPALIVE_THROTTLE_MS) return
+      lastKeepalive = now
+      void getOidcUser()
+        .then((session) => {
+          if (!session?.access_token) {
+            void expireSession('token-unavailable')
+          }
+        })
+        .catch((error: unknown) => {
+          // After a temporary failure, later activity tries again instead of signing out.
+          if (isSessionEnded(error)) void expireSession('token-unavailable')
+        })
+    }
     const onActivity = () => {
       if (sessionWarningOpenRef.current) {
         return
@@ -502,35 +518,35 @@ export function AuthProvider({ children }: AuthProviderProps) {
       const now = Date.now()
       if (now - lastActivityReset >= SESSION_ACTIVITY_THROTTLE_MS) {
         lastActivityReset = now
+        recordSessionActivity()
         resetIdleTimer()
       }
-      if (now - lastKeepalive >= SESSION_KEEPALIVE_THROTTLE_MS) {
-        lastKeepalive = now
-        void getOidcUser()
-          .then((session) => {
-            if (!session?.access_token) {
-              void expireSession('token-unavailable')
-            }
-          })
-          .catch((error: unknown) => {
-            // After a temporary failure, later activity tries again instead of signing out.
-            if (isSessionEnded(error)) void expireSession('token-unavailable')
-          })
-      }
+      keepSessionAlive(now)
+    }
+    // Activity in another tab keeps this one signed in, with a fresh token and no warning.
+    const onOtherTabActivity = (event: StorageEvent) => {
+      if (!isSessionActivityEvent(event)) return
+      if (sessionWarningOpenRef.current) closeSessionWarning()
+      resetIdleTimer()
+      keepSessionAlive(Date.now())
     }
 
+    // Signing in or choosing to stay logged in counts as activity for the other tabs.
+    recordSessionActivity()
     resetIdleTimer()
     SESSION_ACTIVITY_EVENTS.forEach((eventName) => {
       window.addEventListener(eventName, onActivity, { passive: true })
     })
+    window.addEventListener('storage', onOtherTabActivity)
 
     return () => {
       clearTimers()
       SESSION_ACTIVITY_EVENTS.forEach((eventName) => {
         window.removeEventListener(eventName, onActivity)
       })
+      window.removeEventListener('storage', onOtherTabActivity)
     }
-  }, [capabilities.authenticated, expireSession, idleTimerVersion])
+  }, [capabilities.authenticated, closeSessionWarning, expireSession, idleTimerVersion])
 
   const login = useCallback(
     async (provider: LoginProvider = 'idir', { sessionChecked = false } = {}) => {
