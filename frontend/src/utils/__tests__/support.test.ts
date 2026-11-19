@@ -20,10 +20,8 @@ describe('userManualsForRoles', () => {
     ])
   })
 
-  it('collapses industry roles into one manual', () => {
-    expect(userManualsForRoles(['FEDERAL_READ_ONLY', 'PROVINCIAL_SUBMITTER'])).toEqual([
-      { label: 'User manual', href: '/manuals/LEXIS-Industry-User-Manual.pdf' },
-    ])
+  it('offers no manual to Federal Read Only', () => {
+    expect(userManualsForRoles(['FEDERAL_READ_ONLY'])).toEqual([])
   })
 
   it('maps regional provincial submitter roles to the industry manual', () => {

@@ -53,9 +53,7 @@ out.
 ## The Summary page
 
 After you log in, LEXIS opens **Provincial › Summary**. It is your home
-page: one table for each kind of record your organization has. (With the
-Federal Read Only role you land on **Federal › Application search** instead.
-See [Federal applications](06-federal-applications.md).)
+page: one table for each kind of record your organization has.
 
 | Table | Shows |
 |---|---|

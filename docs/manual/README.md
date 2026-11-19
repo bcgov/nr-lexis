@@ -6,7 +6,7 @@ bottom of the LEXIS menu.
 
 | Manual | For | Chapters |
 |---|---|---|
-| Industry | Business BCeID users: companies applying for exemptions and permits or making offers, their agents, and federal application viewers | [industry/](industry/README.md) |
+| Industry | Business BCeID users: companies applying for exemptions and permits or making offers, and their agents | [industry/](industry/README.md) |
 | Administrator, Application Approver, Exemption Approver, Read Only | IDIR staff, one manual for each role | [ministry/](ministry/README.md) |
 
 The PDFs are in [`frontend/public/manuals/`](../../frontend/public/manuals).

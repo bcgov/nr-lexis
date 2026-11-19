@@ -1,14 +1,13 @@
-# 7. Who can do what
+# 6. Who can do what
 
 Your role decides which menu items, records and buttons you see. Industry
-users hold one of two roles. A Business BCeID account can't hold both.
+users hold the Provincial Submitter role.
 
-## Roles
+## Your role
 
 | Role | For | Lets you |
 |---|---|---|
 | Provincial Submitter | Companies that apply for exemptions and permits or make offers, and their agents. Granted for each forest client you act for. | Enter and upload applications, add packages, summary of scale and documents, place and withdraw offers, see your exemptions, request permits, send them for review and print them. |
-| Federal Read Only | Users who need to see federal applications. | Find and read every federal application. Nothing else. |
 
 ## What a Provincial Submitter sees
 

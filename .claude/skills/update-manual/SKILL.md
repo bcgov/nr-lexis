@@ -10,7 +10,7 @@ two editions, one per sign-in:
 
 | Edition | Folder | Readers |
 |---|---|---|
-| Industry | `docs/manual/industry/` | Business BCeID users: Provincial Submitter, Federal Read Only |
+| Industry | `docs/manual/industry/` | Business BCeID users: Provincial Submitter. Federal Read Only (NEXCOL) has no manual. |
 | Ministry | `docs/manual/ministry/` | IDIR staff: Read Only, Application Approver, Exemption Approver, Administrator |
 
 The ministry edition is the source for four PDFs, one for each staff role.
@@ -53,11 +53,11 @@ record page, a search) is described in both, each from its reader's side.
 | `pages/ProvincialExemption`, `pages/ProvincialExemptionDetails`, `backend/.../service/exemption/**` | `04-exemptions.md` | `04-exemptions.md` |
 | `pages/ProvincialExemptionCreate`, `components/ExemptionApprovalModal.tsx` | none | `04-exemptions.md` |
 | `pages/ProvincialPermit`, `pages/ProvincialPermitDetails`, `pages/ProvincialBlanketOicPermitCreate`, `backend/.../service/permit/**` | `05-permits.md` | `05-permits.md` |
-| `pages/Federal`, `pages/FederalApplicationDetails`, `backend/.../service/federal/**` | `06-federal-applications.md` | `06-federal-applications.md` |
+| `pages/Federal`, `pages/FederalApplicationDetails`, `backend/.../service/federal/**` | none | `06-federal-applications.md` |
 | `pages/Reports`, `backend/.../service/report/**`, `backend/src/main/resources/reports/**` | none | `07-reports.md` |
 | `pages/AdminPolicies`, `pages/RTMEmsLogAmv`, `pages/AdminUploads`, `backend/.../service/{admin,rtm}/**` | none | `08-administration.md` |
 | `backend/.../service/mail/**`, `backend/src/main/resources/mail/**` | the chapter of the record the email is about | same |
-| `backend/src/main/resources/application.yml` (`role-actions`), `backend/.../security/**`, `backend/.../service/session/**`, `routes/routePaths.tsx`, `NAVIGATION_SECTIONS` and `ROLE_LABELS` in `components/Layout.tsx` | `07-who-can-do-what.md` | `09-who-can-do-what.md` (and the affected chapter) |
+| `backend/src/main/resources/application.yml` (`role-actions`), `backend/.../security/**`, `backend/.../service/session/**`, `routes/routePaths.tsx`, `NAVIGATION_SECTIONS` and `ROLE_LABELS` in `components/Layout.tsx` | `06-who-can-do-what.md` | `09-who-can-do-what.md` (and the affected chapter) |
 | A new area in the menu | New chapter: add it to that edition's `README.md` and this table |
 
 Frontend paths are under `frontend/src/`; `backend/...` =
