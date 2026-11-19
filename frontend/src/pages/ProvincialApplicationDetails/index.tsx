@@ -4297,6 +4297,12 @@ const ProvincialApplicationDetailsPage = () => {
                 <TabPanel className="application-detail-tab-panel">
                   <Grid fullWidth className="application-detail-tab-grid">
                     <Column sm={4} md={8} lg={16}>
+                      {ownerActionResult && (
+                        <ActionResultNotification
+                          result={ownerActionResult}
+                          onClose={() => setActionResult(null)}
+                        />
+                      )}
                       <Tile
                         id="application-owner-details"
                         ref={sections.sectionRef('owner')}
@@ -4324,12 +4330,6 @@ const ProvincialApplicationDetailsPage = () => {
                               </Button>
                             )}
                         </div>
-                        {ownerActionResult && (
-                          <ActionResultNotification
-                            result={ownerActionResult}
-                            onClose={() => setActionResult(null)}
-                          />
-                        )}
                         {isEditingOwnerDetails && summaryForm ? (
                           <>
                             <RequiredFieldsLegend className="application-detail-required" />
@@ -4607,6 +4607,12 @@ const ProvincialApplicationDetailsPage = () => {
                 <TabPanel className="application-detail-tab-panel">
                   <Grid fullWidth className="application-detail-tab-grid">
                     <Column sm={4} md={8} lg={16}>
+                      {summaryActionResult && (
+                        <ActionResultNotification
+                          result={summaryActionResult}
+                          onClose={() => setActionResult(null)}
+                        />
+                      )}
                       <Tile
                         id="application-summary"
                         ref={sections.sectionRef('summary')}
@@ -4634,12 +4640,6 @@ const ProvincialApplicationDetailsPage = () => {
                               </Button>
                             )}
                         </div>
-                        {summaryActionResult && (
-                          <ActionResultNotification
-                            result={summaryActionResult}
-                            onClose={() => setActionResult(null)}
-                          />
-                        )}
                         {isEditingSummary && canEditSummary && summaryForm ? (
                           <>
                             <RequiredFieldsLegend className="application-detail-required" />
@@ -4863,6 +4863,12 @@ const ProvincialApplicationDetailsPage = () => {
                 <TabPanel className="application-detail-tab-panel">
                   <Grid fullWidth className="application-detail-tab-grid">
                     <Column sm={4} md={8} lg={16}>
+                      {scaleActionResult && (
+                        <ActionResultNotification
+                          result={scaleActionResult}
+                          onClose={() => setActionResult(null)}
+                        />
+                      )}
                       <Tile
                         id="application-item-details"
                         ref={sections.sectionRef('scale')}
@@ -4891,12 +4897,6 @@ const ProvincialApplicationDetailsPage = () => {
                               </Button>
                             )}
                         </div>
-                        {scaleActionResult && (
-                          <ActionResultNotification
-                            result={scaleActionResult}
-                            onClose={() => setActionResult(null)}
-                          />
-                        )}
                         {isEditingApplicationItems && canEditSummary && summaryForm ? (
                           <>
                             <RequiredFieldsLegend className="application-detail-required" />

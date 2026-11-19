@@ -385,13 +385,14 @@ const gbmsHistoryRow = {
 // The Fee column is the last cell of a fee row.
 const feeAmountCell = (row: HTMLElement) => within(row).getAllByRole('cell').at(-1) as HTMLElement
 
-// A section's result shows inside that section's card, after the card title.
-const expectResultInCard = (message: string, cardTitle: string) => {
+// A section's result shows in the tab panel directly above that section's card.
+const expectResultAboveCard = (message: string, cardTitle: string) => {
   const notice = screen.getByText(message).closest('.app-notification-container') as HTMLElement
-  const card = notice.closest<HTMLElement>('.cds--tile')
-  expect(card).not.toBeNull()
-  const title = within(card as HTMLElement).getByRole('heading', { name: cardTitle })
-  expect(title.compareDocumentPosition(notice) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+  expect(notice.closest('.cds--tile')).toBeNull()
+  const card = notice.nextElementSibling as HTMLElement
+  expect(card).toHaveClass('cds--tile')
+  expect(within(card).getByRole('heading', { name: cardTitle })).toBeInTheDocument()
+  expect(notice.closest('[role="tabpanel"]')).toBe(card.closest('[role="tabpanel"]'))
 }
 
 const selectPermitDetailTab = async (name: string) => {
@@ -707,7 +708,7 @@ describe('Provincial Permit Detail Action Smoke', () => {
     ) as HTMLElement
     expect(notice).toHaveClass('cds--inline-notification--success')
     expect(notice.closest('[role="tabpanel"]')).toBe(screen.getByRole('tabpanel', { name: 'Fees' }))
-    expectResultInCard('Receipt number saved.', 'Permit fees')
+    expectResultAboveCard('Receipt number saved.', 'Permit fees')
     expect(screen.queryByText('Permit details saved.')).not.toBeInTheDocument()
     await waitFor(() =>
       expect(screen.getByRole('button', { name: 'Edit receipt number' })).toHaveFocus(),
@@ -808,7 +809,7 @@ describe('Provincial Permit Detail Action Smoke', () => {
       expect(notice).toHaveTextContent('The test-2026-10-14 change was rejected.')
       expect(notice).toHaveTextContent('Check the saved details before trying again.')
       expect(notice.closest('[role="tabpanel"]')).toBe(screen.getByRole('tabpanel', { name: tab }))
-      expectResultInCard(`${section} not saved.`, card)
+      expectResultAboveCard(`${section} not saved.`, card)
       expect(screen.queryByText('Action failed')).not.toBeInTheDocument()
       expect(
         screen.getByRole('button', { name: /^Save (?:changes|permit|shipping|fee override)$/ }),
@@ -1727,7 +1728,7 @@ describe('Provincial Permit Detail Action Smoke', () => {
       )
     })
     expect(await screen.findByText('Applicant details saved.')).toBeInTheDocument()
-    expectResultInCard('Applicant details saved.', 'Applicant details')
+    expectResultAboveCard('Applicant details saved.', 'Applicant details')
   })
 
   it.each([
@@ -1911,7 +1912,7 @@ describe('Provincial Permit Detail Action Smoke', () => {
       '.cds--inline-notification',
     )
     expect(notice).toHaveClass('cds--inline-notification--success')
-    expectResultInCard('Permit details saved.', 'Permit details')
+    expectResultAboveCard('Permit details saved.', 'Permit details')
     expect(mockedUpdatePermitApplications).toHaveBeenCalledTimes(1)
     expect(mockedUpdatePermitApplications).toHaveBeenCalledWith({
       permitNumber: '777',
@@ -2012,7 +2013,7 @@ describe('Provincial Permit Detail Action Smoke', () => {
       'The added scales total 847.7 m³, but the exemption has 30.0 m³ remaining.',
     )
     await waitFor(() => expect(notice).toHaveFocus())
-    expectResultInCard('Permit details not saved.', 'Permit details')
+    expectResultAboveCard('Permit details not saved.', 'Permit details')
     expect(includeApplication('101103')).toBeChecked()
     expect(permitFieldValue('Current permit pieces')).toHaveTextContent('2515')
     expect(permitFieldValue('Current permit volume (m³)')).toHaveTextContent('847.7')
@@ -3850,7 +3851,7 @@ describe('Provincial Permit Detail Action Smoke', () => {
     expect(savedNotice.closest('[role="tabpanel"]')).toBe(
       screen.getByRole('tabpanel', { name: 'Permit' }),
     )
-    expectResultInCard('Permit details saved.', 'Permit summary')
+    expectResultAboveCard('Permit details saved.', 'Permit summary')
     expect(screen.queryByText('The permit was updated successfully.')).not.toBeInTheDocument()
     expect(mockedUpdatePermitDetail).toHaveBeenCalledWith(
       expect.objectContaining({ permitSubmitDate: '2026-04-11', permitStatus: 'ACT' }),
@@ -3948,7 +3949,7 @@ describe('Provincial Permit Detail Action Smoke', () => {
     expect(savedNotice.closest('[role="tabpanel"]')).toBe(
       screen.getByRole('tabpanel', { name: 'Shipping' }),
     )
-    expectResultInCard('Shipping details saved.', 'Shipping')
+    expectResultAboveCard('Shipping details saved.', 'Shipping')
     expect(screen.queryByText('The permit was saved successfully.')).not.toBeInTheDocument()
     expect(mockedFetchProvincialPermitFees).toHaveBeenCalledTimes(2)
     await selectPermitDetailTab('Fees')
@@ -4010,7 +4011,7 @@ describe('Provincial Permit Detail Action Smoke', () => {
     expect(savedNotice.closest('[role="tabpanel"]')).toBe(
       screen.getByRole('tabpanel', { name: 'Fees' }),
     )
-    expectResultInCard('Fee override saved.', 'Fee calculation details')
+    expectResultAboveCard('Fee override saved.', 'Fee calculation details')
     expect(screen.getByLabelText('Total fees (CAD)')).toHaveValue('$45.25')
     await userEvent.click(await screen.findByRole('button', { name: 'Edit fee override' }))
     await userEvent.click(screen.getByRole('radio', { name: 'No' }))
@@ -5553,7 +5554,7 @@ describe('Provincial Permit Detail Action Smoke', () => {
       await userEvent.click(addButton)
     }
 
-    it('focuses the added notice inside the Associated applications card', async () => {
+    it('focuses the added notice above the Associated applications card', async () => {
       const visibleRects = vi
         .spyOn(HTMLElement.prototype, 'getClientRects')
         .mockReturnValue([new DOMRect(0, 0, 400, 100)] as unknown as DOMRectList)
@@ -5568,10 +5569,10 @@ describe('Provincial Permit Detail Action Smoke', () => {
       )
       await waitFor(() => expect(notice).toHaveFocus())
       expect(within(notice as HTMLElement).getByText('Application added.')).toBeVisible()
-      expectResultInCard('Application was added to the permit.', 'Associated applications')
+      expectResultAboveCard('Application was added to the permit.', 'Associated applications')
     })
 
-    it('shows a refused application add inside the Associated applications card', async () => {
+    it('shows a refused application add above the Associated applications card', async () => {
       configureEditablePermitWithApplication()
       mockedAddApplicationsToPermit.mockResolvedValueOnce({
         success: false,
@@ -5588,11 +5589,11 @@ describe('Provincial Permit Detail Action Smoke', () => {
       )
       expect(notice).toHaveClass('cds--inline-notification--error')
       expect(notice).toHaveTextContent('test-2026-10-20 application refused.')
-      expectResultInCard('Application not added.', 'Associated applications')
+      expectResultAboveCard('Application not added.', 'Associated applications')
       expect(screen.queryByText('Action failed')).not.toBeInTheDocument()
     })
 
-    it('focuses the removed notice inside the Associated applications card', async () => {
+    it('focuses the removed notice above the Associated applications card', async () => {
       const visibleRects = vi
         .spyOn(HTMLElement.prototype, 'getClientRects')
         .mockReturnValue([new DOMRect(0, 0, 400, 100)] as unknown as DOMRectList)
@@ -5612,7 +5613,7 @@ describe('Provincial Permit Detail Action Smoke', () => {
       )
       await waitFor(() => expect(notice).toHaveFocus())
       expect(within(notice as HTMLElement).getByText('Application removed.')).toBeVisible()
-      expectResultInCard('Application was removed from the permit.', 'Associated applications')
+      expectResultAboveCard('Application was removed from the permit.', 'Associated applications')
     })
   })
 

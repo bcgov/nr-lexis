@@ -2482,9 +2482,9 @@ const ProvincialExemptionDetailsPage = () => {
                     {editingSection === 'summary' && editForm ? (
                       <>
                         <Column sm={4} md={8} lg={16}>
+                          {sectionResult('summary')}
                           <Tile>
                             <DetailCardTitle icon={Rule}>Exemption details</DetailCardTitle>
-                            {sectionResult('summary')}
                             <RequiredFieldsLegend className="application-detail-required" />
                             <RecordFieldGrid editing>
                               <RecordFieldRow>
@@ -2727,6 +2727,7 @@ const ProvincialExemptionDetailsPage = () => {
                       </>
                     ) : (
                       <Column sm={4} md={8} lg={16}>
+                        {sectionResult('summary')}
                         <Tile className="detail-section-card exemption-summary-card">
                           <div className="detail-section-card__header">
                             <DetailCardTitle icon={Rule}>Exemption details</DetailCardTitle>
@@ -2742,7 +2743,6 @@ const ProvincialExemptionDetailsPage = () => {
                               </Button>
                             )}
                           </div>
-                          {sectionResult('summary')}
                           <RecordFieldGrid>
                             <RecordFieldRow>
                               {[
@@ -2866,6 +2866,7 @@ const ProvincialExemptionDetailsPage = () => {
                   <TabPanel key="applications" className="application-detail-tab-panel">
                     <Grid fullWidth className="application-detail-tab-grid">
                       <Column sm={4} md={8} lg={16}>
+                        {sectionResult('applications')}
                         <Tile>
                           <div className="detail-section-card__header">
                             <DetailCardTitle icon={Result}>Applications</DetailCardTitle>
@@ -2885,7 +2886,6 @@ const ProvincialExemptionDetailsPage = () => {
                               </Button>
                             )}
                           </div>
-                          {sectionResult('applications')}
                           {!applicationsErrorMessage && (
                             <RecordFieldGrid className="exemption-table-totals">
                               <RecordFieldRow>
@@ -3239,6 +3239,7 @@ const ProvincialExemptionDetailsPage = () => {
                       className="application-detail-tab-grid"
                     >
                       <Column sm={4} md={8} lg={16}>
+                        {sectionResult('fees')}
                         {applicationsErrorMessage ||
                         (!editContextLoaded && !editContextRefreshing) ? (
                           <Tile>
@@ -3260,7 +3261,6 @@ const ProvincialExemptionDetailsPage = () => {
                         ) : editingSection === 'fees' && editForm ? (
                           <Tile>
                             <DetailCardTitle icon={Currency}>Fees</DetailCardTitle>
-                            {sectionResult('fees')}
                             <RequiredFieldsLegend className="application-detail-required" />
                             <RecordFieldGrid editing>
                               <RecordFieldRow>
@@ -3357,7 +3357,6 @@ const ProvincialExemptionDetailsPage = () => {
                                 </Button>
                               )}
                             </div>
-                            {sectionResult('fees')}
                             <RecordFieldGrid>
                               <RecordFieldRow>
                                 <RecordField

@@ -240,8 +240,8 @@ const gbmsInvoiceAmountLabel = (amount: string) => {
 
 /**
  * Where a result shows: Documents results in the Documents tab, package results at the top of the
- * Scale tab, scale results in the package's Summary of scale, and a section's save inside that
- * section's card below its title. An application added to or removed from a permit other than a
+ * Scale tab, scale results in the package's Summary of scale, and a section's save above that
+ * section's card. An application added to or removed from a permit other than a
  * Ministerial permit shows in its Associated applications card; a Ministerial permit's
  * applications save with its Permit details. Every other result stays at page level, where an
  * email action's result also takes focus.
@@ -715,8 +715,6 @@ type PermitClientTileProps = {
   errorMessage: string
   icon?: ReactNode
   headerAction?: ReactNode
-  /** A save result, shown in the card below its title. */
-  result?: ReactNode
   reviewedLayout?: boolean
 }
 
@@ -749,7 +747,6 @@ const PermitClientTile = ({
   errorMessage,
   icon,
   headerAction,
-  result,
   reviewedLayout = false,
 }: PermitClientTileProps) => {
   const labels = permitClientLabels(kind)
@@ -783,7 +780,6 @@ const PermitClientTile = ({
         </section>
       ) : (
         <DetailFieldTile title={title} icon={icon} headerAction={headerAction} fields={[]}>
-          {result}
           {fields}
         </DetailFieldTile>
       )}
@@ -7873,10 +7869,10 @@ const ProvincialPermitDetailsPage = () => {
                     className="application-detail-tab-grid"
                   >
                     <Column sm={4} md={8} lg={16}>
+                      {renderSectionSaveResult('permit')}
                       {isReviewedPermitEdit ? (
                         <Tile className="ministerial-permit-details">
                           <DetailCardTitle icon={Certificate}>Permit details</DetailCardTitle>
-                          {renderSectionSaveResult('permit')}
                           <RequiredFieldsLegend />
                           {renderReviewedPermitFields()}
                           {isMinisterialPermitEdit && renderFederalPermitNotice()}
@@ -7889,7 +7885,6 @@ const ProvincialPermitDetailsPage = () => {
                           <DetailCardTitle icon={Certificate}>
                             {usesReviewedPermitFlow ? 'Permit details' : 'Permit summary'}
                           </DetailCardTitle>
-                          {renderSectionSaveResult('permit')}
                           <RequiredFieldsLegend />
                           {renderPermitSummaryFields()}
                         </Tile>
@@ -7909,7 +7904,6 @@ const ProvincialPermitDetailsPage = () => {
                               </Button>
                             )}
                           </div>
-                          {renderSectionSaveResult('permit')}
                           {renderReviewedPermitFields()}
                         </Tile>
                       ) : detail.blanketOic ? (
@@ -7928,7 +7922,6 @@ const ProvincialPermitDetailsPage = () => {
                               </Button>
                             )}
                           </div>
-                          {renderSectionSaveResult('permit')}
                           {renderReviewedPermitFields()}
                         </Tile>
                       ) : (
@@ -7949,7 +7942,6 @@ const ProvincialPermitDetailsPage = () => {
                           }
                           fields={[]}
                         >
-                          {renderSectionSaveResult('permit')}
                           {renderPermitSummaryFields()}
                         </DetailFieldTile>
                       )}
@@ -7986,11 +7978,11 @@ const ProvincialPermitDetailsPage = () => {
                       )}
                     {!ministerialPermit && !detail.blanketOic && (
                       <Column sm={4} md={8} lg={16}>
+                        {renderSectionSaveResult('applications')}
                         <Tile>
                           <DetailCardTitle icon={Certificate}>
                             Associated applications
                           </DetailCardTitle>
-                          {renderSectionSaveResult('applications')}
                           {isPermitTablesLoading ? (
                             <InlineLoading description="Loading associated permit applications…" />
                           ) : permitTablesErrorMessage ? (
@@ -8130,6 +8122,7 @@ const ProvincialPermitDetailsPage = () => {
                   >
                     {!ownerEditMode && (
                       <Column sm={4} md={8} lg={16}>
+                        {renderSectionSaveResult('applicant')}
                         {usesReviewedPermitFlow ? (
                           <Tile className="detail-section-card permit-applicant-card">
                             <div className="detail-section-card__header">
@@ -8146,7 +8139,6 @@ const ProvincialPermitDetailsPage = () => {
                                 </Button>
                               )}
                             </div>
-                            {renderSectionSaveResult('applicant')}
                             <PermitClientTile
                               title="Owner"
                               kind="owner"
@@ -8206,7 +8198,6 @@ const ProvincialPermitDetailsPage = () => {
                                   </Button>
                                 ) : undefined
                               }
-                              result={renderSectionSaveResult('applicant')}
                               clientNumber={detail.ownerClientNumber}
                               locationCode={detail.ownerClientLocationCode}
                               clientData={ownerClientData}
@@ -8240,6 +8231,7 @@ const ProvincialPermitDetailsPage = () => {
                     )}
                     {ownerEditMode && permitForm && (
                       <Column sm={4} md={8} lg={16}>
+                        {renderSectionSaveResult('applicant')}
                         {/* Editing the applicant, focus waits for the owner's locations, so it
                         lands on the owner's fields rather than the fields after them. */}
                         <Tile
@@ -8250,7 +8242,6 @@ const ProvincialPermitDetailsPage = () => {
                           }
                         >
                           <DetailCardTitle icon={Enterprise}>Applicant details</DetailCardTitle>
-                          {renderSectionSaveResult('applicant')}
                           <RequiredFieldsLegend className="permit-client-editor__required-hint" />
                           {usesReviewedPermitFlow && (
                             <h3 className="permit-client-subheading">Owner</h3>
@@ -8295,53 +8286,55 @@ const ProvincialPermitDetailsPage = () => {
                   >
                     <Column sm={4} md={8} lg={16}>
                       {isEditingShipping && permitForm ? (
-                        <Tile>
-                          <DetailCardTitle icon={EarthFilled}>
-                            {usesReviewedPermitFlow ? 'Shipping details' : 'Shipping'}
-                          </DetailCardTitle>
+                        <>
                           {renderSectionSaveResult('shipping')}
-                          <RequiredFieldsLegend />
-                          {shippingReferencesErrorMessage && (
-                            <InlineNotification
-                              className="detail-context-notification"
-                              kind="warning"
-                              lowContrast
-                              hideCloseButton
-                              title="Shipping options unavailable"
-                              subtitle={shippingReferencesErrorMessage}
-                            />
-                          )}
-                          {renderShippingFields()}
-                          {canEditShipping && (
-                            <div className="legacy-search-actions">
-                              <Button
-                                kind="tertiary"
-                                size="md"
-                                disabled={isSavingShippingAction}
-                                onClick={permitEditSections.cancelEditing}
-                              >
-                                Cancel
-                              </Button>
-                              <Button
-                                kind="primary"
-                                size="md"
-                                disabled={isSavingShippingAction || isRefreshingPermitForEdit}
-                                renderIcon={isSavingShippingAction ? PendingIcon : undefined}
-                                onClick={() =>
-                                  void (permitEditSection === 'newPermit'
-                                    ? onSavePermit()
-                                    : onSaveShipping())
-                                }
-                              >
-                                {isSavingShippingAction
-                                  ? 'Saving…'
-                                  : usesReviewedPermitFlow
-                                    ? 'Save changes'
-                                    : 'Save shipping'}
-                              </Button>
-                            </div>
-                          )}
-                        </Tile>
+                          <Tile>
+                            <DetailCardTitle icon={EarthFilled}>
+                              {usesReviewedPermitFlow ? 'Shipping details' : 'Shipping'}
+                            </DetailCardTitle>
+                            <RequiredFieldsLegend />
+                            {shippingReferencesErrorMessage && (
+                              <InlineNotification
+                                className="detail-context-notification"
+                                kind="warning"
+                                lowContrast
+                                hideCloseButton
+                                title="Shipping options unavailable"
+                                subtitle={shippingReferencesErrorMessage}
+                              />
+                            )}
+                            {renderShippingFields()}
+                            {canEditShipping && (
+                              <div className="legacy-search-actions">
+                                <Button
+                                  kind="tertiary"
+                                  size="md"
+                                  disabled={isSavingShippingAction}
+                                  onClick={permitEditSections.cancelEditing}
+                                >
+                                  Cancel
+                                </Button>
+                                <Button
+                                  kind="primary"
+                                  size="md"
+                                  disabled={isSavingShippingAction || isRefreshingPermitForEdit}
+                                  renderIcon={isSavingShippingAction ? PendingIcon : undefined}
+                                  onClick={() =>
+                                    void (permitEditSection === 'newPermit'
+                                      ? onSavePermit()
+                                      : onSaveShipping())
+                                  }
+                                >
+                                  {isSavingShippingAction
+                                    ? 'Saving…'
+                                    : usesReviewedPermitFlow
+                                      ? 'Save changes'
+                                      : 'Save shipping'}
+                                </Button>
+                              </div>
+                            )}
+                          </Tile>
+                        </>
                       ) : (
                         <>
                           {shippingReferencesErrorMessage && (
@@ -8354,6 +8347,7 @@ const ProvincialPermitDetailsPage = () => {
                               subtitle={shippingReferencesErrorMessage}
                             />
                           )}
+                          {renderSectionSaveResult('shipping')}
                           <DetailFieldTile
                             title={usesReviewedPermitFlow ? 'Shipping details' : 'Shipping'}
                             icon={<EarthFilled size={24} aria-hidden="true" />}
@@ -8375,7 +8369,6 @@ const ProvincialPermitDetailsPage = () => {
                             }
                             fields={[]}
                           >
-                            {renderSectionSaveResult('shipping')}
                             {renderShippingFields()}
                           </DetailFieldTile>
                         </>
@@ -8773,6 +8766,7 @@ const ProvincialPermitDetailsPage = () => {
                     ) : usesReviewedPermitFlow ? (
                       <>
                         <Column sm={4} md={8} lg={16}>
+                          {renderSectionSaveResult('fees')}
                           <Tile>
                             <div className="detail-section-card__header">
                               <DetailCardTitle icon={Currency}>Permit fees</DetailCardTitle>
@@ -8811,7 +8805,6 @@ const ProvincialPermitDetailsPage = () => {
                                   </div>
                                 )}
                             </div>
-                            {renderSectionSaveResult('fees')}
                             {renderPermitFeeSummary()}
                           </Tile>
                         </Column>
@@ -8824,9 +8817,9 @@ const ProvincialPermitDetailsPage = () => {
                       </>
                     ) : (
                       <Column sm={4} md={8} lg={16}>
+                        {renderSectionSaveResult('fees')}
                         <Tile>
                           <DetailCardTitle icon={Currency}>Fee calculation details</DetailCardTitle>
-                          {renderSectionSaveResult('fees')}
                           {renderPermitFeeSummary()}
                           {renderPackageFees()}
                         </Tile>

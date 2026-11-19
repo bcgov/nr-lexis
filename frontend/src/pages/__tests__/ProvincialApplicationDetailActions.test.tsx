@@ -49,6 +49,14 @@ const getOwnerClientDetailsTile = (): HTMLElement => {
   return tile as HTMLElement
 }
 
+// The save notice renders in the tab panel directly before its card.
+const expectSavedNoticeAboveTile = (tile: HTMLElement): void => {
+  const notice = screen.getByText('The application was saved.')
+  expect(tile.contains(notice)).toBe(false)
+  expect(tile.closest('.application-detail-tab-panel')?.contains(notice)).toBe(true)
+  expect(notice.compareDocumentPosition(tile) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+}
+
 const getAgentDetailsTile = (): HTMLElement => {
   const title = screen.getByRole('heading', {
     name: 'Agent information',
@@ -498,7 +506,8 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
     const save = screen.getByRole('button', { name: 'Save changes' })
     expect(save).toBeEnabled()
     await userEvent.click(save)
-    expect(await summary.findByText(missingOptions)).toBeInTheDocument()
+    await waitFor(() => expect(screen.getAllByText(missingOptions)).toHaveLength(2))
+    expect(summary.queryByText(missingOptions)).not.toBeInTheDocument()
     expect(mockedUpdateApplicationSummary).not.toHaveBeenCalled()
 
     await selectApplicationDetailTab('Applicant')
@@ -1011,9 +1020,7 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
     expect(
       screen.getByText('The application was saved.').closest('.cds--inline-notification'),
     ).toHaveClass('cds--inline-notification--success')
-    expect(
-      within(getOwnerClientDetailsTile()).getByText('The application was saved.'),
-    ).toBeInTheDocument()
+    expectSavedNoticeAboveTile(getOwnerClientDetailsTile())
     expect(screen.queryByText('Review package volumes')).not.toBeInTheDocument()
   })
 
@@ -2095,9 +2102,7 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
       expect(mockedFetchProvincialApplicationDetail).toHaveBeenCalledTimes(2)
     })
     expect(await screen.findByText('The application was saved.')).toBeInTheDocument()
-    expect(
-      within(getApplicationSummaryTile()).getByText('The application was saved.'),
-    ).toBeInTheDocument()
+    expectSavedNoticeAboveTile(getApplicationSummaryTile())
     expect(screen.queryByText('Review package volumes')).not.toBeInTheDocument()
   }, 30000)
 
@@ -3360,11 +3365,7 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
         expect.objectContaining({ applicationVolume: '9999999.99' }),
       ),
     )
-    expect(
-      within(document.getElementById('application-item-details') as HTMLElement).getByText(
-        'The application was saved.',
-      ),
-    ).toBeInTheDocument()
+    expectSavedNoticeAboveTile(document.getElementById('application-item-details') as HTMLElement)
   })
 
   it.each(['H', 'T'])(
