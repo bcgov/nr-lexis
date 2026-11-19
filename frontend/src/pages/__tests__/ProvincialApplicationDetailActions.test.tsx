@@ -189,6 +189,38 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
     expect(focusedWhileInert).toEqual([false])
   })
 
+  it('hides the Application search link after Create application, even once the notice is removed', async () => {
+    render(
+      <MemoryRouter
+        initialEntries={[
+          {
+            pathname: '/provincial/application/321',
+            state: { applicationCreationNotice: { applicationNumber: '321' } },
+          },
+        ]}
+      >
+        <Routes>
+          <Route
+            path="/provincial/application/:applicationNumber"
+            element={<ProvincialApplicationDetailsPage />}
+          />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    await screen.findByRole('tab', { name: 'Application' })
+    expect(
+      screen.queryByRole('link', { name: 'Back to Application search' }),
+    ).not.toBeInTheDocument()
+    expect(await screen.findByText('The application was saved.')).toBeInTheDocument()
+    await act(async () => {
+      await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()))
+    })
+    expect(
+      screen.queryByRole('link', { name: 'Back to Application search' }),
+    ).not.toBeInTheDocument()
+  })
+
   it('focuses the title when a record opens with focus lost', async () => {
     renderApplicationDetailPage()
 
@@ -979,6 +1011,9 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
     expect(
       screen.getByText('The application was saved.').closest('.cds--inline-notification'),
     ).toHaveClass('cds--inline-notification--success')
+    expect(
+      within(getOwnerClientDetailsTile()).getByText('The application was saved.'),
+    ).toBeInTheDocument()
     expect(screen.queryByText('Review package volumes')).not.toBeInTheDocument()
   })
 
@@ -1753,7 +1788,8 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
       Array.from(rows, (row) => Array.from(row.querySelectorAll('dt'), (term) => term.textContent)),
     ).toEqual([
       ['Region', 'Product type', 'Exemption reason'],
-      ['Application date', 'List date'],
+      ['Application date'],
+      ['List date'],
       ['Exemption term (days)'],
     ])
     expect(
@@ -2059,6 +2095,9 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
       expect(mockedFetchProvincialApplicationDetail).toHaveBeenCalledTimes(2)
     })
     expect(await screen.findByText('The application was saved.')).toBeInTheDocument()
+    expect(
+      within(getApplicationSummaryTile()).getByText('The application was saved.'),
+    ).toBeInTheDocument()
     expect(screen.queryByText('Review package volumes')).not.toBeInTheDocument()
   }, 30000)
 
@@ -3188,7 +3227,7 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
     const averageLogVolumeInput = await itemDetails.findByLabelText('Average log volume (m³)')
 
     await waitFor(() => {
-      expect(applicationVolumeInput).toHaveValue(100)
+      expect(applicationVolumeInput).toHaveValue('100.0')
     })
 
     fireEvent.change(applicationVolumeInput, { target: { value: '10000000' } })
@@ -3321,6 +3360,11 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
         expect.objectContaining({ applicationVolume: '9999999.99' }),
       ),
     )
+    expect(
+      within(document.getElementById('application-item-details') as HTMLElement).getByText(
+        'The application was saved.',
+      ),
+    ).toBeInTheDocument()
   })
 
   it.each(['H', 'T'])(

@@ -2344,10 +2344,7 @@ const ProvincialApplicationCreatePage = () => {
                           id="averageLogVolume"
                           labelText={requiredLabel('Average log volume (m³)', logDetailsRequired)}
                           aria-required={logDetailsRequired}
-                          type="number"
-                          min={0}
-                          max={99.9}
-                          step="0.1"
+                          inputMode="decimal"
                           value={form.averageLogVolume}
                           invalid={!!fieldError('averageLogVolume')}
                           invalidText={fieldError('averageLogVolume')}
