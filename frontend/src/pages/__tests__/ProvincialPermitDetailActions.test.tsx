@@ -5835,7 +5835,7 @@ describe('Provincial Permit Detail Action Smoke', () => {
     expect(
       await within(packageCard).findByRole('button', { name: 'Edit package' }),
     ).toBeInTheDocument()
-    expect(within(packageCard).queryByText('Comments')).not.toBeInTheDocument()
+    expect(within(packageCard).getByText('Comments')).toBeInTheDocument()
     expect(within(packageCard).getByText('Current package pieces')).toBeInTheDocument()
     expect(within(packageCard).getByText('Current package volume (m³)')).toBeInTheDocument()
     for (const [label, value] of [
@@ -5860,7 +5860,7 @@ describe('Provincial Permit Detail Action Smoke', () => {
   it.each([
     { viewer: 'anyone on a Completed permit', status: 'COM', readOnly: false, comments: 'Note' },
     { viewer: 'a Read Only user', status: 'ACT', readOnly: true, comments: 'Note' },
-    { viewer: 'nobody when the package has none', status: 'COM', readOnly: false, comments: ' ' },
+    { viewer: 'anyone, as a dash when it has none', status: 'COM', readOnly: false, comments: ' ' },
   ])(
     'shows Blanket OIC package comments read-only on the card to $viewer',
     async ({ status, readOnly, comments }) => {
@@ -5890,14 +5890,10 @@ describe('Provincial Permit Detail Action Smoke', () => {
       expect(
         within(packageCard).queryByRole('button', { name: 'Edit package' }),
       ).not.toBeInTheDocument()
-      if (comments.trim()) {
-        const field = within(packageCard)
-          .getByText('Comments')
-          .closest('.record-field') as HTMLElement
-        expect(within(field).getByText(comments)).toBeInTheDocument()
-      } else {
-        expect(within(packageCard).queryByText('Comments')).not.toBeInTheDocument()
-      }
+      const field = within(packageCard)
+        .getByText('Comments')
+        .closest('.record-field') as HTMLElement
+      expect(within(field).getByText(comments.trim() || 'Not provided')).toBeInTheDocument()
     },
   )
 

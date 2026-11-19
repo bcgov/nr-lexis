@@ -7102,6 +7102,16 @@ const ProvincialPermitDetailsPage = () => {
             </Button>
           )}
         </div>
+        {scaleSummaryActionResult && (
+          <ActionResultNotification
+            result={scaleSummaryActionResult}
+            onClose={() => setActionResult(null)}
+            focusOnReveal={
+              scaleSummaryActionResult.focusOnReveal ||
+              (ministerialPermit && packageScopedItems.length === 0)
+            }
+          />
+        )}
         {detail.blanketOic && selectedBlanketOicPackage && (
           <RecordFieldGrid>
             <RecordFieldRow>
@@ -7159,16 +7169,6 @@ const ProvincialPermitDetailsPage = () => {
               </RecordFieldRow>
             </RecordFieldGrid>
           )}
-        {scaleSummaryActionResult && (
-          <ActionResultNotification
-            result={scaleSummaryActionResult}
-            onClose={() => setActionResult(null)}
-            focusOnReveal={
-              scaleSummaryActionResult.focusOnReveal ||
-              (ministerialPermit && packageScopedItems.length === 0)
-            }
-          />
-        )}
         {!permitTablesErrorMessage &&
           !permitScaleEmpty &&
           (packageScopedItems.length > 0 ? (
@@ -7268,14 +7268,8 @@ const ProvincialPermitDetailsPage = () => {
                 </TableBody>
               </Table>
             </TableFrame>
-          ) : usesReviewedPermitFlow ? (
-            <p className="permit-scale-summary__empty">No scales yet.</p>
           ) : (
-            <EmptyState
-              title="No permit items available"
-              description="No permit item rows are available for this permit."
-              headingLevel={3}
-            />
+            <p className="permit-scale-summary__empty">No scales yet.</p>
           ))}
         {ministerialPermit && ministerialScaleSelectionDraft !== null && (
           <div className="legacy-search-actions permit-scale-summary__actions">
@@ -8455,13 +8449,7 @@ const ProvincialPermitDetailsPage = () => {
                                       )}
                                     />
                                   </RecordFieldRow>
-                                  {/* Users who can't open Edit package read the comments here. */}
-                                  <RecordFieldRow
-                                    hidden={
-                                      canEditBlanketOicPackages ||
-                                      !selectedBlanketOicPackage.comments.trim()
-                                    }
-                                  >
+                                  <RecordFieldRow>
                                     <RecordField
                                       label="Comments"
                                       span="full"
@@ -8469,9 +8457,7 @@ const ProvincialPermitDetailsPage = () => {
                                     />
                                   </RecordFieldRow>
                                 </RecordFieldGrid>
-                                <div className="boic-package-summary__scale">
-                                  {renderScaleSummary()}
-                                </div>
+                                {renderScaleSummary()}
                               </DetailFieldTile>
                             ) : ministerialPermit && selectedNormalPermitPackage ? (
                               <RecordFieldGrid>
@@ -8573,9 +8559,7 @@ const ProvincialPermitDetailsPage = () => {
                                   ],
                                 ]}
                               >
-                                <div className="boic-package-summary__scale">
-                                  {renderScaleSummary()}
-                                </div>
+                                {renderScaleSummary()}
                               </DetailFieldTile>
                             ) : detail.blanketOic ? (
                               <EmptyState

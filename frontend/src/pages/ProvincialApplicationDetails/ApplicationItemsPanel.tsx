@@ -33,7 +33,6 @@ import { focusFirstEditableFieldAfterPanelChange } from '@/utils/focus'
 import EmptyState from '../../components/EmptyState'
 import DetailSidePanel from '../../components/DetailSidePanel'
 import PendingIcon from '../../components/PendingIcon'
-import SearchableSelect from '../../components/SearchableSelect'
 import type { ProvincialApplicationDetail } from '@/interfaces/LexisDetails'
 import {
   atMostOneDecimalFieldError,
@@ -372,6 +371,10 @@ const requiredDropdownRef =
 
 const optionName = (option: ApplicationCodeOption | null): string =>
   option ? option.description || option.code : ''
+
+// A grade lists without its "Grade" prefix, so typing its code selects it.
+const gradeName = (option: ApplicationCodeOption | null): string =>
+  optionName(option).replace(/^Grade\s+/i, '')
 
 const findOption = (
   options: ApplicationCodeOption[],
@@ -1339,15 +1342,6 @@ function ProvincialApplicationItemsPanel({
     !!selectedPackageNumber &&
     !isSavingPackage &&
     scales.length === 0
-  // The server refuses to delete a package that still has scales, even ones with no pieces.
-  const packageDeleteBlockedByScales =
-    !itemsBusy &&
-    canDeletePackages &&
-    packageDataLoaded &&
-    !!selectedPackageNumber &&
-    !isSavingPackage &&
-    scales.length > 0
-
   const startItemEditing = (drawer: 'create' | 'edit' | 'scale', launcher: HTMLElement) => {
     if (!canOpenItemsEditor || itemsBusy) return
     if (drawer === 'create' && !canAddPackages) return
@@ -1824,17 +1818,19 @@ function ProvincialApplicationItemsPanel({
                   package is identified by its card title, as in the application design. */}
               {packageNumbers.length > 1 && (
                 <div className="application-items-package-select">
-                  <SearchableSelect
+                  <Dropdown<string | null>
                     id="applicationItemsPackageSelect"
-                    labelText="Selected package"
-                    value={selectedPackageNumber}
-                    placeholder="Select package"
+                    titleText="Selected package"
+                    label="Select package"
+                    items={packageNumbers}
+                    itemToString={(packageNumber) =>
+                      packageNumber ? formatPackageNumberLabel(packageNumber) : ''
+                    }
+                    selectedItem={selectedPackageNumber || null}
                     disabled={itemsBusy}
-                    options={packageNumbers.map((packageNumber) => ({
-                      value: packageNumber,
-                      label: formatPackageNumberLabel(packageNumber),
-                    }))}
-                    onChange={requestPackageSelection}
+                    onChange={({ selectedItem }) => {
+                      if (selectedItem) requestPackageSelection(selectedItem)
+                    }}
                   />
                 </div>
               )}
@@ -1870,11 +1866,6 @@ function ProvincialApplicationItemsPanel({
               </span>
             </h3>
             <div className="application-items-card-actions">
-              {canOpenItemsEditor && packageDeleteBlockedByScales && (
-                <p id="application-items-delete-package-reason" className="cds--form__helper-text">
-                  A package with scales can&apos;t be deleted.
-                </p>
-              )}
               {canOpenItemsEditor && canDeleteSelectedPackage && (
                 <Button
                   kind="danger--ghost"
@@ -1915,6 +1906,9 @@ function ProvincialApplicationItemsPanel({
                 label="Average top diameter (rads)"
                 value={packageBaselineForm.averageDiameter}
               />
+            </RecordFieldRow>
+            <RecordFieldRow>
+              <RecordField label="Comments" span="full" value={packageBaselineForm.comments} />
             </RecordFieldRow>
           </RecordFieldGrid>
           <DetailSidePanel
@@ -2115,7 +2109,9 @@ function ProvincialApplicationItemsPanel({
                     invalid={!!scaleFieldError('scaleTimberMark')}
                     invalidText={scaleFieldError('scaleTimberMark')}
                     onBlur={() => markItemFieldTouched('scaleTimberMark')}
-                    onChange={(event) => setScaleField('timberMark', event.target.value)}
+                    onChange={(event) =>
+                      setScaleField('timberMark', event.target.value.toUpperCase())
+                    }
                   />
                   <TextInput
                     id="applicationItemsScalePieces"
@@ -2162,7 +2158,7 @@ function ProvincialApplicationItemsPanel({
                     titleText={requiredLabel('Grade')}
                     label=""
                     items={gradeOptions}
-                    itemToString={optionName}
+                    itemToString={gradeName}
                     selectedItem={findOption(gradeOptions, scaleForm.gradeCode)}
                     disabled={scaleFieldsDisabled || !scaleForm.speciesCode}
                     invalid={!!scaleFieldError('scaleGradeCode')}
