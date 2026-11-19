@@ -114,6 +114,26 @@ public class OracleAggregateLockRepository {
     return readRootOnly(LOCK_OFFER, "EXPORT_PURCHASE_OFFER", offerNumber);
   }
 
+  /** Takes the same row lock as {@link #lockExemption} without reading child rows. */
+  public boolean lockExemptionRow(String exemptionNumber) {
+    return lockRow(LOCK_EXEMPTION, exemptionNumber);
+  }
+
+  /** Takes the same row lock as {@link #lockApplication} without reading child rows. */
+  public boolean lockApplicationRow(Long applicationNumber) {
+    return lockRow(LOCK_APPLICATION, applicationNumber);
+  }
+
+  /** Takes the same row lock as {@link #lockPermit} without reading child rows. */
+  public boolean lockPermitRow(Long permitNumber) {
+    return lockRow(LOCK_PERMIT, permitNumber);
+  }
+
+  /** Takes the same row lock as {@link #lockOffer}. */
+  public boolean lockOfferRow(Long offerNumber) {
+    return lockRow(LOCK_OFFER, offerNumber);
+  }
+
   public Optional<RootRecordSnapshot> findExemptionVersion(String exemptionNumber) {
     return readExemption(FIND_EXEMPTION, exemptionNumber);
   }
@@ -210,6 +230,11 @@ public class OracleAggregateLockRepository {
     return Optional.of(
         new RootRecordSnapshot(
             fingerprint(rowSets), lastSaved.savedAt(), lastSaved.updatedBy()));
+  }
+
+  private boolean lockRow(String lockSql, Object identifier) {
+    return !jdbcTemplate.query(lockSql, (resultSet, rowNumber) -> Boolean.TRUE, identifier)
+        .isEmpty();
   }
 
   private RowSetSnapshot readRows(String name, String sql, Object... arguments) {

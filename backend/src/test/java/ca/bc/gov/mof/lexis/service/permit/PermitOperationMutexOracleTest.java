@@ -3,6 +3,7 @@ package ca.bc.gov.mof.lexis.service.permit;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyList;
+import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.mock;
@@ -205,8 +206,9 @@ class PermitOperationMutexOracleTest {
 
     assertThat(rowLocks.executionCount()).isOne();
     verify(repository).lockApplication(10L);
-    verify(repository).lockPermit(100L);
-    verify(repository).lockPermit(200L);
+    verify(repository).lockPermitRow(100L);
+    verify(repository).lockPermitRow(200L);
+    verify(repository, never()).lockPermit(anyLong());
     assertThat(result).isEqualTo("saved");
     assertThat(
             request.getAttribute(
@@ -264,8 +266,10 @@ class PermitOperationMutexOracleTest {
     verify(repository, never()).lockExemption("TEST8Q4B");
     verify(repository, times(2)).findExemptionVersion("test8q4b");
     verify(repository, never()).findExemptionVersion("TEST8Q4B");
-    verify(repository).lockApplication(10L);
-    verify(repository).lockPermit(100L);
+    verify(repository).lockApplicationRow(10L);
+    verify(repository).lockPermitRow(100L);
+    verify(repository, never()).lockApplication(anyLong());
+    verify(repository, never()).lockPermit(anyLong());
     assertThat(request.getAttribute(OptimisticLockRequestReader.RESPONSE_VERSION_ATTRIBUTE))
         .isEqualTo(
             versionService.toVersion(OptimisticRecordType.EXEMPTION, "TEST8Q4B", freshSnapshot));

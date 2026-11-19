@@ -2,10 +2,15 @@ package ca.bc.gov.mof.lexis.service.permit;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.anyLong;
+import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
+import static org.mockito.Mockito.verifyNoMoreInteractions;
 import static org.mockito.Mockito.when;
 
 import ca.bc.gov.mof.lexis.repository.oracle.OracleAggregateLockRepository;
@@ -56,14 +61,15 @@ class OracleAggregateRowLockServiceTest {
             });
 
     InOrder order = inOrder(repository);
-    order.verify(repository).lockExemption("a");
-    order.verify(repository).lockExemption("A-1");
-    order.verify(repository).lockExemption("z-2");
-    order.verify(repository).lockExemption("[");
-    order.verify(repository).lockApplication(10L);
-    order.verify(repository).lockApplication(20L);
-    order.verify(repository).lockPermit(100L);
-    order.verify(repository).lockPermit(200L);
+    order.verify(repository).lockExemptionRow("a");
+    order.verify(repository).lockExemptionRow("A-1");
+    order.verify(repository).lockExemptionRow("z-2");
+    order.verify(repository).lockExemptionRow("[");
+    order.verify(repository).lockApplicationRow(10L);
+    order.verify(repository).lockApplicationRow(20L);
+    order.verify(repository).lockPermitRow(100L);
+    order.verify(repository).lockPermitRow(200L);
+    verifyNoMoreInteractions(repository);
     assertThat(invoked).isTrue();
     assertThat(result).isEqualTo("done");
   }
@@ -73,7 +79,7 @@ class OracleAggregateRowLockServiceTest {
     AtomicBoolean invoked = new AtomicBoolean();
     doThrow(new CannotAcquireLockException("simulated row contention"))
         .when(repository)
-        .lockApplication(10L);
+        .lockApplicationRow(10L);
 
     assertThatThrownBy(
             () ->
@@ -94,13 +100,7 @@ class OracleAggregateRowLockServiceTest {
   @Test
   void shouldRejectExistingInteractiveMutationWhenVersionIsMissing() {
     AtomicBoolean invoked = new AtomicBoolean();
-    when(repository.lockApplication(10L))
-        .thenReturn(
-            Optional.of(
-                new RootRecordSnapshot(
-                    "current-fingerprint",
-                    Instant.parse("2026-07-15T18:01:00Z"),
-                    "IDIR\\EDITOR")));
+    when(repository.lockApplicationRow(10L)).thenReturn(true);
 
     assertThatThrownBy(
             () ->
@@ -120,7 +120,7 @@ class OracleAggregateRowLockServiceTest {
 
   @Test
   void shouldAllowCreateWhenTheLockedRootDoesNotExist() {
-    when(repository.lockApplication(10L)).thenReturn(Optional.empty());
+    when(repository.lockApplicationRow(10L)).thenReturn(false);
 
     assertThat(service.execute(List.of(), List.of(10L), List.of(), () -> "created"))
         .isEqualTo("created");
@@ -128,13 +128,7 @@ class OracleAggregateRowLockServiceTest {
 
   @Test
   void shouldAllowExplicitSystemMutationWithoutARecordVersion() {
-    when(repository.lockExemption("EX-100"))
-        .thenReturn(
-            Optional.of(
-                new RootRecordSnapshot(
-                    "current-fingerprint",
-                    Instant.parse("2026-07-15T18:01:00Z"),
-                    "EXPIRY_MONITOR")));
+    when(repository.lockExemptionRow("EX-100")).thenReturn(true);
 
     assertThat(
             service.executeSystemMutation(
@@ -144,13 +138,7 @@ class OracleAggregateRowLockServiceTest {
 
   @Test
   void shouldAllowExplicitRootCreateWithAnExistingParentWithoutARecordVersion() {
-    when(repository.lockApplication(10L))
-        .thenReturn(
-            Optional.of(
-                new RootRecordSnapshot(
-                    "current-fingerprint",
-                    Instant.parse("2026-07-15T18:01:00Z"),
-                    "IDIR\\EDITOR")));
+    when(repository.lockApplicationRow(10L)).thenReturn(true);
 
     assertThat(
             service.executeRootCreateMutation(
@@ -326,11 +314,8 @@ class OracleAggregateRowLockServiceTest {
     RootRecordSnapshot first =
         new RootRecordSnapshot(
             "first-fingerprint", Instant.parse("2026-07-15T18:00:00Z"), "IDIR\\FIRST");
-    RootRecordSnapshot second =
-        new RootRecordSnapshot(
-            "second-fingerprint", Instant.parse("2026-07-15T18:01:00Z"), "IDIR\\SECOND");
     when(repository.lockApplication(10L)).thenReturn(Optional.of(first));
-    when(repository.lockApplication(11L)).thenReturn(Optional.of(second));
+    when(repository.lockApplicationRow(11L)).thenReturn(true);
     OptimisticRecordVersion expected =
         new OracleOptimisticRecordVersionService(repository)
             .toVersion(OptimisticRecordType.APPLICATION, "10", first);
@@ -345,5 +330,92 @@ class OracleAggregateRowLockServiceTest {
                     List.of(), List.of(10L, 11L), List.of(), () -> "not-reached"))
         .isInstanceOf(InvalidRecordVersionException.class)
         .hasMessageContaining("multiple application records");
+  }
+
+  @Test
+  void versionedSaveShouldReadChildRowsOnlyForTheVersionedRecord() {
+    RootRecordSnapshot permit =
+        new RootRecordSnapshot(
+            "permit-fingerprint", Instant.parse("2026-07-15T18:00:00Z"), "IDIR\\EDITOR");
+    when(repository.lockExemptionRow("EX-1")).thenReturn(true);
+    when(repository.lockApplicationRow(10L)).thenReturn(true);
+    when(repository.lockPermit(100L)).thenReturn(Optional.of(permit));
+    OptimisticRecordVersion expected =
+        new OracleOptimisticRecordVersionService(repository)
+            .toVersion(OptimisticRecordType.PERMIT, "100", permit);
+    when(requestReader.currentRequest())
+        .thenReturn(
+            new OptimisticLockRequest(
+                Optional.of(OptimisticRecordVersion.parse(expected.token()))));
+
+    assertThat(
+            service.execute(List.of("EX-1"), List.of(10L), List.of(100L), () -> "saved"))
+        .isEqualTo("saved");
+
+    InOrder order = inOrder(repository);
+    order.verify(repository).lockExemptionRow("EX-1");
+    order.verify(repository).lockApplicationRow(10L);
+    order.verify(repository).lockPermit(100L);
+    order.verify(repository).findPermitVersion(100L);
+    verify(repository, never()).lockExemption(anyString());
+    verify(repository, never()).lockApplication(anyLong());
+    verify(repository, never()).lockPermitRow(anyLong());
+  }
+
+  @Test
+  void staleVersionedRecordShouldStillBeRejectedAmongRowOnlyLocks() {
+    AtomicBoolean invoked = new AtomicBoolean();
+    RootRecordSnapshot current =
+        new RootRecordSnapshot(
+            "current-fingerprint", Instant.parse("2026-07-15T18:01:00Z"), "IDIR\\SECOND");
+    when(repository.lockExemption("EX-1")).thenReturn(Optional.of(current));
+    when(repository.lockApplicationRow(10L)).thenReturn(true);
+    when(repository.lockPermitRow(100L)).thenReturn(true);
+    OptimisticRecordVersion expected =
+        new OptimisticRecordVersion(
+            OptimisticRecordType.EXEMPTION,
+            "EX-1",
+            Instant.parse("2026-07-15T18:00:00Z"),
+            "IDIR\\FIRST",
+            "original-fingerprint");
+    when(requestReader.currentRequest())
+        .thenReturn(
+            new OptimisticLockRequest(
+                Optional.of(OptimisticRecordVersion.parse(expected.token()))));
+
+    assertThatThrownBy(
+            () ->
+                service.execute(
+                    List.of("EX-1"),
+                    List.of(10L),
+                    List.of(100L),
+                    () -> {
+                      invoked.set(true);
+                      return "not-reached";
+                    }))
+        .isInstanceOf(StaleRecordException.class);
+    assertThat(invoked).isFalse();
+  }
+
+  @Test
+  void missingVersionShouldBeRejectedWhenOnlyARowOnlyRecordExists() {
+    when(repository.lockExemptionRow("EX-1")).thenReturn(false);
+    when(repository.lockPermitRow(100L)).thenReturn(true);
+
+    assertThatThrownBy(
+            () ->
+                service.execute(List.of("EX-1"), List.of(), List.of(100L), () -> "not-reached"))
+        .isInstanceOf(MissingRecordVersionException.class);
+  }
+
+  @Test
+  void malformedVersionShouldBeRejectedBeforeAnyRowIsLocked() {
+    when(requestReader.currentRequest())
+        .thenThrow(new InvalidRecordVersionException("The record version is invalid.", null));
+
+    assertThatThrownBy(
+            () -> service.execute(List.of("EX-1"), List.of(10L), List.of(), () -> "not-reached"))
+        .isInstanceOf(InvalidRecordVersionException.class);
+    verifyNoInteractions(repository);
   }
 }
