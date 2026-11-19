@@ -626,6 +626,40 @@ describe('Layout shell', () => {
     expect(collapsedReportIssue).toHaveAttribute('aria-describedby', tooltip.id)
   })
 
+  it('offers the user manual for a single-role user under Support', () => {
+    mockedUseAuth.mockReturnValue(
+      createTestAuthContext({ capabilities: createTestCapabilities({ roles: ['READ_ONLY'] }) }),
+    )
+    renderLayout('/admin/rtm/emslogamv/upload')
+
+    const userManual = within(screen.getByRole('group', { name: 'Support' })).getByRole('link', {
+      name: 'User manual',
+    })
+
+    expect(userManual).toHaveAttribute('href', '/manuals/LEXIS-Read-Only-User-Manual.pdf')
+    expect(userManual).toHaveAttribute('download')
+  })
+
+  it('labels each user manual under Support when the user has several', () => {
+    mockedUseAuth.mockReturnValue(
+      createTestAuthContext({
+        capabilities: createTestCapabilities({ roles: ['READ_ONLY', 'PROVINCIAL_SUBMITTER'] }),
+      }),
+    )
+    renderLayout('/admin/rtm/emslogamv/upload')
+
+    const support = within(screen.getByRole('group', { name: 'Support' }))
+
+    expect(support.getByRole('link', { name: 'User manual (Read Only)' })).toHaveAttribute(
+      'href',
+      '/manuals/LEXIS-Read-Only-User-Manual.pdf',
+    )
+    expect(support.getByRole('link', { name: 'User manual (Industry)' })).toHaveAttribute(
+      'href',
+      '/manuals/LEXIS-Industry-User-Manual.pdf',
+    )
+  })
+
   it('names the application header landmark after the product', () => {
     renderLayout('/admin/rtm/emslogamv')
 

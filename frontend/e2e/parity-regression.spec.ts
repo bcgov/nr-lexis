@@ -105,6 +105,7 @@ const installParityFixtures = async (page: Page) => {
             offerNumber: 81001,
             applicationNumber: 888,
             packageNumber: 'PARITY-PKG',
+            purchaseOfferAmount: null,
             exportJurisdictionCode: 'P',
             companyName: 'Synthetic buyer',
             contactName: 'Example contact',

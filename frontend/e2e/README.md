@@ -21,22 +21,27 @@ regression coverage uses a separate TEST-only Playwright config.
 - `playwright.regression.config.ts` runs files ending in `regression.spec.ts`, including the
   synthetic session-timeout, automatic/manual logout warning scenarios, and the TEST credentialed
   regression specs.
+- `playwright.manual.config.ts` runs only `manual.screenshots.spec.ts` (`npm run manual:screenshots`).
+  It writes the user manual screenshots to `docs/manual/<edition>/images/`. The industry edition
+  comes from a synthetic session with mocked API responses and fictional data. The ministry edition
+  comes from a signed-in IDIR session on `E2E_BASE_URL` and is skipped unless `E2E_BASE_URL`,
+  `E2E_IDIR_USER` and `E2E_IDIR_PASSWORD` are set (plus `E2E_IDIR_TOTP_SECRET` for the second
+  factor); it blocks every write and swaps personal details
+  in API responses for sample ones. Run it locally only: no CI job runs it, and each image is
+  reviewed before it is committed.
 
 ## CI setup
 
-- The `Regression` workflow runs only by manual dispatch until there is a TEST IDIR regression
-  account that signs in through modern FAM (Keycloak). Keep the regression specs up to date with
-  every change meanwhile, so the suite can run as soon as that account works. It runs on the
-  default branch and reads TEST credentials from GitHub `test` environment secrets before running
-  Playwright; pushing a feature branch does not run this gate.
-- To resume weekly regression, confirm the account can sign in through modern FAM (Keycloak) and has
-  its required TEST role, then complete a successful manual `Regression` run. Restore the
-  `schedule` trigger in `.github/workflows/regression.yml` with cron `0 10 * * 3` (Wednesdays at
-  10:00 UTC; 3 AM Pacific during daylight time). Keep existing credential validation and failure
-  reporting. PR/merge Basic E2E and scheduled security scans continue during the pause.
+- The `Regression` workflow runs weekly (Wednesdays at 10:00 UTC; 3 AM Pacific during daylight
+  time) and by manual dispatch. It runs on the default branch and reads TEST credentials from
+  GitHub `test` environment secrets before running Playwright; pushing a feature branch does not
+  run this gate. Keep the regression specs up to date with every change.
+- The regression account is an IDIR that signs in through modern FAM (Keycloak) and holds the LEXIS
+  Administrator role in TEST only.
 - Required `test` environment secrets:
   - `E2E_IDIR_USER`
   - `E2E_IDIR_PASSWORD`
+  - `E2E_IDIR_TOTP_SECRET`
 - No fixture identifiers need configuring. Each lifecycle run creates unique applications, packages,
   scales, offers, exemptions and permits through the normal APIs. Cleanup runs after success or
   failure: it removes packages/scales and terminalizes records retained by the business APIs.
@@ -97,16 +102,25 @@ regression coverage uses a separate TEST-only Playwright config.
   stdout/stderr are suppressed. Keep test names free of business data. Do not override this reporter
   for credentialed public runs or enable debug output.
 - Credentials are supplied only to the validation/test steps as GitHub secrets. Traces, screenshots,
-  videos, HTML reports, and artifact uploads remain disabled for credentialed runs. Detailed
-  debugging belongs in a controlled synthetic reproduction or an approved private channel. See
+  videos, failure page snapshots (`PLAYWRIGHT_NO_COPY_PROMPT`), HTML reports, and artifact uploads
+  remain disabled for credentialed runs: a snapshot of the sign-in page holds the typed password.
+  Prefix a run of only the mocked specs with `PLAYWRIGHT_NO_COPY_PROMPT=` to keep its snapshots.
+  Detailed debugging belongs in a controlled synthetic reproduction or an approved private
+  channel. See
   [GitHub's secure-use guidance](https://docs.github.com/en/actions/reference/security/secure-use).
 - The Chromium job retains `continue-on-error` so the separate **TEST Regression Result** job can
   report the outcome outside the deployment environment. A green Chromium job alone is not a pass.
 - Login uses the CSS integration's Keycloak authorization-code flow with PKCE; logout chains
   SiteMinder `logoff.cgi` (when configured) to the realm's end-session endpoint and returns to the
-  registered LEXIS origin. IDIR MFA
-  requirements must be checked before enabling credentialed CI; credentials alone do not establish
-  that unattended federation will work.
+  registered LEXIS origin.
+- IDIR sign-in asks for a second factor. The login helper answers it with the code an authenticator
+  app would show, generated from `E2E_IDIR_TOTP_SECRET` (`e2e/utils/totp.ts`), following BC Gov
+  SSO's [Automating MFA with TOTP](https://bcgov.github.io/sso-docs/advanced/automating-mfa-totp).
+  To get the secret, sign in as the regression account at
+  <https://mysignins.microsoft.com/security-info>, choose **Add sign-in method → Microsoft
+  Authenticator → Set up a different authentication app → Can't scan QR code?**, copy the **Secret
+  key**, and finish the registration with one generated code. The secret is the second factor
+  itself: keep it only in a masked secret.
 - Synthetic browser coverage uses the real `oidc-client-ts` user format in `sessionStorage` and
   intercepts discovery, refresh and logout endpoints. Tokens are synthetic and backend routes are
   intercepted; these tests prove browser behavior, not live CSS provisioning or Oracle
