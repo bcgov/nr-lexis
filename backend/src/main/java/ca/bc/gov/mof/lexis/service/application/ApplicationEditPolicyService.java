@@ -208,7 +208,7 @@ public class ApplicationEditPolicyService {
 
   /**
    * Existing remarks stay editable after the application details lock, except on an Expired
-   * application or for Read Only.
+   * application. Needs Create application in the application's own region.
    */
   public void requireRemarkUpdate(
       Authentication authentication,
@@ -218,18 +218,14 @@ public class ApplicationEditPolicyService {
         applicationService == null || applicationNumber == null || applicationNumber < 1
             ? null
             : applicationService.getApplicationEditContext(applicationNumber).orElse(null);
-    Set<String> roles =
-        context == null
-            ? Set.of()
-            : normalizeRoles(
-                sessionService.rolesForOrgUnit(authentication, context.orgUnitNumber()));
-    boolean readOnly = !roles.contains(ROLE_ADMIN) && isPureReadOnlyRole(roles);
     require(
-        !readOnly
-            && context != null
+        context != null
             && applicationNumber.equals(context.applicationNumber())
             && "P".equals(normalizeCode(context.jurisdictionCode()))
-            && !APPLICATION_STATUS_EXPIRED.equals(normalizeCode(context.applicationStatusCode())),
+            && !APPLICATION_STATUS_EXPIRED.equals(normalizeCode(context.applicationStatusCode()))
+            && authorizationService.canPerformAction(
+                sessionService.rolesForOrgUnit(authentication, context.orgUnitNumber()),
+                ACTION_CREATE_APPLICATION),
         "Remark editing is not allowed by the application edit policy.");
   }
 

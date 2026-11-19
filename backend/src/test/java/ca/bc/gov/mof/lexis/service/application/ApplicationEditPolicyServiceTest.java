@@ -380,8 +380,7 @@ class ApplicationEditPolicyServiceTest {
 
   @Test
   void approverUpdatesExistingRemarksAfterTheDetailsLock() {
-    when(sessionService.rolesForOrgUnit(authentication, null))
-        .thenReturn(List.of("LEXIS_APPLICATION_APPROVER"));
+    allowRoles("LEXIS_APPLICATION_APPROVER");
     context("PMT", TODAY.minusDays(30), true, true, true);
 
     assertThatCode(
@@ -435,9 +434,24 @@ class ApplicationEditPolicyServiceTest {
   }
 
   @Test
+  void userWithoutARoleInTheApplicationsRegionCannotUpdateRemarks() {
+    lenient()
+        .when(
+            authorizationService.canPerformAction(
+                List.of("LEXIS_APPLICATION_APPROVER"), "createApplication"))
+        .thenReturn(true);
+    when(sessionService.rolesForOrgUnit(authentication, null)).thenReturn(List.of());
+    context("PMT", TODAY.minusDays(30), true, true, true);
+
+    assertThatThrownBy(
+            () ->
+                policyService.requireRemarkUpdate(
+                    authentication, applicationService, APPLICATION_NUMBER))
+        .hasMessageContaining("Remark editing");
+  }
+
+  @Test
   void remarksOnAnExpiredApplicationCannotBeUpdated() {
-    when(sessionService.rolesForOrgUnit(authentication, null))
-        .thenReturn(List.of("LEXIS_APPLICATION_APPROVER"));
     context("EXP", TODAY.minusDays(30), true, true, false);
 
     assertThatThrownBy(
