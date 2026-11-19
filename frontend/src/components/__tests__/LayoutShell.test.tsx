@@ -626,6 +626,40 @@ describe('Layout shell', () => {
     expect(collapsedReportIssue).toHaveAttribute('aria-describedby', tooltip.id)
   })
 
+  it('offers the user manual for a single-role user under Support', () => {
+    mockedUseAuth.mockReturnValue(
+      createTestAuthContext({ capabilities: createTestCapabilities({ roles: ['READ_ONLY'] }) }),
+    )
+    renderLayout('/admin/rtm/emslogamv/upload')
+
+    const userManual = within(screen.getByRole('group', { name: 'Support' })).getByRole('link', {
+      name: 'User manual',
+    })
+
+    expect(userManual).toHaveAttribute('href', '/manuals/LEXIS-Read-Only-User-Manual.pdf')
+    expect(userManual).toHaveAttribute('download')
+  })
+
+  it('labels each user manual under Support when the user has several', () => {
+    mockedUseAuth.mockReturnValue(
+      createTestAuthContext({
+        capabilities: createTestCapabilities({ roles: ['READ_ONLY', 'PROVINCIAL_SUBMITTER'] }),
+      }),
+    )
+    renderLayout('/admin/rtm/emslogamv/upload')
+
+    const support = within(screen.getByRole('group', { name: 'Support' }))
+
+    expect(support.getByRole('link', { name: 'User manual (Read Only)' })).toHaveAttribute(
+      'href',
+      '/manuals/LEXIS-Read-Only-User-Manual.pdf',
+    )
+    expect(support.getByRole('link', { name: 'User manual (Industry)' })).toHaveAttribute(
+      'href',
+      '/manuals/LEXIS-Industry-User-Manual.pdf',
+    )
+  })
+
   it('names the application header landmark after the product', () => {
     renderLayout('/admin/rtm/emslogamv')
 
@@ -821,6 +855,25 @@ describe('Layout shell', () => {
       screen.queryByRole('link', { name: /Create\/Edit Application/i }),
     ).not.toBeInTheDocument()
     expect(screen.queryByRole('link', { name: /^Uploads$/i })).not.toBeInTheDocument()
+  })
+
+  it('shows provincial workflows and hides Admin for a user with both approver roles', () => {
+    const grantedActions = ['/applicationsReview', '/applicationSearch', '/exemptionSearch']
+    mockedUseAuth.mockReturnValue(
+      createTestAuthContext({
+        capabilities: createTestCapabilities({
+          roles: ['LEXIS_APPLICATION_APPROVER', 'LEXIS_EXEMPTION_APPROVER'],
+          grantedActions,
+        }),
+        canPerform: (action: string) => grantedActions.includes(action),
+      }),
+    )
+
+    renderLayout('/provincial/exemption')
+
+    expect(screen.getByRole('link', { name: 'Exemption search' })).toBeVisible()
+    expect(screen.getByRole('link', { name: 'Application search' })).toBeVisible()
+    expect(screen.queryByRole('button', { name: 'Admin' })).not.toBeInTheDocument()
   })
 
   it('shows federal search when federal read actions are granted', () => {

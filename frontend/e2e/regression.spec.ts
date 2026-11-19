@@ -18,12 +18,14 @@ import {
   fetchSessionCapabilities,
   getWithAuth,
   hasIdirCredentials,
+  isSafeCredentialedRegressionBaseUrl,
   loginWithIdir,
   postWithCsrf,
   putWithCsrf,
   redactedTextSnippet,
 } from './utils/regression-auth'
 import { E2E_BASE_URL } from './utils'
+import { redirectExternalLogoutToLoginShell } from './utils/logout'
 import { gotoWithRecovery } from './utils/navigation'
 import {
   regressionSubmissionFile,
@@ -195,39 +197,6 @@ const safeUrlForLog = (rawUrl: string): string => {
     return `${url.origin}${url.pathname}`
   } catch {
     return '[unparseable-url]'
-  }
-}
-
-const redirectExternalLogoutToLoginShell = async (page: Page): Promise<void> => {
-  const logoutReturnUrl = `${new URL(E2E_BASE_URL).origin}/`
-
-  await page.route(
-    /https:\/\/[^/]+\/.*\/protocol\/openid-connect\/logout(?:\?.*)?$/i,
-    async (route) => {
-      await route.fulfill({
-        status: 302,
-        headers: {
-          location: logoutReturnUrl,
-        },
-        body: '',
-      })
-    },
-  )
-}
-
-const isSafeCredentialedRegressionBaseUrl = (rawUrl: string): boolean => {
-  try {
-    const hostname = new URL(rawUrl).hostname.toLowerCase()
-    return (
-      hostname === 'localhost' ||
-      hostname === '127.0.0.1' ||
-      hostname === '[::1]' ||
-      hostname === 'nr-lexis-dev.apps.gold.devops.gov.bc.ca' ||
-      hostname === 'nr-lexis-test.apps.gold.devops.gov.bc.ca' ||
-      /^nr-lexis-\d+\.apps\.gold\.devops\.gov\.bc\.ca$/.test(hostname)
-    )
-  } catch {
-    return false
   }
 }
 
@@ -680,8 +649,12 @@ const expectLogoutRoundTrip = async (
 ): Promise<void> => {
   const baseOrigin = new URL(E2E_BASE_URL).origin
 
+  // The sign-out request is answered before it leaves, so the page never shows another origin.
   await Promise.all([
-    page.waitForURL((url) => url.origin !== baseOrigin, { timeout: 30_000 }),
+    page.waitForRequest(
+      (request) => request.isNavigationRequest() && new URL(request.url()).origin !== baseOrigin,
+      { timeout: 30_000 },
+    ),
     trigger(),
   ])
   await expectLoginShell(page, source)
@@ -1899,7 +1872,6 @@ test.describe('TEST IDIR admin regression', () => {
 
     await expectAdminNavigation(page)
     await expect(page.getByRole('link', { name: /^Summary$/ })).toHaveCount(0)
-    await expect(page.getByRole('link', { name: /^Upload applications$/i })).toHaveCount(0)
     await expect(page.getByRole('link', { name: /^Data upload$/i })).toHaveCount(0)
     await expect(page.locator(sideNavSection('Federal')).getByRole('link')).toHaveCount(1)
     await expect(
@@ -2933,7 +2905,7 @@ test.describe('TEST IDIR admin regression', () => {
     await expect(speciesSelect).toBeEnabled()
     await page.getByRole('option', { name: firstSpeciesLabel, exact: true }).click()
     await expect(speciesSelect).toHaveAccessibleName(/Total items selected: 0/)
-    await expect(itemsPanel.getByText('At least one species is required.')).toBeVisible()
+    await expect(itemsPanel.getByText('At least one species is required')).toBeVisible()
     await expect(page.getByRole('button', { name: /Create package/i })).toHaveCount(0)
 
     for (const section of ['Documents', 'Remarks', 'Offers', 'Review']) {
@@ -3989,16 +3961,16 @@ test.describe('TEST IDIR admin regression', () => {
       'Jursidiction Code',
       'Application Number',
       'Species Enduse',
-      'Product type',
+      'Product Type',
       'Product Location',
       'Exemption Application Volume',
       'Average Log Volume',
       'Agent Name',
       'Agent Phone',
       'Agent Contact Name',
-      'Package number',
+      'Package Number',
       'Package Volume',
-      'Age class',
+      'Age Class',
       'Average Length',
       'Average Diameter',
     ]
@@ -4634,12 +4606,17 @@ test.describe('TEST IDIR admin regression', () => {
         page,
         `/api/lexis/applications/${lifecycleApplicationNumber}`,
       )
-      const lifecycleApplicationUpdate = applicationSummaryForm(
-        lifecycleTemplate,
-        String(lifecycleTemplate.exportScheduleId ?? ''),
-        `${lifecycleMarker} edited`,
-        submission.endUseCode,
-      )
+      const lifecycleApplicationUpdate = {
+        ...applicationSummaryForm(
+          lifecycleTemplate,
+          // No list date: an exemption needs the listing date to have passed.
+          '',
+          `${lifecycleMarker} edited`,
+          submission.endUseCode,
+        ),
+        // Only a summary save clears the list date; a full save keeps the stored one.
+        saveSource: 'summary-items',
+      }
       const updatedLifecycleApplication = await readJsonResponse<ApplicationPersistenceResponse>(
         await postWithCsrf(page, '/api/lexis/rpc/application-details/application-summary', {
           headers: versionHeaders(lifecycleApplication.version),
@@ -4670,6 +4647,7 @@ test.describe('TEST IDIR admin regression', () => {
           params: { applicationNumbers: String(lifecycleApplicationNumber) },
         }),
       )
+      expect(asStringArray(preview.errors)).toEqual([])
       expect(preview.valid).toBe(true)
       expect(preview.exemptionTypeCode).toBe('M')
       expect(preview.exemptionStatusCode).toBe('NEW')

@@ -3645,6 +3645,7 @@ class ApplicationDetailsRpcControllerTest {
   void directAddScaleShouldAllowStandingAndUnmanufacturedProvincialApplications(
       String productTypeCode) {
     TestingAuthenticationToken authentication = authorized("createApplication");
+    when(sessionService.rolesForOrgUnit(authentication, null)).thenReturn(List.of("LEXIS_APPLICATION_APPROVER"));
     when(serviceProvider.getIfAvailable()).thenReturn(service);
     when(service.addScaleToPackage(any(), org.mockito.ArgumentMatchers.eq("idir\\jsmith")))
         .thenReturn(

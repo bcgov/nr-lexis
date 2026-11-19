@@ -419,32 +419,17 @@ class Oauth2SecurityCustomizerTest {
   }
 
   @ParameterizedTest
-  @ValueSource(strings = {
-    "LEXIS_APPLICATION_APPROVER,LEXIS_EXEMPTION_APPROVER",
-    "LEXIS_APPLICATION_APPROVER_REGION,LEXIS_EXEMPTION_APPROVER_REGION",
-    "LEXIS_APPLICATION_APPROVER_REGION,LEXIS_EXEMPTION_APPROVER",
-    "LEXIS_APPLICATION_APPROVER,LEXIS_EXEMPTION_APPROVER_REGION",
-    " lexis_application_approver_region ,LEXIS_EXEMPTION_APPROVER_REGION_REGION-SKEENA",
-    "LEXIS_APPLICATION_APPROVER_REGION_REGION-CARIBOO,LEXIS_EXEMPTION_APPROVER_REGION,LEXIS_ADMIN,LEXIS_READ_ONLY_REGION-SKEENA",
-    "LEXIS_APPLICATION_APPROVER_REGION-CARIBOO,LEXIS_EXEMPTION_APPROVER",
-    "LEXIS_APPLICATION_APPROVER,LEXIS_EXEMPTION_APPROVER_REGION_REGION-SKEENA",
-    "LEXIS_APPLICATION_APPROVER_REGION_REGION-CARIBOO,LEXIS_EXEMPTION_APPROVER_REGION_REGION-CARIBOO",
-    "LEXIS_APPLICATION_APPROVER_REGION-CARIBOO,LEXIS_EXEMPTION_APPROVER_REGION_REGION-NORTHERN_INTERIOR",
-    "LEXIS_APPLICATION_APPROVER_REGION-RETIRED,LEXIS_EXEMPTION_APPROVER_REGION-SKEENA",
-    " lexis_application_approver_region-cariboo ,Lexis_Exemption_Approver_Region-Skeena,LEXIS_ADMIN,LEXIS_READ_ONLY_REGION-CARIBOO"
-  })
-  void conflictingApproverRolesRetainOnlyTheDenialDiagnostic(String roleCsv) {
-    List<String> roles = List.of(roleCsv.split(","));
-    for (String provider : List.of("idir", "azureidir")) {
-      assertThat(authorities(Map.of("identity_provider", provider, "client_roles", roles)))
-          .containsExactly(LexisSessionService.APPROVER_CONFLICT_AUTHORITY);
-      assertThat(authorities(Map.of(
-          "identity_provider", provider,
-          "resource_access", Map.of(CLIENT, Map.of("roles", roles)))))
-          .containsExactly(LexisSessionService.APPROVER_CONFLICT_AUTHORITY);
-    }
-    assertThat(sessionService.parseRoleHeader(LexisSessionService.APPROVER_CONFLICT_AUTHORITY))
-        .isEmpty();
+  @ValueSource(strings = {"idir", "azureidir"})
+  void staffReceiveEachValidGrantWhenBothApproversAreAssigned(String provider) {
+    String application = "LEXIS_APPLICATION_APPROVER_REGION-CARIBOO";
+    String exemption = "LEXIS_EXEMPTION_APPROVER_REGION_REGION-SKEENA";
+    List<String> roles = List.of(application, exemption, "LEXIS_EXEMPTION_APPROVER",
+        "LEXIS_APPLICATION_APPROVER_REGION", "LEXIS_EXEMPTION_APPROVER_REGION-RETIRED");
+    assertThat(authorities(Map.of("identity_provider", provider, "client_roles", roles)))
+        .containsExactly(application, exemption);
+    assertThat(authorities(Map.of("identity_provider", provider,
+        "resource_access", Map.of(CLIENT, Map.of("roles", roles)))))
+        .containsExactly(application, exemption);
   }
 
   @ParameterizedTest

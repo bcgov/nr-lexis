@@ -274,7 +274,7 @@ public class LexisApplicationController {
 
   private LexisApplicationDetailDto withEditLock(
       LexisApplicationDetailDto detail, Authentication authentication) {
-    List<String> roles = sessionService.parseRolesFromPrincipal(authentication);
+    List<String> roles = sessionService.rolesForOrgUnit(authentication, detail.orgUnitNumber());
     ApplicationEditPolicy policy =
         applicationEditPolicyService.resolve(
             authentication,

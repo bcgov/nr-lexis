@@ -140,14 +140,8 @@ public class Oauth2SecurityCustomizer
         && expectedClientId.equals(jwt.getClaimAsString("azp"))) {
       List<String> roles = clientRoles(jwt);
       String identityProvider = jwt.getClaimAsString("identity_provider");
-      if (isStaffIdentityProvider(identityProvider)
-          && sessionService.hasConflictingApproverRoles(roles)) {
-        authorities.add(LexisSessionService.APPROVER_CONFLICT_AUTHORITY);
-      } else {
-        authorities.addAll(
-            sessionService.parseGrantedAuthorities(
-                identityCompatibleFamRoles(roles, identityProvider)));
-      }
+      authorities.addAll(
+          sessionService.parseGrantedAuthorities(identityCompatibleFamRoles(roles, identityProvider)));
     } else if (keycloakIssuerUri != null
         && keycloakIssuerUri.equals(tokenIssuer)
         && !machineValidator.validate(jwt).hasErrors()) {
@@ -192,10 +186,8 @@ public class Oauth2SecurityCustomizer
     // Preserve the approved IDIR staff / Business BCeID separation and the internal
     // forest-client authority contract used throughout business authorization.
     if (isStaffIdentityProvider(identityProvider)) {
-      // Staff grants require a current region; only Administrator remains province-wide.
-      // Retain the concrete regional grant without adding its unscoped base role. The grant
-      // passes route checks with its role's actions; only ProvincialAuthorizationService limits
-      // it to its regions, so every record endpoint must apply those checks.
+      // Keep each approver role paired with its region for record checks.
+      // Administrator is the only province-wide staff grant.
       return roles.stream()
           .filter(role -> ROLE_ADMIN.equals(role) || FamRegionGrant.parse(role).isPresent())
           .toList();

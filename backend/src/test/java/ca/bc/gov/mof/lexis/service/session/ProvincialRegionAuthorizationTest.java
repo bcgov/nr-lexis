@@ -31,6 +31,8 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.beans.factory.ObjectProvider;
@@ -409,11 +411,14 @@ class ProvincialRegionAuthorizationTest {
         .doesNotThrowAnyException();
   }
 
-  @Test
-  void regionalExemptionApproverApprovesExemptionsLinkedOnlyInTheirRegion() {
+  @ParameterizedTest
+  @ValueSource(booleans = {false, true})
+  void exemptionApprovalRequiresItsOwnGrantInEveryLinkedRegion(boolean applicationApproverInCariboo) {
     ministerialExemption(LINKED_IN_SKEENA, SKEENA);
     ministerialExemption(LINKED_IN_TWO_REGIONS, CARIBOO, SKEENA);
-    Authentication skeenaApprover = staff(EXEMPTION_APPROVER_SKEENA);
+    Authentication skeenaApprover = applicationApproverInCariboo
+        ? staff(EXEMPTION_APPROVER_SKEENA, APPROVER_CARIBOO)
+        : staff(EXEMPTION_APPROVER_SKEENA);
 
     requestAuthorizedFor("/exemptionDetails");
     assertThat(service.canAccessExemption(skeenaApprover, LINKED_IN_SKEENA)).isTrue();
