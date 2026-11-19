@@ -1,7 +1,12 @@
 import { DatePicker, DatePickerInput } from '@carbon/react'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { isValidIsoDate, isoDateRangeEndError } from '@/pages/shared/create-form-utils'
+import { closeDateCalendar } from '@/utils/focus'
 import { parseIsoDate } from './IsoDatePicker'
+
+type CalendarInput = HTMLInputElement & {
+  _flatpickr?: { isOpen: boolean; open: () => void; calendarContainer: HTMLElement }
+}
 
 type IsoDateRangePickerProps = {
   fromId: string
@@ -71,11 +76,35 @@ export default function IsoDateRangePicker({
     // Typed bounds belong to the caller. Flatpickr's blur/Enter parser can rewrite the other
     // bound or fail on an incomplete range; calendar selections are handled separately below.
     const preserveDraft = (event: Event) => {
-      if (event.type === 'keydown' && (event as KeyboardEvent).key === 'Tab') {
-        keyboardFocusRef.current = true
-      }
-      if (event.type === 'keydown' && (event as KeyboardEvent).key !== 'Enter') return
       const input = event.target
+      const key = event.type === 'keydown' ? (event as KeyboardEvent).key : ''
+      if (key === 'Tab') {
+        keyboardFocusRef.current = true
+        // Tab moves on: From to To, then to the next field, closing the calendar. Carbon would
+        // move it into the calendar, which the Down arrow reaches instead.
+        if (!(event as KeyboardEvent).shiftKey && input instanceof HTMLInputElement) {
+          event.stopPropagation()
+          if (input.id === toId) closeDateCalendar(input)
+        }
+      }
+      if (key === 'ArrowDown' && input instanceof HTMLInputElement) {
+        const calendar = range.querySelector<CalendarInput>(`#${CSS.escape(fromId)}`)?._flatpickr
+        if (!calendar) return
+        if (!calendar.isOpen) calendar.open()
+        const days = calendar.calendarContainer
+        const day =
+          days.querySelector<HTMLElement>(
+            input.id === toId ? '.flatpickr-day.endRange' : '.flatpickr-day.startRange',
+          ) ??
+          days.querySelector<HTMLElement>('.flatpickr-day.selected') ??
+          days.querySelector<HTMLElement>('.flatpickr-day.today') ??
+          days.querySelector<HTMLElement>('.flatpickr-day[tabindex]')
+        if (!day) return
+        event.preventDefault()
+        day.focus()
+        return
+      }
+      if (event.type === 'keydown' && key !== 'Enter') return
       if (!(input instanceof HTMLInputElement)) return
       event.stopPropagation()
     }
@@ -104,7 +133,7 @@ export default function IsoDateRangePicker({
       range.removeEventListener('blur', preserveDraft, true)
       range.removeEventListener('keydown', preserveDraft, true)
     }
-  }, [fromId])
+  }, [fromId, toId])
 
   useEffect(() => () => removeCalendarListenersRef.current?.(), [])
 
