@@ -75,26 +75,4 @@ describe('Unauthorized page actions', () => {
     expect(logout).toHaveBeenCalledWith()
     expect(screen.getByRole('heading', { name: 'Access not granted' })).toBeInTheDocument()
   })
-
-  it('retains contact guidance for a denial reported by an older backend', () => {
-    mockedUseAuth.mockReturnValue(
-      createTestAuthContext({
-        capabilities: createTestCapabilities({
-          principal: 'IDIR\\staff',
-          roles: [],
-          accessDeniedReason: 'INCOMPATIBLE_APPROVER_ROLES',
-        }),
-      }),
-    )
-
-    renderPage()
-
-    expect(
-      screen.getByText(
-        'You’re signed in as IDIR\\staff, but your account is not authorized to use LEXIS. Contact your administrator.',
-      ),
-    ).toBeVisible()
-    expect(screen.queryByText(/Approver/)).not.toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'Log out' })).toBeVisible()
-  })
 })

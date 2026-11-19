@@ -211,8 +211,7 @@ class KeycloakBearerAuthenticationIntegrationTest {
         .andExpect(jsonPath("$.welcomeTarget").value("exemptionApprover"))
         .andExpect(jsonPath("$.actionRegions.createApplication", contains(1903)))
         .andExpect(jsonPath("$.actionRegions.approveExemption",
-            contains((int) FamRegionGrant.Region.valueOf(exemptionRegion).orgUnitNumber())))
-        .andExpect(jsonPath("$.accessDeniedReason").doesNotExist());
+            contains((int) FamRegionGrant.Region.valueOf(exemptionRegion).orgUnitNumber())));
     mvc.perform(get("/api/lexis/session/welcome").header("Authorization", token))
         .andExpect(status().isOk());
     mvc.perform(get("/api/lexis/admin/notifications").header("Authorization", token))

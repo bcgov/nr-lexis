@@ -16,10 +16,6 @@ const UnauthorizedPage = () => {
   const signedInDescription = capabilities.principal
     ? `You’re signed in as ${capabilities.principal}, but your account is not authorized to use LEXIS.`
     : 'Your account is signed in, but it is not authorized to use LEXIS.'
-  const description =
-    capabilities.accessDeniedReason === 'INCOMPATIBLE_APPROVER_ROLES'
-      ? `${signedInDescription} Contact your administrator.`
-      : signedInDescription
 
   // The heading isn't a PageHeader, so the page names the browser tab itself and gives the
   // previous name back when it goes away.
@@ -46,7 +42,7 @@ const UnauthorizedPage = () => {
 
             <div className="landing-title-group">
               <h1 className="landing-title">{ACCESS_NOT_GRANTED_TITLE}</h1>
-              <p className="landing-subtitle">{description}</p>
+              <p className="landing-subtitle">{signedInDescription}</p>
             </div>
 
             <div className="landing-actions">

@@ -139,11 +139,14 @@ public class LexisSessionService {
 
   /** Regional grants apply to the record's own organization unit. */
   public List<String> rolesForOrgUnit(Authentication authentication, Long orgUnitNumber) {
-    return normalizeRoles(authorityNames(authentication).stream()
-        .filter(authority -> FamRegionGrant.parse(authority.trim().toUpperCase(Locale.ROOT))
-            .map(grant -> Objects.equals(orgUnitNumber, grant.region().orgUnitNumber()))
-            .orElse(true))
-        .toList());
+    return normalizeRoles(
+        authorityNames(authentication).stream()
+            .filter(
+                authority ->
+                    FamRegionGrant.parse(canonicalizeRole(authority))
+                        .map(grant -> Objects.equals(orgUnitNumber, grant.region().orgUnitNumber()))
+                        .orElse(true))
+            .toList());
   }
 
   public String resolveForestClientNumber(Authentication authentication) {

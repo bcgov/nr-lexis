@@ -269,6 +269,38 @@ class LexisSessionServiceTest {
   }
 
   @Test
+  void rolesForOrgUnitKeepsOnlyGrantsForThatRegion() {
+    TestingAuthenticationToken authentication =
+        new TestingAuthenticationToken(
+            "idir\\approver",
+            "n/a",
+            "LEXIS_APPLICATION_APPROVER_REGION-CARIBOO",
+            "lexis_exemption_approver_region-skeena",
+            "LEXIS_READ_ONLY_REGION_REGION-SKEENA");
+
+    assertThat(service.rolesForOrgUnit(authentication, 1903L))
+        .containsExactly("LEXIS_APPLICATION_APPROVER");
+    assertThat(service.rolesForOrgUnit(authentication, 1908L))
+        .containsExactly("LEXIS_EXEMPTION_APPROVER", "LEXIS_READ_ONLY");
+    assertThat(service.rolesForOrgUnit(authentication, 1904L)).isEmpty();
+    assertThat(service.rolesForOrgUnit(authentication, null)).isEmpty();
+  }
+
+  @Test
+  void rolesForOrgUnitKeepsAdministratorAndUnscopedRolesEverywhere() {
+    TestingAuthenticationToken authentication =
+        new TestingAuthenticationToken(
+            "idir\\admin",
+            "n/a",
+            "LEXIS_ADMIN",
+            "LEXIS_APPLICATION_APPROVER_REGION-CARIBOO",
+            "SCOPE_openid");
+
+    assertThat(service.rolesForOrgUnit(authentication, 1908L)).containsExactly("LEXIS_ADMIN");
+    assertThat(service.rolesForOrgUnit(authentication, null)).containsExactly("LEXIS_ADMIN");
+  }
+
+  @Test
   void shouldResolveForestClientNumberFromCanonicalScopedRole() {
     String clientNumber = service.resolveForestClientNumber(List.of("lexis_provincial_submitter_00077881"));
 

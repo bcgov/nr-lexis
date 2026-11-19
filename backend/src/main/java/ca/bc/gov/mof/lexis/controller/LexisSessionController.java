@@ -108,8 +108,7 @@ public class LexisSessionController {
             forestClientScope.availableClientNumbers(),
             forestClientSelectionRequired,
             orgUnitNo,
-            actionRegions,
-            null));
+            actionRegions));
   }
 
   @GetMapping("/canPerformAction")
