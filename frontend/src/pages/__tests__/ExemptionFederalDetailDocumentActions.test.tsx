@@ -922,8 +922,8 @@ describe('Exemption and Federal Detail Document Actions', () => {
       "Application 654 can't be added. Insufficient privileges to add this application.",
     ],
     [
-      "Application 654 can't be added. The exemption's requested volume would be 102.0 m³, more than its approved volume of 2.0 m³.",
-      "Application 654 can't be added. The exemption's requested volume would be 102.0 m³, more than its approved volume of 2.0 m³.",
+      "Application 654 can't be added. The exemption's requested volume would be 102.0 m³, more than its approval volume of 2.0 m³.",
+      "Application 654 can't be added. The exemption's requested volume would be 102.0 m³, more than its approval volume of 2.0 m³.",
     ],
     [
       '',

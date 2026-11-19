@@ -76,8 +76,8 @@ const whereToFix = (problem: string): string[] => {
     guidance.push('Review the expiry date in Exemption details.')
   }
   if (
-    problem.includes('The approved volume must be') ||
-    problem.includes('The approved volume must have no more than two decimal places.')
+    problem.includes('The approval volume must be') ||
+    problem.includes('The approval volume must have no more than two decimal places.')
   ) {
     guidance.push('Review the approval volume in Exemption details.')
   }

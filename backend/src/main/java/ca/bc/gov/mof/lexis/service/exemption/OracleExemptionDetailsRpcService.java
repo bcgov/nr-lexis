@@ -722,7 +722,7 @@ public class OracleExemptionDetailsRpcService implements ExemptionDetailsRpcServ
             + displayApplicationNumber(candidate.applicationNumber())
             + " can't be added. The exemption's requested volume would be "
             + totalRequestedVolume.toPlainString()
-            + " m³, more than its approved volume of "
+            + " m³, more than its approval volume of "
             + roundedApprovedVolume.toPlainString()
             + " m³.");
   }
@@ -1757,17 +1757,17 @@ public class OracleExemptionDetailsRpcService implements ExemptionDetailsRpcServ
 
   private void validateApprovedVolume(Double approvedVolume, List<String> errors) {
     if (approvedVolume == null || !Double.isFinite(approvedVolume) || approvedVolume <= 0.0d) {
-      errors.add("The approved volume must be greater than 0");
+      errors.add("The approval volume must be greater than 0");
       return;
     }
     if (approvedVolume > MAX_APPROVED_VOLUME) {
       errors.add(
-          "The approved volume must be less than or equal to "
+          "The approval volume must be less than or equal to "
               + BigDecimal.valueOf(MAX_APPROVED_VOLUME).toPlainString()
               + ".");
     }
     if (!hasAtMostTwoDecimals(approvedVolume)) {
-      errors.add("The approved volume must have no more than two decimal places.");
+      errors.add("The approval volume must have no more than two decimal places.");
     }
   }
 

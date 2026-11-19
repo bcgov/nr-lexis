@@ -164,7 +164,7 @@ const serverErrorField = (message: string): ProvincialExemptionCreateField | und
   ) {
     return 'exemptionNumber'
   }
-  if (message.startsWith('The approved volume ')) return 'approvedVolume'
+  if (message.startsWith('The approval volume ')) return 'approvedVolume'
   if (message.startsWith('Other conditions ')) return 'otherConditions'
   if (
     message === 'A valid expiry date is required.' ||
