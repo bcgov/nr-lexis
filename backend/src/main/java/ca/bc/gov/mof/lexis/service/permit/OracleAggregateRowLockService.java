@@ -5,10 +5,10 @@ import ca.bc.gov.mof.lexis.repository.oracle.OracleAggregateLockRepository.RootR
 import ca.bc.gov.mof.lexis.service.coordination.DistributedLockBusyException;
 import ca.bc.gov.mof.lexis.service.coordination.InvalidRecordVersionException;
 import ca.bc.gov.mof.lexis.service.coordination.MissingRecordVersionException;
-import ca.bc.gov.mof.lexis.service.coordination.OptimisticLockRequest;
 import ca.bc.gov.mof.lexis.service.coordination.OptimisticLockRequestReader;
 import ca.bc.gov.mof.lexis.service.coordination.OptimisticRecordType;
 import ca.bc.gov.mof.lexis.service.coordination.OptimisticRecordVersion;
+import ca.bc.gov.mof.lexis.service.coordination.OptimisticRecordVersion.ExpectedRecordVersion;
 import ca.bc.gov.mof.lexis.service.coordination.OracleOptimisticRecordVersionService;
 import ca.bc.gov.mof.lexis.service.coordination.StaleRecordException;
 import java.util.ArrayList;
@@ -19,6 +19,8 @@ import java.util.Locale;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.TreeSet;
+import java.util.function.Function;
+import java.util.function.Predicate;
 import java.util.function.Supplier;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Profile;
@@ -120,42 +122,52 @@ public class OracleAggregateRowLockService {
       boolean requireExpectedVersion,
       Supplier<T> operation) {
     Objects.requireNonNull(operation, "operation");
+    Optional<ExpectedRecordVersion> expected =
+        optimisticLockRequestReader.currentRequest().expectedVersion();
     try {
       List<LockedRecord> lockedRecords = new ArrayList<>();
       normalizeExemptions(exemptionNumbers)
           .forEach(
               value ->
                   lockedRecords.add(
-                      lockedRecord(
+                      lock(
                           OptimisticRecordType.EXEMPTION,
                           value,
-                          repository.lockExemption(value))));
+                          expected,
+                          repository::lockExemption,
+                          repository::lockExemptionRow)));
       normalizeNumbers(applicationNumbers, "application")
           .forEach(
               value ->
                   lockedRecords.add(
-                      lockedRecord(
+                      lock(
                           OptimisticRecordType.APPLICATION,
-                          value.toString(),
-                          repository.lockApplication(value))));
+                          value,
+                          expected,
+                          repository::lockApplication,
+                          repository::lockApplicationRow)));
       normalizeNumbers(offerNumbers, "offer")
           .forEach(
               value ->
                   lockedRecords.add(
-                      lockedRecord(
+                      lock(
                           OptimisticRecordType.OFFER,
-                          value.toString(),
-                          repository.lockOffer(value))));
+                          value,
+                          expected,
+                          repository::lockOffer,
+                          repository::lockOfferRow)));
       normalizeNumbers(permitNumbers, "permit")
           .forEach(
               value ->
                   lockedRecords.add(
-                      lockedRecord(
+                      lock(
                           OptimisticRecordType.PERMIT,
-                          value.toString(),
-                          repository.lockPermit(value))));
+                          value,
+                          expected,
+                          repository::lockPermit,
+                          repository::lockPermitRow)));
       LockedRecord optimisticTarget =
-          verifyExpectedVersion(lockedRecords, requireExpectedVersion);
+          verifyExpectedVersion(expected, lockedRecords, requireExpectedVersion);
       T result = operation.get();
       if (TransactionSynchronizationManager.isActualTransactionActive()
           && TransactionAspectSupport.currentTransactionStatus().isRollbackOnly()) {
@@ -177,6 +189,33 @@ public class OracleAggregateRowLockService {
     return execute(List.of(), List.of(), List.of(offerNumber), List.of(), operation);
   }
 
+  // Every record takes the same row lock; only the one the version names reads child rows.
+  private <I> LockedRecord lock(
+      OptimisticRecordType recordType,
+      I identifier,
+      Optional<ExpectedRecordVersion> expected,
+      Function<I, Optional<RootRecordSnapshot>> lockWithVersion,
+      Predicate<I> lockRowOnly) {
+    String recordId = identifier.toString();
+    String normalizedRecordId = recordType.normalizeIdentifier(recordId);
+    boolean versionTarget =
+        expected
+            .filter(
+                version ->
+                    version.recordType() == recordType
+                        && version.recordId().equals(normalizedRecordId))
+            .isPresent();
+    if (versionTarget) {
+      return lockedRecord(recordType, recordId, lockWithVersion.apply(identifier));
+    }
+    return new LockedRecord(
+        recordType,
+        normalizedRecordId,
+        recordId.trim(),
+        lockRowOnly.test(identifier),
+        Optional.empty());
+  }
+
   private LockedRecord lockedRecord(
       OptimisticRecordType recordType,
       String recordId,
@@ -187,26 +226,24 @@ public class OracleAggregateRowLockService {
         recordType,
         recordType.normalizeIdentifier(recordId),
         recordId.trim(),
+        safeSnapshot.isPresent(),
         safeSnapshot.map(value -> versionService.toVersion(recordType, recordId, value)));
   }
 
   private LockedRecord verifyExpectedVersion(
-      List<LockedRecord> lockedRecords, boolean requireExpectedVersion) {
-    OptimisticLockRequest request = optimisticLockRequestReader.currentRequest();
-    if (request.expectedVersion().isEmpty()) {
-      if (requireExpectedVersion
-          && lockedRecords.stream().anyMatch(record -> record.version().isPresent())) {
+      Optional<ExpectedRecordVersion> expectedVersion,
+      List<LockedRecord> lockedRecords,
+      boolean requireExpectedVersion) {
+    if (expectedVersion.isEmpty()) {
+      if (requireExpectedVersion && lockedRecords.stream().anyMatch(LockedRecord::exists)) {
         throw new MissingRecordVersionException();
       }
       return null;
     }
-    var expected = request.expectedVersion().orElseThrow();
+    var expected = expectedVersion.orElseThrow();
     long existingTargetsOfExpectedType =
         lockedRecords.stream()
-            .filter(
-                locked ->
-                    locked.recordType() == expected.recordType()
-                        && locked.version().isPresent())
+            .filter(locked -> locked.recordType() == expected.recordType() && locked.exists())
             .count();
     if (existingTargetsOfExpectedType > 1) {
       throw new InvalidRecordVersionException(
@@ -285,5 +322,6 @@ public class OracleAggregateRowLockService {
       OptimisticRecordType recordType,
       String recordId,
       String oracleRecordId,
+      boolean exists,
       Optional<OptimisticRecordVersion> version) {}
 }
