@@ -1,12 +1,8 @@
 import { DatePicker, DatePickerInput } from '@carbon/react'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { isValidIsoDate, isoDateRangeEndError } from '@/pages/shared/create-form-utils'
-import { closeDateCalendar } from '@/utils/focus'
+import { closeDateCalendar, focusDateCalendarDay, type DateInput } from '@/utils/focus'
 import { parseIsoDate } from './IsoDatePicker'
-
-type CalendarInput = HTMLInputElement & {
-  _flatpickr?: { isOpen: boolean; open: () => void; calendarContainer: HTMLElement }
-}
 
 type IsoDateRangePickerProps = {
   fromId: string
@@ -88,20 +84,11 @@ export default function IsoDateRangePicker({
         }
       }
       if (key === 'ArrowDown' && input instanceof HTMLInputElement) {
-        const calendar = range.querySelector<CalendarInput>(`#${CSS.escape(fromId)}`)?._flatpickr
+        const calendar = range.querySelector<DateInput>(`#${CSS.escape(fromId)}`)?._flatpickr
         if (!calendar) return
-        if (!calendar.isOpen) calendar.open()
-        const days = calendar.calendarContainer
-        const day =
-          days.querySelector<HTMLElement>(
-            input.id === toId ? '.flatpickr-day.endRange' : '.flatpickr-day.startRange',
-          ) ??
-          days.querySelector<HTMLElement>('.flatpickr-day.selected') ??
-          days.querySelector<HTMLElement>('.flatpickr-day.today') ??
-          days.querySelector<HTMLElement>('.flatpickr-day[tabindex]')
-        if (!day) return
-        event.preventDefault()
-        day.focus()
+        const preferredDay =
+          input.id === toId ? '.flatpickr-day.endRange' : '.flatpickr-day.startRange'
+        if (focusDateCalendarDay(calendar, preferredDay)) event.preventDefault()
         return
       }
       if (event.type === 'keydown' && key !== 'Enter') return
