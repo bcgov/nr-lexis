@@ -126,7 +126,7 @@ describe('Landing auth flow smoke', () => {
         .getAllByRole('listitem')
         .map((item) => item.textContent),
     ).toEqual([
-      'Coast: Provincial.Log.Export.Analyst@gov.bc.ca',
+      'Coast and MFPR: Provincial.Log.Export.Analyst@gov.bc.ca',
       'North: NorthAreaExportScaling@gov.bc.ca',
       'South: Export.Applications@gov.bc.ca',
     ])
