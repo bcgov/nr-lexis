@@ -319,7 +319,7 @@ const getApplicationSummaryTile = (): HTMLElement => {
 
 const getApplicationItemDetailsTile = (): HTMLElement => {
   const itemDetailsTitle = screen.getByRole('heading', {
-    name: 'Scale details',
+    name: 'Advertising details',
     level: 2,
   })
   const itemDetailsTile = itemDetailsTitle.closest('.cds--tile')
@@ -358,11 +358,11 @@ const selectApplicationSummaryTile = async (edit = true): Promise<HTMLElement> =
 }
 
 const selectApplicationItemDetailsTile = async (edit = true): Promise<HTMLElement> => {
-  await selectApplicationDetailTab('Scale')
+  await selectApplicationDetailTab('Package and scale')
   const itemDetailsTile = await waitFor(() => getApplicationItemDetailsTile())
   if (edit) {
     const editButton = within(itemDetailsTile).queryByRole('button', {
-      name: 'Edit scale details',
+      name: 'Edit advertising details',
     })
     if (editButton) {
       await userEvent.click(editButton)
@@ -386,7 +386,7 @@ const selectApplicationReviewTile = async (edit = true): Promise<HTMLElement> =>
 }
 
 const selectApplicationItemsForEditing = async (): Promise<void> => {
-  await selectApplicationDetailTab('Scale')
+  await selectApplicationDetailTab('Package and scale')
   const editButton = await screen.findByRole('button', { name: 'Edit package' })
   await userEvent.click(editButton)
 }

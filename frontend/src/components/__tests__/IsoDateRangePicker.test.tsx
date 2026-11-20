@@ -207,6 +207,22 @@ describe('IsoDateRangePicker', () => {
     expect(document.querySelector('.flatpickr-calendar.open')).toBeNull()
   })
 
+  it('opens the calendar under the field in use', async () => {
+    render(<Range />)
+    const from = screen.getByLabelText('List date from')
+    const to = screen.getByLabelText('List date to')
+    const calendar = (from as HTMLInputElement & { _flatpickr: { _positionElement: HTMLElement } })
+      ._flatpickr
+
+    await userEvent.click(to)
+    await waitFor(() => expect(calendar._positionElement).toBe(to))
+    await userEvent.click(from)
+    await waitFor(() => expect(calendar._positionElement).toBe(from))
+    await userEvent.click(to)
+    await userEvent.keyboard('{Escape}{ArrowDown}')
+    expect(calendar._positionElement).toBe(to)
+  })
+
   it.each([
     { field: 'List date from', day: '10', escapeFirst: false },
     { field: 'List date to', day: '20', escapeFirst: false },

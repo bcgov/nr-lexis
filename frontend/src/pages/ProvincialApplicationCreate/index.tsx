@@ -27,13 +27,13 @@ import {
 import {
   Box,
   Chat,
-  ContainerRegistry,
   DataDefinition,
   DocumentAttachment,
   Enterprise,
   Result,
   Save,
   Stamp,
+  Tree,
 } from '@carbon/icons-react'
 import SearchableSelect from '../../components/SearchableSelect'
 import SelectedItemTags from '@/components/SelectedItemTags'
@@ -158,7 +158,7 @@ const APPLICATION_CREATE_TABS: ApplicationCreateTab[] = [
 const APPLICATION_CREATE_TAB_LABELS: Record<ApplicationCreateTab, string> = {
   owner: 'Applicant',
   application: 'Application',
-  items: 'Scale',
+  items: 'Package and scale',
   documents: 'Documents',
   remarks: 'Remarks',
   offers: 'Offers',
@@ -2305,10 +2305,10 @@ const ProvincialApplicationCreatePage = () => {
                 <Tile
                   className="create-form-tile application-detail-section"
                   role="region"
-                  aria-label="Scale"
+                  aria-label="Package and scale"
                 >
                   <div className="detail-section-card__header">
-                    <DetailCardTitle icon={ContainerRegistry}>Scale details</DetailCardTitle>
+                    <DetailCardTitle icon={Tree}>Advertising details</DetailCardTitle>
                   </div>
                   <RequiredFieldsLegend className="application-create-required" />
                   <RecordFieldGrid editing>

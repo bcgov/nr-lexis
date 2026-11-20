@@ -115,7 +115,7 @@ describe.sequential('Provincial Application Detail Actions - review', () => {
     expect(tabs.map((tab) => tab.textContent)).toEqual([
       'Applicant',
       'Application',
-      'Scale',
+      'Package and scale',
       'Documents',
       'Offers',
     ])
@@ -568,11 +568,11 @@ describe.sequential('Provincial Application Detail Actions - review', () => {
     fireEvent.change(newRemark, {
       target: { value: 'Preserve remark draft' },
     })
-    await selectApplicationDetailTab('Scale')
+    await selectApplicationDetailTab('Package and scale')
     await userEvent.click(await screen.findByRole('button', { name: 'Keep editing' }))
     expect(newRemark).toHaveValue('Preserve remark draft')
     expect(screen.getByRole('tab', { name: 'Remarks' })).toHaveAttribute('aria-selected', 'true')
-    await selectApplicationDetailTab('Scale')
+    await selectApplicationDetailTab('Package and scale')
     await userEvent.click(await screen.findByRole('button', { name: 'Discard changes' }))
     await selectApplicationItemsForEditing()
     fireEvent.change(await screen.findByLabelText('Comments'), {

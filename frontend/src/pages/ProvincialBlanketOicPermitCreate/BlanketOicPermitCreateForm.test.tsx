@@ -184,7 +184,7 @@ describe('BlanketOicPermitCreateForm', () => {
       'Permit',
       'Applicant',
       'Shipping',
-      'Scale',
+      'Package and scale',
       'Documents',
       'Fees',
     ])
@@ -212,7 +212,7 @@ describe('BlanketOicPermitCreateForm', () => {
     expect(
       screen.getByRole('heading', { level: 2, name: 'Permit details' }).querySelector('svg'),
     ).toHaveAttribute('aria-hidden', 'true')
-    for (const tab of ['Scale', 'Documents', 'Fees']) {
+    for (const tab of ['Package and scale', 'Documents', 'Fees']) {
       await user.click(screen.getByRole('tab', { name: tab }))
       const panel = screen.getByRole('tabpanel', { name: tab })
       expect(panel).toHaveTextContent(/^Available after the permit is saved\.$/)

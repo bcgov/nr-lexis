@@ -57,7 +57,7 @@ import type { ActionResult } from '@/utils/action-result'
 Element.prototype.scrollIntoView = vi.fn()
 
 const openCreatePackageControls = async () => {
-  await selectApplicationDetailTab('Scale')
+  await selectApplicationDetailTab('Package and scale')
   await userEvent.click(await screen.findByRole('button', { name: 'Create package' }))
   const packageNumber = await screen.findByLabelText('Package number')
   return within(packageNumber.closest('.application-items-drawer') as HTMLElement)
@@ -111,7 +111,7 @@ const fillNewScale = async (
 }
 
 const openScaleControls = async () => {
-  await selectApplicationDetailTab('Scale')
+  await selectApplicationDetailTab('Package and scale')
   await userEvent.click(await screen.findByRole('button', { name: 'Add scale' }))
   const timberMark = await screen.findByLabelText('Timber mark')
   return within(timberMark.closest('.application-items-drawer') as HTMLElement)
@@ -174,7 +174,7 @@ describe.sequential('Provincial Application Detail Actions - items', () => {
 
   it('identifies one package by its card title without a redundant selector', async () => {
     renderApplicationItems()
-    await selectApplicationDetailTab('Scale')
+    await selectApplicationDetailTab('Package and scale')
 
     expect(await screen.findByRole('heading', { name: 'Package PKG-1' })).toBeInTheDocument()
     expect(screen.queryByRole('combobox', { name: 'Selected package' })).not.toBeInTheDocument()
@@ -213,7 +213,10 @@ describe.sequential('Provincial Application Detail Actions - items', () => {
     )
 
     await waitFor(() => {
-      expect(screen.getByRole('tab', { name: 'Scale' })).toHaveAttribute('aria-selected', 'true')
+      expect(screen.getByRole('tab', { name: 'Package and scale' })).toHaveAttribute(
+        'aria-selected',
+        'true',
+      )
       expect(screen.queryByRole('tab', { name: 'Agent' })).not.toBeInTheDocument()
     })
     await waitFor(() => {
@@ -521,7 +524,7 @@ describe.sequential('Provincial Application Detail Actions - items', () => {
     expect(applicationTotalPieces()).toHaveTextContent('8')
 
     await userEvent.click(
-      applicationItemDetails.getByRole('button', { name: 'Edit scale details' }),
+      applicationItemDetails.getByRole('button', { name: 'Edit advertising details' }),
     )
     await waitFor(() => {
       expect(applicationItemDetails.getAllByText('Total pieces')).toHaveLength(1)
@@ -568,7 +571,7 @@ describe.sequential('Provincial Application Detail Actions - items', () => {
 
     renderApplicationItems()
 
-    await selectApplicationDetailTab('Scale')
+    await selectApplicationDetailTab('Package and scale')
     const packageSelector = await screen.findByRole('combobox', { name: 'Selected package' })
     await waitFor(() => expect(packageSelector).toHaveTextContent('PKG-1'))
     await chooseComboBoxOption(packageSelector, 'PKG-2')
@@ -624,7 +627,7 @@ describe.sequential('Provincial Application Detail Actions - items', () => {
     )
 
     const details = within(await selectApplicationItemDetailsTile(false))
-    await userEvent.click(details.getByRole('button', { name: 'Edit scale details' }))
+    await userEvent.click(details.getByRole('button', { name: 'Edit advertising details' }))
     const input = await details.findByLabelText('Application volume (m³)')
     await waitFor(() => expect(input).toHaveProperty('value', expected))
     expect((input as HTMLInputElement).validity.stepMismatch).toBe(false)
@@ -642,7 +645,7 @@ describe.sequential('Provincial Application Detail Actions - items', () => {
       </MemoryRouter>,
     )
 
-    await selectApplicationDetailTab('Scale')
+    await selectApplicationDetailTab('Package and scale')
     expect(await screen.findByRole('button', { name: 'Edit package' })).toBeInTheDocument()
     expect(screen.queryByRole('heading', { level: 2, name: 'Packages' })).not.toBeInTheDocument()
     expect(screen.getByRole('heading', { level: 3, name: /^Package PKG-/ })).toBeInTheDocument()
@@ -703,14 +706,16 @@ describe.sequential('Provincial Application Detail Actions - items', () => {
 
     const applicationItemDetails = within(await selectApplicationItemDetailsTile(false))
     expect(
-      applicationItemDetails.getByRole('button', { name: 'Edit scale details' }),
+      applicationItemDetails.getByRole('button', { name: 'Edit advertising details' }),
     ).toBeInTheDocument()
 
     await userEvent.click(await screen.findByRole('button', { name: 'Edit package' }))
     const packageComments = await screen.findByLabelText('Comments')
     fireEvent.change(packageComments, { target: { value: 'Unsaved package draft' } })
     expect(packageComments).toHaveValue('Unsaved package draft')
-    expect(applicationItemDetails.getByRole('button', { name: 'Edit scale details' })).toBeEnabled()
+    expect(
+      applicationItemDetails.getByRole('button', { name: 'Edit advertising details' }),
+    ).toBeEnabled()
 
     await userEvent.click(
       within(document.querySelector('.application-items-drawer') as HTMLElement).getByRole(
@@ -720,7 +725,7 @@ describe.sequential('Provincial Application Detail Actions - items', () => {
     )
     await userEvent.click(screen.getByRole('button', { name: 'Discard changes' }))
     const editApplicationItemDetails = await applicationItemDetails.findByRole('button', {
-      name: 'Edit scale details',
+      name: 'Edit advertising details',
     })
     await userEvent.click(editApplicationItemDetails)
 
@@ -1067,7 +1072,7 @@ describe.sequential('Provincial Application Detail Actions - items', () => {
     const packageDetails = await mockedFetchApplicationPackageDetails('PKG-1')
     mockedFetchApplicationPackageDetails.mockResolvedValue({ ...packageDetails, comments })
     renderApplicationItems()
-    await selectApplicationDetailTab('Scale')
+    await selectApplicationDetailTab('Package and scale')
 
     const packageSection = (await screen.findByRole('heading', { name: 'Package PKG-1' })).closest(
       'section',
@@ -1217,7 +1222,7 @@ describe.sequential('Provincial Application Detail Actions - items', () => {
     const summaryTile = getApplicationSummaryTile()
     expect(within(summaryTile).queryByLabelText('Exemption reason')).not.toBeInTheDocument()
 
-    await selectApplicationDetailTab('Scale')
+    await selectApplicationDetailTab('Package and scale')
     expect(await screen.findByRole('heading', { name: /^Package PKG-/ })).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Edit package' })).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Save package' })).not.toBeInTheDocument()
@@ -1252,7 +1257,7 @@ describe.sequential('Provincial Application Detail Actions - items', () => {
 
     renderApplicationItems()
 
-    await selectApplicationDetailTab('Scale')
+    await selectApplicationDetailTab('Package and scale')
     expect(await screen.findByText('TM001')).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Edit package' })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Add scale' })).toBeInTheDocument()
@@ -1270,7 +1275,7 @@ describe.sequential('Provincial Application Detail Actions - items', () => {
 
     renderApplicationItems()
 
-    await selectApplicationDetailTab('Scale')
+    await selectApplicationDetailTab('Package and scale')
     expect(await screen.findByText('TM001')).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Add scale' })).toBeInTheDocument()
     const scaleRow = screen.getByText('TM001').closest('tr') as HTMLElement
@@ -1316,7 +1321,7 @@ describe.sequential('Provincial Application Detail Actions - items', () => {
       const summaryTile = getApplicationSummaryTile()
       expect(within(summaryTile).queryByLabelText('Exemption reason')).not.toBeInTheDocument()
 
-      await selectApplicationDetailTab('Scale')
+      await selectApplicationDetailTab('Package and scale')
       expect(await screen.findByRole('heading', { name: /^Package PKG-/ })).toBeInTheDocument()
       expect(screen.queryByRole('button', { name: 'Edit package' })).not.toBeInTheDocument()
       expect(screen.queryByRole('button', { name: 'Save package' })).not.toBeInTheDocument()
@@ -1404,7 +1409,7 @@ describe.sequential('Provincial Application Detail Actions - items', () => {
       }),
     ).toBeEnabled()
 
-    await selectApplicationDetailTab('Scale')
+    await selectApplicationDetailTab('Package and scale')
     expect(screen.queryByRole('button', { name: 'Edit package' })).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Save package' })).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Create package' })).not.toBeInTheDocument()
@@ -1475,7 +1480,7 @@ describe.sequential('Provincial Application Detail Actions - items', () => {
       expect(screen.getByRole('button', { name: 'Create package' })).toBeEnabled()
 
       await userEvent.click(
-        within(scaleDetailsTile).getByRole('button', { name: 'Edit scale details' }),
+        within(scaleDetailsTile).getByRole('button', { name: 'Edit advertising details' }),
       )
       const scaleDetails = within(scaleDetailsTile)
       expect(scaleDetails.getByLabelText('Location of logs')).toHaveValue('BC')
@@ -1559,7 +1564,7 @@ describe.sequential('Provincial Application Detail Actions - items', () => {
       </MemoryRouter>,
     )
 
-    await selectApplicationDetailTab('Scale')
+    await selectApplicationDetailTab('Package and scale')
     const packageDetailsSection = (
       await screen.findByRole('heading', { name: 'Package PKG-1' })
     ).closest('section') as HTMLElement
@@ -1957,7 +1962,7 @@ describe.sequential('Provincial Application Detail Actions - items', () => {
       </MemoryRouter>,
     )
 
-    await selectApplicationDetailTab('Scale')
+    await selectApplicationDetailTab('Package and scale')
 
     const waterScaleRow = (await screen.findByText('TM-WATER')).closest('tr')
     const estimatedScaleRow = screen.getByText('TM-ESTIMATE').closest('tr')
@@ -2024,7 +2029,7 @@ describe.sequential('Provincial Application Detail Actions - items', () => {
       </MemoryRouter>,
     )
 
-    await selectApplicationDetailTab('Scale')
+    await selectApplicationDetailTab('Package and scale')
 
     const packageDetailsSection = (
       await screen.findByRole('heading', { name: /^Package PKG-/ })
@@ -2073,7 +2078,7 @@ describe.sequential('Provincial Application Detail Actions - items', () => {
       </MemoryRouter>,
     )
 
-    await selectApplicationDetailTab('Scale')
+    await selectApplicationDetailTab('Package and scale')
     expect(await screen.findByText('Selected package data unavailable')).toBeInTheDocument()
 
     const createPackageControls = await openCreatePackageControls()
@@ -2102,7 +2107,7 @@ describe.sequential('Provincial Application Detail Actions - items', () => {
       </MemoryRouter>,
     )
 
-    await selectApplicationDetailTab('Scale')
+    await selectApplicationDetailTab('Package and scale')
 
     const packageDetailsSection = (
       await screen.findByRole('heading', { name: /^Package PKG-/ })
@@ -2151,7 +2156,7 @@ describe.sequential('Provincial Application Detail Actions - items', () => {
       </MemoryRouter>,
     )
 
-    await selectApplicationDetailTab('Scale')
+    await selectApplicationDetailTab('Package and scale')
 
     expect(
       await screen.findByText('Unable to retrieve application item details.'),
@@ -2278,7 +2283,7 @@ describe.sequential('Provincial Application Detail Actions - items', () => {
       productTypeDescription: 'Harvested',
     })
     renderApplicationItems()
-    await selectApplicationDetailTab('Scale')
+    await selectApplicationDetailTab('Package and scale')
     await screen.findByRole('button', { name: 'Edit package' })
     const section = screen.getByRole('heading', { name: 'Package PKG-1' }).closest('section')!
     expect(within(section).queryByText('Status')).not.toBeInTheDocument()
@@ -2447,7 +2452,7 @@ describe.sequential('Provincial Application Detail Actions - items', () => {
     )
 
     expect(await screen.findByText('The application was saved.')).toBeInTheDocument()
-    await selectApplicationDetailTab('Scale')
+    await selectApplicationDetailTab('Package and scale')
     await userEvent.click(await screen.findByRole('button', { name: 'Create package' }))
     const packageNumber = await screen.findByLabelText('Package number')
     const drawer = packageNumber.closest('.application-items-drawer') as HTMLElement
@@ -2517,7 +2522,7 @@ describe.sequential('Provincial Application Detail Actions - items', () => {
     )
     expect(await screen.findByText('Unable to open the selected document.')).toBeInTheDocument()
 
-    await selectApplicationDetailTab('Scale')
+    await selectApplicationDetailTab('Package and scale')
     expect(await screen.findByRole('heading', { name: 'Package PKG-1' })).toBeInTheDocument()
     expect(screen.queryByText('Package saved.')).not.toBeInTheDocument()
     expect(screen.getByText('Unable to open the selected document.')).toBeInTheDocument()
@@ -2537,7 +2542,7 @@ describe.sequential('Provincial Application Detail Actions - items', () => {
       </MemoryRouter>,
     )
 
-    await selectApplicationDetailTab('Scale')
+    await selectApplicationDetailTab('Package and scale')
     const packageDetailsSection = (
       await screen.findByRole('heading', { name: /^Package PKG-/ })
     ).closest('section')
@@ -2584,7 +2589,7 @@ describe.sequential('Provincial Application Detail Actions - items', () => {
     })
     renderApplicationItems()
 
-    await selectApplicationDetailTab('Scale')
+    await selectApplicationDetailTab('Package and scale')
     await userEvent.click(await screen.findByRole('button', { name: 'Delete package' }))
     const confirmation = await screen.findByRole('dialog', {
       name: 'Are you sure you want to delete this package?',
@@ -2613,7 +2618,7 @@ describe.sequential('Provincial Application Detail Actions - items', () => {
     })
     renderApplicationItems()
 
-    await selectApplicationDetailTab('Scale')
+    await selectApplicationDetailTab('Package and scale')
     await userEvent.click(await screen.findByRole('button', { name: 'Delete package' }))
     const confirmation = await screen.findByRole('dialog', {
       name: 'Are you sure you want to delete this package?',
@@ -2651,7 +2656,7 @@ describe.sequential('Provincial Application Detail Actions - items', () => {
       </MemoryRouter>,
     )
 
-    await selectApplicationDetailTab('Scale')
+    await selectApplicationDetailTab('Package and scale')
     await userEvent.click(await screen.findByRole('button', { name: 'Delete package' }))
     const confirmation = await screen.findByRole('dialog', {
       name: 'Are you sure you want to delete this package?',
@@ -2692,7 +2697,7 @@ describe.sequential('Provincial Application Detail Actions - items', () => {
       </MemoryRouter>,
     )
 
-    await selectApplicationDetailTab('Scale')
+    await selectApplicationDetailTab('Package and scale')
     await waitFor(() => {
       expect(screen.getByRole('button', { name: 'Edit package' })).toBeDisabled()
       expect(screen.queryByRole('button', { name: 'Delete package' })).not.toBeInTheDocument()
@@ -2766,7 +2771,7 @@ describe.sequential('Provincial Application Detail Actions - items', () => {
       </MemoryRouter>,
     )
 
-    await selectApplicationDetailTab('Scale')
+    await selectApplicationDetailTab('Package and scale')
     await waitFor(() => {
       expect(mockedFetchApplicationPackageDetails).toHaveBeenCalledWith('PKG-1')
     })
@@ -2905,7 +2910,7 @@ describe.sequential('Provincial Application Detail Actions - items', () => {
       </MemoryRouter>,
     )
 
-    await selectApplicationDetailTab('Scale')
+    await selectApplicationDetailTab('Package and scale')
     expect(await screen.findByText('TM001')).toBeInTheDocument()
     const detailFetchCountAfterInitialLoad =
       mockedFetchProvincialApplicationDetail.mock.calls.length
@@ -3347,7 +3352,7 @@ describe.sequential('Provincial Application Detail Actions - items', () => {
     expect(mockedAddApplicationScaleToPackage).not.toHaveBeenCalled()
   })
 
-  it('warns once before saving summary when package volumes do not consume application volume', async () => {
+  it('warns in the confirmation when package volumes do not consume the application volume', async () => {
     mockedCheckApplicationVolumeUsage.mockResolvedValue({ volumeUsed: false })
     const visibleRects = vi
       .spyOn(HTMLElement.prototype, 'getClientRects')
@@ -3373,14 +3378,15 @@ describe.sequential('Provincial Application Detail Actions - items', () => {
     })
     await userEvent.click(itemDetails.getByRole('button', { name: 'Save changes' }))
 
-    const warning = await screen.findByText(
-      'The sum of package volumes is less than the total application volume. Review package volumes or save again to continue.',
-    )
-    // The warning takes focus from the Save button the check disabled.
-    await waitFor(() => expect(warning.closest('.app-inline-notification')).toHaveFocus())
+    const dialog = await screen.findByRole('dialog', { name: 'Confirm application details' })
+    expect(
+      within(dialog).getByText(
+        'The sum of the package volume is less than the total application volume.',
+      ),
+    ).toBeVisible()
     expect(mockedUpdateApplicationSummary).not.toHaveBeenCalled()
 
-    await userEvent.click(itemDetails.getByRole('button', { name: 'Save changes' }))
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Save changes' }))
 
     await waitFor(() => {
       expect(mockedUpdateApplicationSummary).toHaveBeenCalledTimes(1)
@@ -3524,7 +3530,7 @@ describe.sequential('Provincial Application Detail Actions - items', () => {
       },
     ])
     renderApplicationItems()
-    await selectApplicationDetailTab('Scale')
+    await selectApplicationDetailTab('Package and scale')
 
     const lockedRow = (await screen.findByText('TM-DONE')).closest('tr') as HTMLElement
     const openRow = screen.getByText('TM-OPEN').closest('tr') as HTMLElement
@@ -3551,7 +3557,7 @@ describe.sequential('Provincial Application Detail Actions - items', () => {
       },
     ])
     renderApplicationItems()
-    await selectApplicationDetailTab('Scale')
+    await selectApplicationDetailTab('Package and scale')
 
     expect(await screen.findByText('TM-DONE')).toBeInTheDocument()
     expect(screen.queryByRole('columnheader', { name: 'Actions' })).not.toBeInTheDocument()
@@ -3561,7 +3567,7 @@ describe.sequential('Provincial Application Detail Actions - items', () => {
   it('explains a refused scale delete as a possible completed permit', async () => {
     mockedDeleteApplicationScale.mockResolvedValueOnce({ success: false })
     renderApplicationItems()
-    await selectApplicationDetailTab('Scale')
+    await selectApplicationDetailTab('Package and scale')
 
     const row = (await screen.findByText('TM001')).closest('tr') as HTMLElement
     await userEvent.click(within(row).getByRole('button', { name: /^Delete scale / }))
@@ -3586,7 +3592,7 @@ describe.sequential('Provincial Application Detail Actions - items', () => {
     async (status) => {
       mockedDeleteApplicationScale.mockRejectedValueOnce(axiosStatusError(status))
       renderApplicationItems()
-      await selectApplicationDetailTab('Scale')
+      await selectApplicationDetailTab('Package and scale')
 
       const row = (await screen.findByText('TM001')).closest('tr') as HTMLElement
       await userEvent.click(within(row).getByRole('button', { name: /^Delete scale / }))
@@ -3611,7 +3617,7 @@ describe.sequential('Provincial Application Detail Actions - items', () => {
       mockedFetchApplicationPackageScales.mockResolvedValue([])
       mockedDeleteApplicationPackage.mockRejectedValueOnce(axiosStatusError(status))
       renderApplicationItems()
-      await selectApplicationDetailTab('Scale')
+      await selectApplicationDetailTab('Package and scale')
 
       await userEvent.click(await screen.findByRole('button', { name: 'Delete package' }))
       const confirmation = await screen.findByRole('dialog', {
@@ -3631,7 +3637,7 @@ describe.sequential('Provincial Application Detail Actions - items', () => {
 
   it('names each scale row Delete button by its scale', async () => {
     renderApplicationItems()
-    await selectApplicationDetailTab('Scale')
+    await selectApplicationDetailTab('Package and scale')
 
     const row = (await screen.findByText('TM001')).closest('tr') as HTMLElement
     expect(
@@ -3680,7 +3686,7 @@ describe.sequential('Provincial Application Detail Actions - items', () => {
       },
     ])
     renderApplicationItems()
-    await selectApplicationDetailTab('Scale')
+    await selectApplicationDetailTab('Package and scale')
 
     expect(await screen.findByRole('button', { name: 'Edit package' })).toBeInTheDocument()
     expect(await screen.findByText('TM001')).toBeInTheDocument()
@@ -3691,7 +3697,7 @@ describe.sequential('Provincial Application Detail Actions - items', () => {
   it('offers Delete package when the package has no scales', async () => {
     mockedFetchApplicationPackageScales.mockResolvedValue([])
     renderApplicationItems()
-    await selectApplicationDetailTab('Scale')
+    await selectApplicationDetailTab('Package and scale')
 
     expect(await screen.findByRole('button', { name: 'Delete package' })).toBeInTheDocument()
   })

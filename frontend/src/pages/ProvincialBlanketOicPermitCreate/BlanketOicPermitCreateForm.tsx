@@ -175,7 +175,7 @@ const FORM_TABS = [
       'otherPortOfExport',
     ],
   },
-  { label: 'Scale', icon: Box, fields: [] },
+  { label: 'Package and scale', icon: Box, fields: [] },
   { label: 'Documents', icon: DocumentAttachment, fields: [] },
   { label: 'Fees', icon: Currency, fields: [] },
 ] as const
@@ -943,7 +943,7 @@ const BlanketOicPermitCreateForm = ({
         <InlineNotification
           kind="info"
           title="The permit number is assigned when you save."
-          subtitle="Scale, Documents and Fees can be added after that."
+          subtitle="Package and scale, Documents and Fees can be added after that."
           lowContrast
           hideCloseButton
         />

@@ -17,7 +17,7 @@ import reverseLogo from '@/assets/gov-bc-logo-horiz.png'
 import landingImage from '@/assets/landing.jpg'
 
 const EXPORT_OFFICE_CONTACTS = [
-  { region: 'Coast', email: 'Provincial.Log.Export.Analyst@gov.bc.ca' },
+  { region: 'Coast and MFPR', email: 'Provincial.Log.Export.Analyst@gov.bc.ca' },
   { region: 'North', email: 'NorthAreaExportScaling@gov.bc.ca' },
   { region: 'South', email: 'Export.Applications@gov.bc.ca' },
 ] as const

@@ -115,7 +115,7 @@ fills in, with these differences:
 - **Client** is a search. Type at least three characters of the name,
   acronym or client number.
 - Tick **I'm an agent** to add **Agent information** for a different client.
-- Choose the harvest **Region** before entering the **Scale** details.
+- Choose the harvest **Region** before entering the **Advertising details**.
   It determines the species and end uses available. Enter **Average log
   volume (m³)** with a decimal point, for example `1.2`.
 - **Advertising list date** also offers today's date, when today is a list
@@ -134,7 +134,7 @@ Approver can upload applications only for their regions. No email is sent.
 ### Change an application
 
 Select the edit button on the **Applicant details**, **Application
-details** or **Scale details** card.
+details** or **Advertising details** card.
 
 - A **New** application can be changed at any time.
 - An **Approved** application can be changed until six days after its list
@@ -142,6 +142,10 @@ details** or **Scale details** card.
 - **Pending**, **Rejected**, **Withdrawn** and **Expired** applications
   can't be changed.
 - The owner client can't be changed once the application is saved.
+- If the application volume is larger than the package volumes together,
+  saving opens **Confirm application details** with the warning "The sum of
+  the package volume is less than the total application volume." Select
+  **Save changes** to save anyway.
 
 After the details lock, you can still change the agent on an application
 that is on a Ministerial or Blanket OIC permit, while each of its permits is
@@ -151,7 +155,7 @@ Active or Payment pending.
 <!-- roles: administrator, application-approver, exemption-approver -->
 ### Packages and the summary of scale
 
-On the **Scale** tab, choose a package in **Selected package**. Its card
+On the **Package and scale** tab, choose a package in **Selected package**. Its card
 shows **Comments**, or a dash when empty, and its **Summary of scale**.
 <!-- /roles -->
 

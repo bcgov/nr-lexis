@@ -39,7 +39,7 @@ type FieldGroup = {
 const scaleLinesLabel = (count: number | undefined): string =>
   typeof count === 'number' ? `${count} ${count === 1 ? 'line' : 'lines'}` : ''
 
-// Groups and labels follow the application's Applicant, Application and Scale tabs.
+// Groups and labels follow the application's Applicant, Application and Package and scale tabs.
 const applicationFieldGroups = (
   summary: LexisXmlSubmissionSummary,
   labels: SubmissionSummaryLabels,
