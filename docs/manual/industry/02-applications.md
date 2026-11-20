@@ -197,6 +197,9 @@ results show each application's status, owner and agent client numbers,
 volume, exemption number, list date and region. Select the application
 number to open it, or the exemption number to open its exemption.
 
+An application in an exemption shows its **Exemption number** under its
+title. Select the number to open the exemption.
+
 ### See the offers on an application
 
 The **Offers** tab on an application lists the company name and the date and

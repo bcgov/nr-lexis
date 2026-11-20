@@ -52,7 +52,7 @@ import {
   Stamp,
 } from '@carbon/icons-react'
 import { AddDocument } from '@carbon/pictograms-react'
-import { useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom'
+import { Link, useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import EmptyState from '@/components/EmptyState'
 import DetailBreadcrumb from '@/components/DetailBreadcrumb'
 import DetailCardTitle from '@/components/DetailCardTitle'
@@ -85,7 +85,9 @@ import { displayValue } from '@/pages/shared/detail-page-utils'
 import {
   applicationSearchReturnTo,
   landingPageReturnTo,
+  locationPath,
   readDetailReturnTo,
+  withDetailReturnTo,
 } from '@/pages/shared/detail-navigation'
 import {
   fetchProvincialApplicationDetail,
@@ -4180,7 +4182,29 @@ const ProvincialApplicationDetailsPage = () => {
           }`.trim()}
           focusTitle={createdTitleFocusLatchedRef.current || 'whenFocusLost'}
           subtitle={
-            detail && detailMatchesRoute ? `Author: ${displayValueText(detail.author)}` : undefined
+            detail && detailMatchesRoute ? (
+              <span className="application-header-facts">
+                <span>Author: {displayValueText(detail.author)}</span>
+                {detail.exemptionNumber ? (
+                  <span>
+                    Exemption number:{' '}
+                    <Link
+                      to={`/provincial/exemption/${encodeURIComponent(detail.exemptionNumber)}`}
+                      state={withDetailReturnTo(
+                        location.state,
+                        {
+                          label: `Application ${detail.applicationNumber}`,
+                          to: locationPath(location),
+                        },
+                        detailReturnTo,
+                      )}
+                    >
+                      {detail.exemptionNumber}
+                    </Link>
+                  </span>
+                ) : null}
+              </span>
+            ) : undefined
           }
           status={
             detail && detailMatchesRoute ? (

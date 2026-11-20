@@ -7,7 +7,9 @@ import {
   Route,
   RouterProvider,
   Routes,
+  useLocation,
 } from 'react-router-dom'
+import { readDetailReturnTo } from '@/pages/shared/detail-navigation'
 import type { ProvincialApplicationDetail } from '@/interfaces/LexisDetails'
 import { beforeEach, describe, expect, it, onTestFinished, vi } from 'vitest'
 import {
@@ -106,6 +108,46 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
         name: 'Application highlights',
       }),
     ).not.toBeInTheDocument()
+  })
+
+  it('links the exemption number in the header to its exemption', async () => {
+    const ExemptionReturnLabel = () => {
+      const location = useLocation()
+      return <p>Return to {readDetailReturnTo(location.state)?.label}</p>
+    }
+    render(
+      <MemoryRouter initialEntries={['/provincial/application/321']}>
+        <Routes>
+          <Route
+            path="/provincial/application/:applicationNumber"
+            element={<ProvincialApplicationDetailsPage />}
+          />
+          <Route path="/provincial/exemption/:exemptionNumber" element={<ExemptionReturnLabel />} />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    const pageHeading = await screen.findByRole('heading', { level: 1, name: 'Application 321' })
+    const pageHeader = pageHeading.closest('.lexis-page-header') as HTMLElement
+    const exemptionLink = within(pageHeader).getByRole('link', { name: 'EX-555' })
+    expect(exemptionLink).toHaveAttribute('href', '/provincial/exemption/EX-555')
+    expect(within(pageHeader).getByText('Exemption number:', { exact: false })).toBeVisible()
+
+    await userEvent.click(exemptionLink)
+    expect(await screen.findByText('Return to Application 321')).toBeInTheDocument()
+  })
+
+  it('shows no exemption number in the header when the application has none', async () => {
+    mockedFetchProvincialApplicationDetail.mockResolvedValue({
+      ...applicationDetail,
+      exemptionNumber: null,
+    })
+    renderApplicationDetailPage()
+
+    const pageHeading = await screen.findByRole('heading', { level: 1, name: 'Application 321' })
+    const pageHeader = pageHeading.closest('.lexis-page-header') as HTMLElement
+    expect(within(pageHeader).getByText('Author: idir\\application-author')).toBeInTheDocument()
+    expect(within(pageHeader).queryByText(/Exemption number/)).not.toBeInTheDocument()
   })
 
   it('opens the application summary in view mode without repeating the application number', async () => {
@@ -1815,7 +1857,7 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
     ).toBeInTheDocument()
     expect(within(summaryTile).queryByText('Exemption number')).not.toBeInTheDocument()
     expect(within(summaryTile).queryByText('Jurisdiction')).not.toBeInTheDocument()
-    expect(screen.queryByText('EX-555')).not.toBeInTheDocument()
+    expect(within(summaryTile).queryByText('EX-555')).not.toBeInTheDocument()
     expect(screen.queryByRole('heading', { name: 'Permits' })).not.toBeInTheDocument()
     expect(mockedFetchProvincialExemptionDetail).not.toHaveBeenCalled()
     expect(within(summaryTile).getByText('Jan 1, 2026')).toBeInTheDocument()
