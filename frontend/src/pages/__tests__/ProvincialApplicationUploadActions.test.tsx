@@ -307,8 +307,10 @@ describe('Upload applications', () => {
 
     await addFiles(new File(['zip'], 'test-2026-10-20.zip', { type: 'application/zip' }))
 
-    expect(await screen.findByText('1 file failed validation')).toBeVisible()
-    expect(screen.getByText('Correct the file and add it again.')).toBeVisible()
+    expect(await screen.findByText("1 file can't be created")).toBeVisible()
+    expect(
+      screen.getByText('Correct the issues listed below in your files, then add them again.'),
+    ).toBeVisible()
 
     await userEvent.click(reviewButton())
 
@@ -327,8 +329,10 @@ describe('Upload applications', () => {
         'No files are ready for review. Correct the failed files and add them again.',
       ),
     ).not.toBeInTheDocument()
-    expect(await screen.findByText('3 files failed validation')).toBeVisible()
-    expect(screen.getByText('Correct the files and add them again.')).toBeVisible()
+    expect(await screen.findByText("3 files can't be created")).toBeVisible()
+    expect(
+      screen.getByText('Correct the issues listed below in your files, then add them again.'),
+    ).toBeVisible()
   })
 
   it('keeps only the latest result when a file is added again under the same name', async () => {

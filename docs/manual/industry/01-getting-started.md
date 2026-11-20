@@ -16,7 +16,7 @@ Email the export office for the region where the logs are harvested:
 
 | Region | Email |
 |---|---|
-| Coast | Provincial.Log.Export.Analyst@gov.bc.ca |
+| Coast and MFPR | Provincial.Log.Export.Analyst@gov.bc.ca |
 | North | NorthAreaExportScaling@gov.bc.ca |
 | South | Export.Applications@gov.bc.ca |
 

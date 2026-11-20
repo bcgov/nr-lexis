@@ -28,7 +28,7 @@ notify the applicant. Completing a permit creates its invoice.
 | **Provincial › Exemption search** | Open the exemption to start a new permit. | <!-- roles: administrator, application-approver -->
 
 A permit record has these tabs: **Permit**, **Applicant**, **Shipping**,
-**Scale**, **Documents**, **Fees** and, once the permit has invoice
+**Package and scale**, **Documents**, **Fees** and, once the permit has invoice
 history, **GBMS**.
 
 ## Common tasks
@@ -56,7 +56,7 @@ permit**.
 - **Blanket OIC**: select **Continue** and fill in the **Apply for new
   permit** form. Staff choose the owner with the **Client** search and can
   set the submit, issued and expiry dates. Packages and scale are added on
-  the saved permit's **Scale** tab.
+  the saved permit's **Package and scale** tab.
 
 A permit can't be deleted once it is created.
 
@@ -69,7 +69,7 @@ Open the permit and check each tab.
 | **Permit** | The exemption, the region, the applications on the permit, **Current permit pieces** and **Current permit volume (m³)** against **Total volume remaining (m³)**. For a Blanket OIC, the request pieces and volume. |
 | **Applicant** | The owner and agent. The **Client location** decides where the invoice goes. |
 | **Shipping** | Purchaser, final destination country, transport, estimated shipping date and customs port of export. |
-| **Scale** | Each package and its summary of scale. |
+| **Package and scale** | Each package and its summary of scale. |
 | **Documents** | The documents your office requires. |
 | **Fees** | The fee for each scale line and the totals. |
 

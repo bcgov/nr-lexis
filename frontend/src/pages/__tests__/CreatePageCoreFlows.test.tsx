@@ -319,7 +319,7 @@ describe('Create Page Core Flows', () => {
       </MemoryRouter>,
     )
 
-    for (const tabName of ['Applicant', 'Application', 'Scale']) {
+    for (const tabName of ['Applicant', 'Application', 'Package and scale']) {
       await selectApplicationCreateTab(tabName)
       const panelRegion = screen.getByRole('region', { name: tabName })
       expect(panelRegion).toBeVisible()
@@ -380,7 +380,7 @@ describe('Create Page Core Flows', () => {
     for (const tabName of [
       'Applicant',
       'Application',
-      'Scale',
+      'Package and scale',
       'Documents',
       'Remarks',
       'Offers',
@@ -475,8 +475,8 @@ describe('Create Page Core Flows', () => {
       </MemoryRouter>,
     )
 
-    await selectApplicationCreateTab('Scale')
-    expect(screen.getByRole('region', { name: 'Scale' })).toBeVisible()
+    await selectApplicationCreateTab('Package and scale')
+    expect(screen.getByRole('region', { name: 'Package and scale' })).toBeVisible()
     expect(screen.getByText('Total pieces')).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: /Create package/i })).not.toBeInTheDocument()
     expect(screen.queryByRole('combobox', { name: 'Selected package' })).not.toBeInTheDocument()
@@ -506,7 +506,7 @@ describe('Create Page Core Flows', () => {
       </MemoryRouter>,
     )
 
-    await selectApplicationCreateTab('Scale')
+    await selectApplicationCreateTab('Package and scale')
     const species = await screen.findByRole('combobox', { name: /^Species list/ })
     expect(species).toHaveAttribute('aria-required', 'true')
     await waitFor(() => expect(species).toBeEnabled())
@@ -541,7 +541,7 @@ describe('Create Page Core Flows', () => {
         </Routes>
       </MemoryRouter>,
     )
-    await selectApplicationCreateTab('Scale')
+    await selectApplicationCreateTab('Package and scale')
     const species = await screen.findByRole('combobox', { name: /^Species list/ })
     await waitFor(() => expect(species).toBeEnabled())
     await userEvent.click(species)
@@ -581,7 +581,7 @@ describe('Create Page Core Flows', () => {
         </Routes>
       </MemoryRouter>,
     )
-    await selectApplicationCreateTab('Scale')
+    await selectApplicationCreateTab('Package and scale')
     const species = await screen.findByRole('combobox', { name: /^Species list/ })
     await waitFor(() => expect(species).toBeEnabled())
     await userEvent.click(species)
@@ -645,9 +645,11 @@ describe('Create Page Core Flows', () => {
     ).not.toBeInTheDocument()
     expect(mockedSubmitProvincialApplicationCreate).not.toHaveBeenCalled()
 
-    await selectApplicationCreateTab('Scale')
-    const scaleTab = screen.getByRole('tab', { name: /^Scale, \d+ required fields? outstanding$/ })
-    const scale = screen.getByRole('region', { name: 'Scale' })
+    await selectApplicationCreateTab('Package and scale')
+    const scaleTab = screen.getByRole('tab', {
+      name: /^Package and scale, \d+ required fields? outstanding$/,
+    })
+    const scale = screen.getByRole('region', { name: 'Package and scale' })
     expect(scale.querySelectorAll('.cds--form-requirement')).toHaveLength(
       Number(scaleTab.textContent?.replace(/\D/g, '')),
     )
@@ -670,9 +672,11 @@ describe('Create Page Core Flows', () => {
     await userEvent.click(saveButton)
     await screen.findByText('Cannot save yet.')
 
-    await selectApplicationCreateTab('Scale')
-    const scaleTab = screen.getByRole('tab', { name: /^Scale, \d+ required fields? outstanding$/ })
-    const scale = screen.getByRole('region', { name: 'Scale' })
+    await selectApplicationCreateTab('Package and scale')
+    const scaleTab = screen.getByRole('tab', {
+      name: /^Package and scale, \d+ required fields? outstanding$/,
+    })
+    const scale = screen.getByRole('region', { name: 'Package and scale' })
     expect(scale.querySelectorAll('.cds--form-requirement')).toHaveLength(
       Number(scaleTab.textContent?.replace(/\D/g, '')),
     )
@@ -708,7 +712,7 @@ describe('Create Page Core Flows', () => {
       name: /^Application, \d+ required fields? outstanding$/,
     })
     expect(
-      screen.getByRole('tab', { name: /^Scale, \d+ required fields? outstanding$/ }),
+      screen.getByRole('tab', { name: /^Package and scale, \d+ required fields? outstanding$/ }),
     ).toBeVisible()
     expect(applicationTab).toHaveAttribute('aria-selected', 'true')
     expect(mockedSubmitProvincialApplicationCreate).not.toHaveBeenCalled()
@@ -988,7 +992,7 @@ describe('Create Page Core Flows', () => {
     })
 
     await chooseComboBoxOption(regionComboBox, 'West Coast Natural Resource Region')
-    await selectApplicationCreateTab('Scale')
+    await selectApplicationCreateTab('Package and scale')
     await chooseComboBoxOption(
       screen.getByRole('combobox', { name: /^Species list/ }),
       'HE - Hemlock',
@@ -1036,7 +1040,7 @@ describe('Create Page Core Flows', () => {
     expect(screen.getAllByRole('tab').map((tab) => tab.textContent)).toEqual([
       'Applicant',
       'Application',
-      'Scale',
+      'Package and scale',
       'Documents',
       'Remarks',
       'Offers',
@@ -1322,7 +1326,7 @@ describe('Create Page Core Flows', () => {
       await waitForApplicationCreateLoads('Applicant client details')
       await userEvent.click(saveButton)
       const feedback = await screen.findByRole('status')
-      expect(feedback).toHaveTextContent('Applicant, Application and Scale tabs')
+      expect(feedback).toHaveTextContent('Applicant, Application and Package and scale tabs')
       await waitFor(() => expect(feedback).toHaveFocus())
 
       const contact = screen.getByRole('textbox', { name: 'Contact name' })
@@ -1335,7 +1339,7 @@ describe('Create Page Core Flows', () => {
         expect(contact).toHaveValue('test'.slice(0, index + 1))
         expect(contact).toHaveFocus()
       }
-      expect(feedback).toHaveTextContent('Application and Scale tabs')
+      expect(feedback).toHaveTextContent('Application and Package and scale tabs')
       expect(feedback).not.toHaveTextContent('Applicant')
     } finally {
       visibleRects.mockRestore()
@@ -1639,7 +1643,7 @@ describe('Create Page Core Flows', () => {
         'Contact name contains unsupported characters. Use unaccented letters, numbers, spaces, or standard punctuation.',
       ),
     ).not.toHaveLength(0)
-    await selectApplicationCreateTab('Scale')
+    await selectApplicationCreateTab('Package and scale')
     const locationOfLogs = screen.getByRole('textbox', { name: 'Location of logs' })
     expect(locationOfLogs).toHaveAttribute('maxlength', '250')
     expect(
@@ -1654,7 +1658,7 @@ describe('Create Page Core Flows', () => {
     fireEvent.change(screen.getByRole('textbox', { name: 'Contact name' }), {
       target: { value: 'O'.repeat(120) },
     })
-    await selectApplicationCreateTab('Scale')
+    await selectApplicationCreateTab('Package and scale')
     fireEvent.change(screen.getByRole('textbox', { name: 'Location of logs' }), {
       target: { value: 'L'.repeat(250) },
     })
@@ -2366,7 +2370,7 @@ describe('Create Page Core Flows', () => {
       </MemoryRouter>,
     )
 
-    await selectApplicationCreateTab('Scale')
+    await selectApplicationCreateTab('Package and scale')
     expect(await screen.findByRole('textbox', { name: 'Application volume (m³)' })).toHaveValue(
       '0.0',
     )
@@ -2468,7 +2472,7 @@ describe('Create Page Core Flows', () => {
     await selectApplicationCreateTab('Application')
     const productType = await screen.findByRole('combobox', { name: 'Product type' })
     await waitFor(() => expect(productType).toHaveValue('Harvested Timber'))
-    await selectApplicationCreateTab('Scale')
+    await selectApplicationCreateTab('Package and scale')
     await waitFor(() => expectScaleFields(true))
 
     await selectApplicationCreateTab('Application')
@@ -2476,12 +2480,12 @@ describe('Create Page Core Flows', () => {
       screen.getByRole('combobox', { name: 'Product type' }),
       'Standing Timber',
     )
-    await selectApplicationCreateTab('Scale')
+    await selectApplicationCreateTab('Package and scale')
     expectScaleFields(false)
 
     await selectApplicationCreateTab('Application')
     await chooseComboBoxOption(screen.getByRole('combobox', { name: 'Product type' }), 'Timber')
-    await selectApplicationCreateTab('Scale')
+    await selectApplicationCreateTab('Package and scale')
     expectScaleFields(false)
   })
 

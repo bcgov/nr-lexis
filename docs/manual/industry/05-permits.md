@@ -43,7 +43,7 @@ you have just started, use **My permits** on the Summary page or the
 exemption's **Permits** tab.
 
 A permit record has these tabs: **Permit**, **Applicant**, **Shipping**,
-**Scale**, **Documents**, **Fees** and, once the permit has been invoiced,
+**Package and scale**, **Documents**, **Fees** and, once the permit has been invoiced,
 **GBMS**.
 
 ## Common tasks
@@ -77,7 +77,7 @@ A permit record has these tabs: **Permit**, **Applicant**, **Shipping**,
    empty, LEXIS names the tabs to complete and shows on each tab how many
    fields it still needs. After this first save, each tab has its own
    **Edit** and **Save changes**.
-7. On the **Scale** tab, check each package's **Summary of scale**. To leave
+7. On the **Package and scale** tab, check each package's **Summary of scale**. To leave
    a scale line off this permit, select **Edit scale selection**, clear its
    **Include in permit** tick and save.
 8. Add any documents the export office needs on the **Documents** tab.
@@ -89,7 +89,7 @@ A permit record has these tabs: **Permit**, **Applicant**, **Shipping**,
 
 An application can go on a permit only if it has a package with a summary
 of scale that isn't already on another permit. If it has none, open the
-application, add the package and scale on its **Scale** tab (see
+application, add the package and scale on its **Package and scale** tab (see
 [Applications](02-applications.md#add-packages-and-the-summary-of-scale)),
 then come back to the permit. The **Exemption number** on the **Permit** tab
 links back to the exemption, and each application number links to its
@@ -117,7 +117,7 @@ automatically.
 
 ![Apply for new permit against a Blanket OIC exemption](images/05-boic-permit-create.png)
 
-Then add what is being shipped, on the saved permit's **Scale** tab:
+Then add what is being shipped, on the saved permit's **Package and scale** tab:
 
 1. Select **Create package** and enter the **Package number** (unique, up
    to 20 characters), **Species list**, **End use**, **Age class**, **Volume

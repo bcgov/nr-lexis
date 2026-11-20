@@ -20,6 +20,8 @@ type ApplicationAccuracyConfirmationProps = {
   errorTitle?: string
   errorMessage?: string
   warningMessage?: string
+  /** Staff saving their own entries skip the accuracy checkbox; the dialog then only warns. */
+  accuracyRequired?: boolean
   onError?: (error: unknown) => void
 }
 
@@ -36,6 +38,7 @@ const ApplicationAccuracyConfirmation = ({
   errorMessage,
   errorTitle,
   warningMessage,
+  accuracyRequired = true,
 }: ApplicationAccuracyConfirmationProps) => {
   const checkboxId = `application-accuracy-${useId().replaceAll(':', '')}`
   const [showConfirmationError, setShowConfirmationError] = useState(false)
@@ -43,7 +46,7 @@ const ApplicationAccuracyConfirmation = ({
   // Save stays enabled; without the tick it shows the error on the checkbox and keeps the dialog.
   const confirm = async (): Promise<boolean | void> => {
     if (busy) return false
-    if (!confirmed) {
+    if (accuracyRequired && !confirmed) {
       setShowConfirmationError(true)
       document.getElementById(checkboxId)?.focus()
       return false
@@ -58,7 +61,7 @@ const ApplicationAccuracyConfirmation = ({
       confirmLabel={confirmLabel}
       pendingLabel={pendingLabel}
       confirmDisabled={busy}
-      initialFocusSelector={`#${checkboxId}`}
+      initialFocusSelector={accuracyRequired ? `#${checkboxId}` : undefined}
       onConfirm={confirm}
       onClose={onClose}
       onError={onError}
@@ -66,27 +69,23 @@ const ApplicationAccuracyConfirmation = ({
       errorTitle={errorTitle}
     >
       {warningMessage && (
-        <AppNotification
-          focusOnReveal
-          revealKey={warningMessage}
-          kind="warning"
-          title="Review package volumes"
-          subtitle={warningMessage}
+        <AppNotification kind="warning" title="Warning" subtitle={warningMessage} />
+      )}
+      {accuracyRequired && (
+        <Checkbox
+          id={checkboxId}
+          labelText={requiredLabel(APPLICATION_ACCURACY_LABEL)}
+          aria-required="true"
+          checked={confirmed}
+          disabled={busy}
+          invalid={showConfirmationError && !confirmed}
+          invalidText={fieldErrorText(APPLICATION_ACCURACY_ERROR)}
+          onChange={(_, { checked }) => {
+            setShowConfirmationError(false)
+            onConfirmedChange(Boolean(checked))
+          }}
         />
       )}
-      <Checkbox
-        id={checkboxId}
-        labelText={requiredLabel(APPLICATION_ACCURACY_LABEL)}
-        aria-required="true"
-        checked={confirmed}
-        disabled={busy}
-        invalid={showConfirmationError && !confirmed}
-        invalidText={fieldErrorText(APPLICATION_ACCURACY_ERROR)}
-        onChange={(_, { checked }) => {
-          setShowConfirmationError(false)
-          onConfirmedChange(Boolean(checked))
-        }}
-      />
     </ConfirmationModal>
   )
 }

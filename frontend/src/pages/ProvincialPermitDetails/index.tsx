@@ -423,7 +423,7 @@ const PERMIT_DETAIL_TABS = [
   { id: 'permit', label: 'Permit', icon: Certificate },
   { id: 'owner', label: 'Applicant', icon: Enterprise },
   { id: 'shipping', label: 'Shipping', icon: EarthFilled },
-  { id: 'items', label: 'Scale', icon: Box },
+  { id: 'items', label: 'Package and scale', icon: Box },
   { id: 'documents', label: 'Documents', icon: DocumentAttachment },
   { id: 'fees', label: 'Fees', icon: Currency },
   { id: 'gbms', label: 'GBMS', icon: Receipt },

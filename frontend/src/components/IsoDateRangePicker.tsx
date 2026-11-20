@@ -164,6 +164,14 @@ export default function IsoDateRangePicker({
         }}
         onOpen={(_dates, _text, calendar) => {
           calendarOpenRef.current = true
+          // Carbon anchors range calendars to From; this one opens under the field in use.
+          const anchor =
+            document.activeElement instanceof HTMLInputElement && document.activeElement.id === toId
+              ? document.activeElement
+              : calendar._input
+          calendar._positionElement = anchor
+          // flatpickr places the calendar after onOpen.
+          queueMicrotask(() => calendar._positionCalendar(anchor))
           removeCalendarListenersRef.current?.()
           const element = calendar.calendarContainer
           const calendarGesture = (event: Event) => {

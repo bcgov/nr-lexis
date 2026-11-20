@@ -43,13 +43,13 @@ import {
   Add,
   Box,
   Chat,
-  ContainerRegistry,
   DataDefinition,
   DocumentAttachment,
   Edit,
   Enterprise,
   Result,
   Stamp,
+  Tree,
 } from '@carbon/icons-react'
 import { AddDocument } from '@carbon/pictograms-react'
 import { useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom'
@@ -226,18 +226,15 @@ type ApplicationActionResult = ActionResult & {
   createdFor?: string
   /** Section results render beside their controls instead of the page header. */
   source?: 'items' | 'documents' | 'remarks' | ApplicationEditSection
-  /** Prompts a second save; any change to the summary draft makes it stale. */
-  volumeWarning?: boolean
 }
 
-const withoutVolumeWarning = (
-  current: ApplicationActionResult | null,
-): ApplicationActionResult | null => (current?.volumeWarning ? null : current)
+const PACKAGE_VOLUME_WARNING =
+  'The sum of the package volume is less than the total application volume.'
 
 /** Opening or leaving an editor drops prompts about the old draft but keeps committed results. */
 const withoutDraftResult = (
   current: ApplicationActionResult | null,
-): ApplicationActionResult | null => withoutVolumeWarning(withoutActionError(current))
+): ApplicationActionResult | null => withoutActionError(current)
 
 /**
  * Opening a section editor also retires the last save's success notice for the page or an edit
@@ -906,7 +903,7 @@ const ProvincialApplicationDetailsPage = () => {
   const [summaryForm, setSummaryForm] = useState<ApplicationSummaryFormState | null>(null)
   const [summaryBaselineForm, setSummaryBaselineForm] =
     useState<ApplicationSummaryFormState | null>(null)
-  const [summaryVolumeWarningAccepted, setSummaryVolumeWarningAccepted] = useState(false)
+  const [summaryVolumeShortfall, setSummaryVolumeShortfall] = useState(false)
   const [isSavingSummary, setIsSavingSummary] = useState(false)
   const [editingSection, setEditingSection] = useState<ApplicationEditSection | null>(null)
   const isEditingSummary = editingSection === 'summary'
@@ -1988,11 +1985,8 @@ const ProvincialApplicationDetailsPage = () => {
       ? fieldErrorText(summarySaveErrors.errors[field])
       : undefined
   const summarySpeciesCodesError = visibleSummaryFieldError('speciesCodes')
-  // A species change asks again about package volumes.
   const onSummarySpeciesChange = (speciesCodes: string[]) => {
     setSummaryForm((current) => (current ? { ...current, speciesCodes } : current))
-    setSummaryVolumeWarningAccepted(false)
-    setActionResult(withoutVolumeWarning)
   }
   const applicationSpeciesMultiSelectOptions = useMemo(() => {
     const options = applicationSpeciesOptions.map((option) => ({
@@ -2908,8 +2902,6 @@ const ProvincialApplicationDetailsPage = () => {
         const next = { ...current, [key]: value }
         return key === 'applicantTypeCode' ? normalizeSummaryAgentFields(next) : next
       })
-      setSummaryVolumeWarningAccepted(false)
-      setActionResult(withoutVolumeWarning)
     },
     [],
   )
@@ -2940,8 +2932,6 @@ const ProvincialApplicationDetailsPage = () => {
         }
         return normalizeSummaryAgentFields(next)
       })
-      setSummaryVolumeWarningAccepted(false)
-      setActionResult(withoutVolumeWarning)
     },
     [savedAgentClientNumber, summaryBaselineForm],
   )
@@ -2964,7 +2954,6 @@ const ProvincialApplicationDetailsPage = () => {
       }
     })
     setSummarySaveErrors(null)
-    setSummaryVolumeWarningAccepted(false)
     setActionResult(withoutDraftResult)
     setSummaryAccuracyConfirmationOpen(false)
     setSummaryAccuracyConfirmed(false)
@@ -3002,7 +2991,6 @@ const ProvincialApplicationDetailsPage = () => {
       }
     })
     setSummarySaveErrors(null)
-    setSummaryVolumeWarningAccepted(false)
     setActionResult(withoutDraftResult)
     setSummaryAccuracyConfirmationOpen(false)
     setSummaryAccuracyConfirmed(false)
@@ -3028,7 +3016,6 @@ const ProvincialApplicationDetailsPage = () => {
       }
     })
     setSummarySaveErrors(null)
-    setSummaryVolumeWarningAccepted(false)
     setActionResult(withoutDraftResult)
     setSummaryAccuracyConfirmationOpen(false)
     setSummaryAccuracyConfirmed(false)
@@ -3127,24 +3114,6 @@ const ProvincialApplicationDetailsPage = () => {
           return { ...current, ownerClientNumber, agentClientNumber }
         })
 
-        if (
-          (source === 'items' || source === 'summary-items') &&
-          !summaryVolumeWarningAccepted &&
-          !isApplicationExpired
-        ) {
-          if (!isApplicationVolumeUsed(summaryRequestForm.applicationVolume, detail.packages)) {
-            setSummaryVolumeWarningAccepted(true)
-            setActionResult({
-              kind: 'warning',
-              title: 'Review package volumes',
-              message:
-                'The sum of package volumes is less than the total application volume. Review package volumes or save again to continue.',
-              volumeWarning: true,
-            })
-            return false
-          }
-        }
-
         // INTENTIONAL_LEGACY_DIVERGENCE(BCEID_APPLICATION_EDIT_CONTRACT):
         // Save only the application fields rendered for every authorized editor; do not make
         // BCeID edits depend on staff-only review status or remark controls.
@@ -3232,7 +3201,6 @@ const ProvincialApplicationDetailsPage = () => {
           setReviewStatusRemarkBaseline(preservedReviewStatusRemarkBaseline)
         }
         setSummarySaveErrors(null)
-        setSummaryVolumeWarningAccepted(false)
         setActionResult({
           kind: 'success',
           title: APPLICATION_SAVED_TITLE,
@@ -3255,7 +3223,6 @@ const ProvincialApplicationDetailsPage = () => {
       detail,
       editingRemarkId,
       editingSection,
-      isApplicationExpired,
       isSavingSummary,
       loadApplicationDetail,
       remarkBody,
@@ -3267,7 +3234,6 @@ const ProvincialApplicationDetailsPage = () => {
       submitterManagesAgent,
       summaryBaselineForm?.applicantTypeCode,
       summaryForm,
-      summaryVolumeWarningAccepted,
       validateSummarySave,
     ],
   )
@@ -3310,12 +3276,20 @@ const ProvincialApplicationDetailsPage = () => {
         setEditingSection(null)
         return
       }
-      if (!requiresApplicationAccuracyAcknowledgement) {
+      // Legacy warns when the packages hold less than the application volume.
+      const volumeShortfall =
+        (source === 'items' || source === 'summary-items') &&
+        !isApplicationExpired &&
+        !!detail &&
+        !!summaryForm &&
+        !isApplicationVolumeUsed(summaryForm.applicationVolume, detail.packages)
+      if (!requiresApplicationAccuracyAcknowledgement && !volumeShortfall) {
         void completeSummarySave(source)
         return
       }
       setActionResult(null)
       setPendingSummarySaveSource(source)
+      setSummaryVolumeShortfall(volumeShortfall)
       setSummaryAccuracyConfirmed(false)
       setSummaryAccuracyApplicationNumber(applicationNumber ?? null)
       setSummaryAccuracyConfirmationOpen(true)
@@ -3326,18 +3300,31 @@ const ProvincialApplicationDetailsPage = () => {
       summaryFieldsChangedFor,
       applicationNumber,
       completeSummarySave,
+      detail,
+      isApplicationExpired,
       requiresApplicationAccuracyAcknowledgement,
+      summaryForm,
       validateSummarySave,
     ],
   )
 
   const onConfirmSummaryAccuracy = useCallback(async () => {
-    if (!summaryAccuracyConfirmed || isSavingSummary) return
+    if (
+      (requiresApplicationAccuracyAcknowledgement && !summaryAccuracyConfirmed) ||
+      isSavingSummary
+    )
+      return
     const saved = await completeSummarySave(pendingSummarySaveSource, true)
     if (!saved) {
       throw new Error('Application changes were not saved.')
     }
-  }, [completeSummarySave, isSavingSummary, pendingSummarySaveSource, summaryAccuracyConfirmed])
+  }, [
+    completeSummarySave,
+    isSavingSummary,
+    pendingSummarySaveSource,
+    requiresApplicationAccuracyAcknowledgement,
+    summaryAccuracyConfirmed,
+  ])
 
   const onApproveApplication = useCallback(async (): Promise<'saved' | 'partial' | 'failed'> => {
     if (
@@ -3452,7 +3439,6 @@ const ProvincialApplicationDetailsPage = () => {
 
     const preservedSummaryForm = summaryForm
     const preservedSummaryBaselineForm = summaryBaselineForm
-    const preservedSummaryVolumeWarningAccepted = summaryVolumeWarningAccepted
     const preservedSummarySaveErrors = summarySaveErrors
     const preservedRemarkBody = remarkBody
     const preservedEditingRemarkId = editingRemarkId
@@ -3468,7 +3454,6 @@ const ProvincialApplicationDetailsPage = () => {
 
     setSummaryForm(preservedSummaryForm)
     setSummaryBaselineForm(preservedSummaryBaselineForm)
-    setSummaryVolumeWarningAccepted(preservedSummaryVolumeWarningAccepted)
     setSummarySaveErrors(preservedSummarySaveErrors)
     setRemarkBody(preservedRemarkBody)
     setEditingRemarkId(preservedEditingRemarkId)
@@ -3492,7 +3477,6 @@ const ProvincialApplicationDetailsPage = () => {
     summaryBaselineForm,
     summaryForm,
     summarySaveErrors,
-    summaryVolumeWarningAccepted,
   ])
 
   const summaryDirty =
@@ -3543,7 +3527,6 @@ const ProvincialApplicationDetailsPage = () => {
       summaryBaselineForm ??
         (detail ? normalizeSummaryAgentFields(toSummaryFormState(detail)) : null),
     )
-    setSummaryVolumeWarningAccepted(false)
     setEditingSection(null)
     setApplicationItemsEditing(false)
     setIsEditingDocuments(false)
@@ -3635,7 +3618,7 @@ const ProvincialApplicationDetailsPage = () => {
     optionDescription(regionOptions, summaryForm?.orgUnitNumber) ||
     detail?.orgUnitName ||
     String(detail?.orgUnitNumber ?? '')
-  // Read-only Scale details show saved values while the Application editor holds a product change.
+  // Read-only Advertising details show saved values while the Application editor holds a product change.
   const savedScaleForm = summaryBaselineForm ?? summaryForm
   const savedGrowthTypeDescription = optionDescription(
     optionsWithCurrentValue(summaryGrowthTypeOptions, savedScaleForm?.growthTypeCode ?? ''),
@@ -4250,16 +4233,11 @@ const ProvincialApplicationDetailsPage = () => {
 
       {!!pageActionResult &&
         // The remark editor and accuracy confirmation show their own failures.
-        !(
-          summaryAccuracyConfirmationOpen &&
-          (!!actionErrorMessage || pageActionResult.volumeWarning)
-        ) &&
+        !(summaryAccuracyConfirmationOpen && !!actionErrorMessage) &&
         !(isEditingRemarks && !!actionErrorMessage) && (
           <ActionResultNotification
             result={pageActionResult}
             onClose={() => setActionResult(null)}
-            // The warning stops the save, so it takes focus from the Save button it disabled.
-            focusOnReveal={pageActionResult.volumeWarning}
           />
         )}
 
@@ -4347,7 +4325,7 @@ const ProvincialApplicationDetailsPage = () => {
               >
                 <Tab renderIcon={Enterprise}>Applicant</Tab>
                 <Tab renderIcon={Result}>Application</Tab>
-                <Tab renderIcon={Box}>Scale</Tab>
+                <Tab renderIcon={Box}>Package and scale</Tab>
                 <Tab renderIcon={DocumentAttachment}>Documents</Tab>
                 {canViewRemarks && <Tab renderIcon={Chat}>Remarks</Tab>}
                 <Tab renderIcon={DataDefinition}>Offers</Tab>
@@ -4858,12 +4836,12 @@ const ProvincialApplicationDetailsPage = () => {
                             {summaryScaleFieldsChanged && (
                               <section
                                 className="application-product-scale-details"
-                                aria-label="Scale details for changed product type"
+                                aria-label="Advertising details for changed product type"
                               >
-                                <h3 className="detail-section-subtitle">Scale details</h3>
+                                <h3 className="detail-section-subtitle">Advertising details</h3>
                                 <p>
-                                  Review the scale details for the selected product type before
-                                  saving.
+                                  Review the advertising details for the selected product type
+                                  before saving.
                                 </p>
                                 {applicationScaleForm}
                               </section>
@@ -4935,7 +4913,7 @@ const ProvincialApplicationDetailsPage = () => {
                         className="application-detail-section application-detail-summary"
                       >
                         <div className="detail-section-card__header">
-                          <DetailCardTitle icon={ContainerRegistry}>Scale details</DetailCardTitle>
+                          <DetailCardTitle icon={Tree}>Advertising details</DetailCardTitle>
                           {canEditSummary &&
                             summaryForm &&
                             !isEditingSummary &&
@@ -4953,7 +4931,7 @@ const ProvincialApplicationDetailsPage = () => {
                                   )
                                 }
                               >
-                                Edit scale details
+                                Edit advertising details
                               </Button>
                             )}
                         </div>
@@ -5332,7 +5310,8 @@ const ProvincialApplicationDetailsPage = () => {
             onConfirm={onConfirmSummaryAccuracy}
             onClose={closeSummaryAccuracyConfirmation}
             errorMessage={actionErrorMessage}
-            warningMessage={pageActionResult?.volumeWarning ? pageActionResult.message : undefined}
+            warningMessage={summaryVolumeShortfall ? PACKAGE_VOLUME_WARNING : undefined}
+            accuracyRequired={requiresApplicationAccuracyAcknowledgement}
             onError={() => undefined}
           />
         )}

@@ -1778,6 +1778,23 @@ test.describe('FSPTS-aligned LEXIS shell', () => {
         expectSameRow(offerLayout, ['withdrawalFromDate', 'withdrawalToDate'])
       }
     }
+
+    // A range calendar opens under the field in use.
+    await page.setViewportSize({ width: 1440, height: 900 })
+    await gotoSyntheticRoute(page, '/provincial/application', {
+      waitUntil: 'domcontentloaded',
+      ready: page.locator('.provincial-application-search-grid'),
+    })
+    const calendar = page.locator('.flatpickr-calendar.open')
+    for (const name of ['List date to', 'List date from']) {
+      const field = page.getByRole('textbox', { name, exact: true })
+      await field.click()
+      await expect(calendar).toBeVisible()
+      const fieldBox = await field.boundingBox()
+      const calendarBox = await calendar.boundingBox()
+      expect(Math.abs(calendarBox!.x - fieldBox!.x)).toBeLessThanOrEqual(1)
+      await page.keyboard.press('Escape')
+    }
   })
 
   test('uses accessible dark interactions and stable FSPTS table rows', async ({ page }) => {
@@ -1989,8 +2006,8 @@ test.describe('FSPTS-aligned LEXIS shell', () => {
     await expect(page.getByRole('tabpanel', { name: 'Remarks' })).toHaveText(
       'Available after the application is saved.',
     )
-    await page.getByRole('tab', { name: 'Scale' }).click()
-    const scaleSection = page.getByRole('region', { name: 'Scale' })
+    await page.getByRole('tab', { name: 'Package and scale' }).click()
+    const scaleSection = page.getByRole('region', { name: 'Package and scale' })
     await expect(scaleSection).toBeVisible()
     await expect(scaleSection).toHaveCSS('background-color', 'rgb(38, 38, 38)')
   })
@@ -3388,8 +3405,10 @@ test.describe('FSPTS-aligned LEXIS shell', () => {
       buffer: Buffer.from('<InvalidLexisSubmission />', 'utf8'),
     })
 
-    await expect(page.getByText('1 file failed validation')).toBeVisible()
-    await expect(page.getByText('Correct the file and add it again.')).toBeVisible()
+    await expect(page.getByText("1 file can't be created")).toBeVisible()
+    await expect(
+      page.getByText('Correct the issues listed below in your files, then add them again.'),
+    ).toBeVisible()
     await expect(page.locator('.application-upload-file--failed')).toHaveCSS(
       'border-top-color',
       'rgb(179, 32, 1)',
