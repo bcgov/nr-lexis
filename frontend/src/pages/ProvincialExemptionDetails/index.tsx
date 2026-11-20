@@ -1557,14 +1557,18 @@ const ProvincialExemptionDetailsPage = () => {
       setEditContextRefreshing(true)
       setEditContextLoaded(false)
       try {
-        const [nextDetail, nextApplications, nextContext] = await Promise.all([
-          fetchProvincialExemptionDetail(exemptionNumber),
-          fetchExemptionApplications(exemptionNumber),
-          fetchExemptionEditContext(exemptionNumber),
-        ])
+        const nextDetail = await fetchProvincialExemptionDetail(exemptionNumber)
         if (!nextDetail) {
           throw new Error('Exemption detail was not found after mutation.')
         }
+        // Read after the detail's record version, so none of them is older than it.
+        const [[nextApplications, nextContext]] = await Promise.all([
+          Promise.all([
+            fetchExemptionApplications(exemptionNumber),
+            fetchExemptionEditContext(exemptionNumber),
+          ]),
+          refreshPermitData(nextDetail.exemptionNumber),
+        ])
         setDetail(nextDetail)
         setApplications(nextApplications.applications)
         setExemptionHolder(nextApplications.ownerNumber)
@@ -1573,7 +1577,6 @@ const ProvincialExemptionDetailsPage = () => {
         setEditContext(nextContext)
         setEditContextLoaded(true)
         setEditForm(toEditForm(nextDetail, nextContext))
-        await refreshPermitData(nextDetail.exemptionNumber)
       } catch (error) {
         if (!preserveCurrentStateOnFailure) {
           setApplications([])
@@ -1624,6 +1627,7 @@ const ProvincialExemptionDetailsPage = () => {
             feeRate: editForm.feeRate,
           }
         : editForm
+    let refreshingAfterSave = false
     try {
       const nextExemptionNumber =
         currentTypeCode === 'O' && canEditSummaryFields
@@ -1711,26 +1715,27 @@ const ProvincialExemptionDetailsPage = () => {
       setDetail(committedDetail)
       setEditContext(committedContext)
       setEditForm(toEditForm(committedDetail, committedContext))
-      try {
-        await refreshEditableData()
-        setActionResult({
-          source: resultSource,
-          kind: 'success',
-          title: resultSource === 'fees' ? 'Fees saved.' : 'Exemption details saved.',
-          message: '',
+      setActionResult({
+        source: resultSource,
+        kind: 'success',
+        title: resultSource === 'fees' ? 'Fees saved.' : 'Exemption details saved.',
+        message: '',
+      })
+      // The page stays busy until the refresh settles; only the notice shows early.
+      refreshingAfterSave = true
+      void refreshEditableData()
+        .catch((refreshError: unknown) => {
+          console.error(refreshError)
+          setApplicationsErrorMessage(
+            'Application links changed, but the current links could not be refreshed. Reload the page.',
+          )
+          setActionResult({
+            source: resultSource,
+            kind: 'warning',
+            message: `${result.message || 'The exemption was saved.'} Current data could not be refreshed; reload before making another change.`,
+          })
         })
-      } catch (refreshError) {
-        console.error(refreshError)
-        setApplicationsErrorMessage(
-          'Application links changed, but the current links could not be refreshed. Reload the page.',
-        )
-        setActionResult({
-          source: resultSource,
-          kind: 'warning',
-          message: `${result.message || 'The exemption was saved.'} Current data could not be refreshed; reload before making another change.`,
-        })
-        return true
-      }
+        .finally(() => setSaving(false))
       return true
     } catch (error) {
       console.error(error)
@@ -1743,7 +1748,7 @@ const ProvincialExemptionDetailsPage = () => {
       })
       return false
     } finally {
-      setSaving(false)
+      if (!refreshingAfterSave) setSaving(false)
     }
   }, [
     canSaveExemption,
