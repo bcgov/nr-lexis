@@ -111,13 +111,16 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
     ).not.toBeInTheDocument()
   })
 
+  // The heading renders from the route before the detail, so wait for the subtitle itself.
   const getPageHeaderSubtitle = async (): Promise<HTMLElement> => {
     const pageHeading = await screen.findByRole('heading', { level: 1, name: 'Application 321' })
-    const subtitle = pageHeading
-      .closest('.lexis-page-header')
-      ?.querySelector<HTMLElement>('.lexis-page-header__subtitle')
-    expect(subtitle).toBeTruthy()
-    return subtitle as HTMLElement
+    return waitFor(() => {
+      const subtitle = pageHeading
+        .closest('.lexis-page-header')
+        ?.querySelector<HTMLElement>('.lexis-page-header__subtitle')
+      expect(subtitle).toBeTruthy()
+      return subtitle as HTMLElement
+    })
   }
 
   const subtitleItems = (subtitle: HTMLElement): (string | null)[] =>
@@ -197,6 +200,26 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
     const subtitle = await getPageHeaderSubtitle()
     await userEvent.click(within(subtitle).getByRole('link', { name: 'EX-555' }))
     expect(await screen.findByText('Return to Application 321')).toBeInTheDocument()
+  })
+
+  it('shows header records as text when the user cannot open their pages', async () => {
+    mockApplicationDetailAuth(
+      (action) => action !== '/permitDetails' && action !== '/exemptionDetails',
+    )
+    mockedFetchApplicationPermits.mockResolvedValue([
+      { permitNumber: '900101', permitStatusDescription: 'Complete' },
+    ])
+    renderApplicationDetailPage()
+
+    const subtitle = await getPageHeaderSubtitle()
+    await waitFor(() =>
+      expect(subtitleItems(subtitle)).toEqual([
+        'Author: idir\\application-author',
+        'Exemption number: EX-555',
+        'Permit number: 900101',
+      ]),
+    )
+    expect(within(subtitle).queryByRole('link')).not.toBeInTheDocument()
   })
 
   it('shows only the author in the header without an exemption or permit', async () => {

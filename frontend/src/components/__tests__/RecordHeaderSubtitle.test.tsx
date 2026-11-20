@@ -68,6 +68,7 @@ describe('RecordHeaderSubtitle', () => {
 
     await userEvent.click(showAll)
     expect(within(applicationItem).getAllByRole('link')).toHaveLength(23)
+    expect(within(applicationItem).getByRole('link', { name: '47205' })).toHaveFocus()
     const showFewer = within(applicationItem).getByRole('button', { name: 'Show fewer' })
     expect(showFewer).toHaveAttribute('aria-expanded', 'true')
 

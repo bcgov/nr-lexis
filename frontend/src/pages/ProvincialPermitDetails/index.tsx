@@ -6225,6 +6225,8 @@ const ProvincialPermitDetailsPage = () => {
   // loads. A permit that fails to load is still named by its number.
   const permitPageTitle =
     detailMatchesRoute || errorMessage ? `Permit ${permitDisplayNumber}`.trim() : ''
+  // Header links follow the target page's route permissions; other records show as text.
+  const canOpenExemptions = canPerform('/exemptionSearch') && canPerform('/exemptionDetails')
   const relatedRecordReturnState = withDetailReturnTo(
     location.state,
     { label: permitPageTitle, to: locationPath(location) },
@@ -7699,7 +7701,9 @@ const ProvincialPermitDetailsPage = () => {
                       ? [
                           {
                             recordNumber: detail.exemptionNumber,
-                            to: `/provincial/exemption/${encodeURIComponent(detail.exemptionNumber)}`,
+                            to: canOpenExemptions
+                              ? `/provincial/exemption/${encodeURIComponent(detail.exemptionNumber)}`
+                              : undefined,
                             state: relatedRecordReturnState,
                           },
                         ]
@@ -7710,7 +7714,9 @@ const ProvincialPermitDetailsPage = () => {
                     pluralLabel: 'Application numbers',
                     records: relatedApplicationNumbers.map((applicationNumber) => ({
                       recordNumber: applicationNumber,
-                      to: `/provincial/application/${encodeURIComponent(applicationNumber)}`,
+                      to: canPerform('/applicationDetails')
+                        ? `/provincial/application/${encodeURIComponent(applicationNumber)}`
+                        : undefined,
                       state: relatedRecordReturnState,
                     })),
                   },

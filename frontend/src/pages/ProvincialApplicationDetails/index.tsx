@@ -4153,6 +4153,9 @@ const ProvincialApplicationDetailsPage = () => {
   if (detailMatchesRoute && !isRefreshingDetail && focusCreatedApplicationTitle) {
     createdTitleFocusLatchedRef.current = true
   }
+  // Header links follow the target page's route permissions; other records show as text.
+  const canOpenExemptions = canPerform('/exemptionSearch') && canPerform('/exemptionDetails')
+  const canOpenPermits = canPerform('/permitSearch') && canPerform('/permitDetails')
   const relatedRecordReturnState = withDetailReturnTo(
     location.state,
     { label: `Application ${applicationNumber ?? ''}`.trim(), to: locationPath(location) },
@@ -4198,7 +4201,9 @@ const ProvincialApplicationDetailsPage = () => {
                       ? [
                           {
                             recordNumber: detail.exemptionNumber,
-                            to: `/provincial/exemption/${encodeURIComponent(detail.exemptionNumber)}`,
+                            to: canOpenExemptions
+                              ? `/provincial/exemption/${encodeURIComponent(detail.exemptionNumber)}`
+                              : undefined,
                             state: relatedRecordReturnState,
                           },
                         ]
@@ -4209,7 +4214,9 @@ const ProvincialApplicationDetailsPage = () => {
                     pluralLabel: 'Permit numbers',
                     records: permitRows.map((permit) => ({
                       recordNumber: permit.permitNumber,
-                      to: `/provincial/permit/${encodeURIComponent(permit.permitNumber)}`,
+                      to: canOpenPermits
+                        ? `/provincial/permit/${encodeURIComponent(permit.permitNumber)}`
+                        : undefined,
                       state: relatedRecordReturnState,
                     })),
                   },

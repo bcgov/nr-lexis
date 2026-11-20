@@ -5571,6 +5571,37 @@ describe('Provincial Permit Detail Action Smoke', () => {
     )
   })
 
+  it('shows header records as text when the user cannot open their pages', async () => {
+    mockedUseAuth.mockReturnValue(
+      createTestAuthContext({
+        canPerform: (action: string) =>
+          action !== '/applicationDetails' && action !== '/exemptionDetails',
+      }),
+    )
+    mockedFetchProvincialPermitDetailTabs.mockResolvedValue({
+      ...tabsResult,
+      applications: ['101103'],
+    })
+    renderPermitDetails()
+
+    const pageHeading = await screen.findByRole('heading', { level: 1, name: /^Permit 777/ })
+    const subtitle = getPageSubtitle()
+    await waitFor(() =>
+      expect(
+        Array.from(
+          subtitle.querySelectorAll('.record-header-subtitle__item'),
+          (item) => item.textContent,
+        ),
+      ).toEqual([
+        'Author: idir\\permit-author',
+        'Exemption number: EX-9',
+        'Application number: 101103',
+      ]),
+    )
+    expect(pageHeading.closest('header')?.contains(subtitle)).toBe(true)
+    expect(within(subtitle).queryByRole('link')).not.toBeInTheDocument()
+  })
+
   describe('application results on an editable permit', () => {
     const configureEditablePermitWithApplication = () => {
       configureActivePermit()

@@ -1,4 +1,4 @@
-import { Fragment, useState } from 'react'
+import { Fragment, useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 
 import './RecordHeaderSubtitle.css'
@@ -20,25 +20,38 @@ export const COLLAPSED_RELATED_RECORD_COUNT = 5
 
 const RelatedRecordGroupLinks = ({ label, pluralLabel, records }: RelatedRecordGroup) => {
   const [showAllRecords, setShowAllRecords] = useState(false)
+  const revealedRecordsRef = useRef<HTMLSpanElement>(null)
   const collapsible = records.length > COLLAPSED_RELATED_RECORD_COUNT
-  const shownRecords =
-    collapsible && !showAllRecords ? records.slice(0, COLLAPSED_RELATED_RECORD_COUNT) : records
+
+  // Keyboard users continue from the first record they revealed, not past the whole list.
+  useEffect(() => {
+    if (showAllRecords) revealedRecordsRef.current?.querySelector('a')?.focus()
+  }, [showAllRecords])
+
+  const renderRecord = (record: RelatedRecordLink, index: number) => (
+    <Fragment key={record.recordNumber}>
+      {index > 0 ? ', ' : null}
+      {record.to ? (
+        <Link to={record.to} state={record.state}>
+          {record.recordNumber}
+        </Link>
+      ) : (
+        record.recordNumber
+      )}
+    </Fragment>
+  )
 
   return (
     <span className="record-header-subtitle__item">
       {records.length === 1 ? label : pluralLabel}:{' '}
-      {shownRecords.map((record, index) => (
-        <Fragment key={record.recordNumber}>
-          {index > 0 ? ', ' : null}
-          {record.to ? (
-            <Link to={record.to} state={record.state}>
-              {record.recordNumber}
-            </Link>
-          ) : (
-            record.recordNumber
-          )}
-        </Fragment>
-      ))}
+      {records.slice(0, COLLAPSED_RELATED_RECORD_COUNT).map(renderRecord)}
+      {collapsible && showAllRecords ? (
+        <span ref={revealedRecordsRef}>
+          {records
+            .slice(COLLAPSED_RELATED_RECORD_COUNT)
+            .map((record, index) => renderRecord(record, index + COLLAPSED_RELATED_RECORD_COUNT))}
+        </span>
+      ) : null}
       {collapsible ? (
         <>
           {' '}
