@@ -50,6 +50,7 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.beans.factory.ObjectProvider;
+import org.springframework.dao.DataRetrievalFailureException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.authentication.TestingAuthenticationToken;
@@ -85,9 +86,6 @@ class ExemptionDetailsRpcControllerTest {
     lenient()
         .when(applicationDetailsServiceProvider.getIfAvailable())
         .thenReturn(applicationDetailsService);
-    lenient()
-        .when(applicationDetailsService.getPermitNumbersForApplicationMutation(anyLong()))
-        .thenReturn(List.of());
     lenient()
         .when(service.getApplicationNumbersForMutation(anyString()))
         .thenReturn(List.of());
@@ -1306,6 +1304,78 @@ class ExemptionDetailsRpcControllerTest {
             authentication,
             List.of(11L, 12L),
             ProvincialAuthorizationService.OrgUnitSurface.EXEMPTION_WRITE);
+  }
+
+  @Test
+  void updateExemptionShouldDiscoverLinkedApplicationPermitsInOneLookup() {
+    TestingAuthenticationToken authentication = linkedApplicationUpdateAuthentication();
+    when(applicationDetailsService.getPermitNumbersForApplicationsMutation(
+            List.of(1000456L, 1000457L)))
+        .thenReturn(List.of(7000123L, 7000124L));
+
+    ResponseEntity<ExemptionDetailsRpcController.ExemptionPersistenceResponseDto> response =
+        controller.updateExemption(linkedApplicationUpdateParameters(), authentication);
+
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+    verify(applicationDetailsService, atLeastOnce())
+        .getPermitNumbersForApplicationsMutation(List.of(1000456L, 1000457L));
+    verify(applicationDetailsService, never()).getPermitNumbersForApplicationMutation(anyLong());
+  }
+
+  @Test
+  void updateExemptionShouldFailClosedWhenLinkedApplicationPermitsAreUnavailable() {
+    TestingAuthenticationToken authentication = linkedApplicationUpdateAuthentication();
+    when(applicationDetailsService.getPermitNumbersForApplicationsMutation(
+            List.of(1000456L, 1000457L)))
+        .thenReturn(null);
+
+    assertThatThrownBy(
+            () -> controller.updateExemption(linkedApplicationUpdateParameters(), authentication))
+        .isInstanceOf(DataRetrievalFailureException.class)
+        .hasMessageContaining("Application permit relationships could not be loaded");
+    verify(service, never())
+        .updateExemption(
+            org.mockito.ArgumentMatchers.any(),
+            org.mockito.ArgumentMatchers.any(),
+            org.mockito.ArgumentMatchers.anyBoolean());
+  }
+
+  private TestingAuthenticationToken linkedApplicationUpdateAuthentication() {
+    when(serviceProvider.getIfAvailable()).thenReturn(service);
+    controller.setProvincialAuthorizationService(provincialAuthorizationService);
+    TestingAuthenticationToken authentication =
+        new TestingAuthenticationToken("idir\\jsmith", "n/a");
+    lenient().when(principalService.resolvePrincipalName(authentication)).thenReturn("IDIR\\JSMITH");
+    when(sessionService.parseRolesFromPrincipal(authentication))
+        .thenReturn(List.of("LEXIS_EXEMPTION_APPROVER"));
+    when(authorizationService.canPerformAction(List.of("LEXIS_EXEMPTION_APPROVER"), "saveExemption"))
+        .thenReturn(true);
+    when(service.getApplicationNumbersForMutation("EX-205"))
+        .thenReturn(List.of(1000457L, 1000456L));
+    lenient()
+        .when(
+            service.updateExemption(
+                org.mockito.ArgumentMatchers.any(),
+                org.mockito.ArgumentMatchers.eq("IDIR\\JSMITH"),
+                org.mockito.ArgumentMatchers.anyBoolean()))
+        .thenReturn(
+            new ExemptionDetailsRpcService.CreateExemptionResult(
+                true, "The exemption was updated successfully.", "EX-205", false, List.of(), List.of()));
+    return authentication;
+  }
+
+  private MultiValueMap<String, String> linkedApplicationUpdateParameters() {
+    MultiValueMap<String, String> params = new LinkedMultiValueMap<>();
+    params.add("exemptionNumber", "EX-205");
+    params.add("legacyExemptionNumber", "EX-205");
+    params.add("approvedVolume", "350.5");
+    params.add("approvalDate", "03/01/2026");
+    params.add("exemptionExpiryDate", "12/31/2026");
+    params.add("otherConditions", "Updated conditions");
+    params.add("exemptionTypeCode", "M");
+    params.add("exemptionStatusCode", "ACT");
+    params.add("region", "11");
+    return params;
   }
 
   @Test

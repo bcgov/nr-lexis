@@ -4,6 +4,7 @@ import java.io.IOException;
 import java.io.OutputStream;
 import java.time.Instant;
 import java.time.LocalDate;
+import java.util.Collection;
 import java.util.List;
 import java.util.Locale;
 import java.util.Optional;
@@ -197,6 +198,9 @@ public interface ApplicationDetailsRpcService {
 
   /** Loads every permit key that must be serialized before mutating application children. */
   List<Long> getPermitNumbersForApplicationMutation(Long applicationNumber);
+
+  /** The permit keys of several applications, sorted and without duplicates. */
+  List<Long> getPermitNumbersForApplicationsMutation(Collection<Long> applicationNumbers);
 
   List<ApplicationPackageScaleItem> getScalesForPackage(String packageNumber);
 
