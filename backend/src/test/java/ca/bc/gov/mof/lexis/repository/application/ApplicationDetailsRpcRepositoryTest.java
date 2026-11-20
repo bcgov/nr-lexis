@@ -25,10 +25,12 @@ import java.sql.SQLException;
 import java.sql.Timestamp;
 import java.time.Instant;
 import java.time.LocalDate;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.stream.LongStream;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -37,9 +39,11 @@ import org.junit.jupiter.params.provider.ValueSource;
 import org.mockito.ArgumentCaptor;
 import org.springframework.dao.DataAccessResourceFailureException;
 import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.dao.DataRetrievalFailureException;
 import org.springframework.dao.DuplicateKeyException;
 import org.springframework.jdbc.core.CallableStatementCallback;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.jdbc.core.RowCallbackHandler;
 import org.springframework.jdbc.core.RowMapper;
 
 @DisplayName("Unit Test | ApplicationDetailsRpcRepository")
@@ -65,7 +69,7 @@ class ApplicationDetailsRpcRepositoryTest {
         .thenAnswer(
             invocation -> {
               RowMapper<CodeRow> mapper = invocation.getArgument(1);
-              List<CodeRow> mapped = new java.util.ArrayList<>();
+              List<CodeRow> mapped = new ArrayList<>();
               for (int index = 0; index < rows.size(); index++) {
                 mapped.add(mapper.mapRow(rows.get(index), index));
               }
@@ -141,7 +145,7 @@ class ApplicationDetailsRpcRepositoryTest {
             : repository::findAllPackageStatusCodesRequired;
 
     assertThatThrownBy(loader::get)
-        .isInstanceOf(org.springframework.dao.DataRetrievalFailureException.class)
+        .isInstanceOf(DataRetrievalFailureException.class)
         .hasMessageContaining(column)
         .hasCause(failure);
   }
@@ -219,7 +223,7 @@ class ApplicationDetailsRpcRepositoryTest {
     ApplicationDetailsRpcRepository repository = new ApplicationDetailsRpcRepository(jdbcTemplate);
 
     assertThatThrownBy(() -> repository.isOrgUnitValidRequired(1903L))
-        .isInstanceOf(org.springframework.dao.DataRetrievalFailureException.class)
+        .isInstanceOf(DataRetrievalFailureException.class)
         .hasMessageContaining("ORG_UNIT_NO")
         .hasCause(failure);
   }
@@ -446,7 +450,7 @@ class ApplicationDetailsRpcRepositoryTest {
             new ApplicationDetailsRpcRepository.RemarkRow(
                 44L, 1000456L, "first", "idir\\jsmith", Instant.EPOCH));
     assertThatThrownBy(() -> repository.findRemarkRequired(44L, 1000456L))
-        .isInstanceOf(org.springframework.dao.DataRetrievalFailureException.class)
+        .isInstanceOf(DataRetrievalFailureException.class)
         .hasMessageContaining("REMARK")
         .hasCause(cause);
   }
@@ -481,7 +485,7 @@ class ApplicationDetailsRpcRepositoryTest {
                 0L, 1000456L, "", "idir\\jsmith", Instant.EPOCH);
     assertThat(repository.findRemark(44L, 1000456L)).contains(nullableExpected);
     assertThatThrownBy(() -> repository.findRemarkRequired(44L, 1000456L))
-        .isInstanceOf(org.springframework.dao.DataRetrievalFailureException.class)
+        .isInstanceOf(DataRetrievalFailureException.class)
         .hasMessageContaining(unreadableColumn)
         .hasCause(cause);
   }
@@ -595,7 +599,7 @@ class ApplicationDetailsRpcRepositoryTest {
     ApplicationDetailsRpcRepository repository = new ApplicationDetailsRpcRepository(jdbcTemplate);
 
     assertThatThrownBy(() -> repository.findRemarksByApplicationNumber(1000456L))
-        .isInstanceOf(org.springframework.dao.DataRetrievalFailureException.class)
+        .isInstanceOf(DataRetrievalFailureException.class)
         .hasMessageContaining(unreadableColumn)
         .hasCause(cause);
   }
@@ -633,7 +637,7 @@ class ApplicationDetailsRpcRepositoryTest {
             });
 
     assertThatThrownBy(() -> repository.findRemarksByApplicationNumber(1000456L))
-        .isInstanceOf(org.springframework.dao.DataRetrievalFailureException.class)
+        .isInstanceOf(DataRetrievalFailureException.class)
         .hasMessageContaining("REMARK")
         .hasCause(cause);
   }
@@ -898,13 +902,6 @@ class ApplicationDetailsRpcRepositoryTest {
         .hasMessage("end-use duplicate");
 
     assertThat(repository.packageExistsChecks).isZero();
-  }
-
-  @Test
-  void requiredOicPermitLookupShouldPropagateOracleFailure() {
-    FailingRequiredLookupRepository repository = new FailingRequiredLookupRepository();
-
-    assertOracleFailure(() -> repository.findPermitsByOicApplicationNumberRequired(1000456L));
   }
 
   @Test
@@ -1173,8 +1170,6 @@ class ApplicationDetailsRpcRepositoryTest {
         .containsExactly(new ApplicationDetailsRpcRepository.ApplicationPermitRow(76925L, "Active"));
     assertThat(repository.findPermitByOicApplicationNumberRequired(46116L))
         .contains(new ApplicationDetailsRpcRepository.ApplicationPermitRow(76925L, "Active"));
-    assertThat(repository.findPermitsByOicApplicationNumberRequired(46116L))
-        .containsExactly(new ApplicationDetailsRpcRepository.ApplicationPermitRow(76925L, "Active"));
 
     verify(ordinaryReadCursor, never()).getLong("EXPORT_PERMIT_NUMBER");
     verify(ordinaryRequiredCursor, never()).getLong("EXPORT_PERMIT_NUMBER");
@@ -1295,6 +1290,97 @@ class ApplicationDetailsRpcRepositoryTest {
         Instant.now(),
         "idir\\jsmith",
         endUses);
+  }
+
+  @Test
+  void permitNumbersForApplicationsShouldBindEachApplicationIntoBothRelationships()
+      throws SQLException {
+    JdbcTemplate jdbcTemplate = mock(JdbcTemplate.class);
+    List<String> statements = new ArrayList<>();
+    List<Object[]> bindings = new ArrayList<>();
+    ResultSet rows = mock(ResultSet.class);
+    when(rows.getLong(1)).thenReturn(7000125L, 7000123L, 7000124L);
+    when(rows.wasNull()).thenReturn(false);
+    doAnswer(
+            invocation -> {
+              statements.add(invocation.getArgument(0));
+              Object[] arguments = invocation.getArguments();
+              bindings.add(Arrays.copyOfRange(arguments, 2, arguments.length));
+              RowCallbackHandler handler = invocation.getArgument(1);
+              handler.processRow(rows);
+              handler.processRow(rows);
+              handler.processRow(rows);
+              return null;
+            })
+        .when(jdbcTemplate)
+        .query(any(String.class), any(RowCallbackHandler.class), any(Object[].class));
+    ApplicationDetailsRpcRepository repository = new ApplicationDetailsRpcRepository(jdbcTemplate);
+
+    assertThat(repository.findPermitNumbersForApplications(List.of(1000457L, 1000456L, 1000457L)))
+        .containsExactly(7000123L, 7000124L, 7000125L);
+
+    assertThat(statements).hasSize(1);
+    String sql = statements.get(0).replaceAll("\\s+", " ");
+    assertThat(sql)
+        .contains("WHERE EEA.APPLICATION_NUMBER IN (?,?) UNION")
+        .contains("WHERE EPD.OIC_APPLICATION_NUMBER IN (?,?)")
+        .contains("INNER JOIN EXPORT_SCALE_DETAIL ESD ON ESD.PACKAGE_NUMBER = EP.PACKAGE_NUMBER"
+            + " AND ESD.EXPORT_PERMIT_DETAIL_NUMBER = EPD.EXPORT_PERMIT_DETAIL_NUMBER")
+        .contains("WHERE EEA.EXEMPTION_NUMBER = EPD.EXEMPTION_NUMBER");
+    assertThat(bindings.get(0)).containsExactly(1000456L, 1000457L, 1000456L, 1000457L);
+  }
+
+  @Test
+  void permitNumbersForApplicationsShouldKeepEachInListWithinOracleLimits() {
+    JdbcTemplate jdbcTemplate = mock(JdbcTemplate.class);
+    List<Integer> bindingCounts = new ArrayList<>();
+    doAnswer(
+            invocation -> {
+              bindingCounts.add(invocation.getArguments().length - 2);
+              return null;
+            })
+        .when(jdbcTemplate)
+        .query(any(String.class), any(RowCallbackHandler.class), any(Object[].class));
+    ApplicationDetailsRpcRepository repository = new ApplicationDetailsRpcRepository(jdbcTemplate);
+    List<Long> applications =
+        LongStream.rangeClosed(1, 1_200).boxed().toList();
+
+    assertThat(repository.findPermitNumbersForApplications(applications)).isEmpty();
+
+    assertThat(bindingCounts).containsExactly(1_000, 1_000, 400);
+  }
+
+  @Test
+  void permitNumbersForApplicationsShouldFailClosedForAnInvalidPermitNumber() throws SQLException {
+    JdbcTemplate jdbcTemplate = mock(JdbcTemplate.class);
+    ResultSet rows = mock(ResultSet.class);
+    when(rows.getLong(1)).thenReturn(0L);
+    doAnswer(
+            invocation -> {
+              ((RowCallbackHandler) invocation.getArgument(1)).processRow(rows);
+              return null;
+            })
+        .when(jdbcTemplate)
+        .query(any(String.class), any(RowCallbackHandler.class), any(Object[].class));
+    ApplicationDetailsRpcRepository repository = new ApplicationDetailsRpcRepository(jdbcTemplate);
+
+    assertThatThrownBy(() -> repository.findPermitNumbersForApplications(List.of(1000456L)))
+        .isInstanceOf(DataRetrievalFailureException.class)
+        .hasMessageContaining("invalid permit number");
+  }
+
+  @Test
+  void permitNumbersForApplicationsShouldRejectInvalidApplicationsBeforeQuerying() {
+    JdbcTemplate jdbcTemplate = mock(JdbcTemplate.class);
+    ApplicationDetailsRpcRepository repository = new ApplicationDetailsRpcRepository(jdbcTemplate);
+    List<Long> withNull = Arrays.asList(1000456L, null);
+
+    assertThatThrownBy(() -> repository.findPermitNumbersForApplications(withNull))
+        .isInstanceOf(IllegalArgumentException.class);
+    assertThatThrownBy(() -> repository.findPermitNumbersForApplications(List.of(0L)))
+        .isInstanceOf(IllegalArgumentException.class);
+    assertThat(repository.findPermitNumbersForApplications(List.of())).isEmpty();
+    verifyNoInteractions(jdbcTemplate);
   }
 
   private static void assertOracleFailure(Runnable mutation) {

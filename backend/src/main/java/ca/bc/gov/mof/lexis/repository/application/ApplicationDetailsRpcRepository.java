@@ -18,9 +18,13 @@ import java.sql.Timestamp;
 import java.sql.Types;
 import java.time.Instant;
 import java.time.LocalDate;
+import java.util.Collection;
+import java.util.Collections;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Optional;
+import java.util.SortedSet;
+import java.util.TreeSet;
 import java.util.regex.Pattern;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.context.annotation.Profile;
@@ -120,8 +124,70 @@ public class ApplicationDetailsRpcRepository extends OracleRepositorySupport {
   private static final String UPDATE_EXEMPTION_APPLICATION =
       LEXIS_GROUP_14_PACKAGE + "UPDATE_EXEMPTION_APPLICATION(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)";
 
+  // The permits FIND_PERMIT_DET_BY_APP and FIND_PERMIT_DET_BY_OIC_APP return, as numbers only.
+  private static final String PERMIT_NUMBERS_FOR_APPLICATIONS =
+      """
+      SELECT EPD.EXPORT_PERMIT_DETAIL_NUMBER
+        FROM EXPORT_PERMIT_DETAIL EPD
+       INNER JOIN EXPORT_PERMIT_STATUS_CODE EPSC
+          ON EPD.EXPORT_PERMIT_STATUS_CODE = EPSC.EXPORT_PERMIT_STATUS_CODE
+       INNER JOIN EXPORT_EXEMPTION_APPLICATION EEA ON EPD.EXEMPTION_NUMBER = EEA.EXEMPTION_NUMBER
+       INNER JOIN EXPORT_PACKAGE EP ON EP.APPLICATION_NUMBER = EEA.APPLICATION_NUMBER
+       INNER JOIN EXPORT_SCALE_DETAIL ESD
+          ON ESD.PACKAGE_NUMBER = EP.PACKAGE_NUMBER
+         AND ESD.EXPORT_PERMIT_DETAIL_NUMBER = EPD.EXPORT_PERMIT_DETAIL_NUMBER
+       WHERE EEA.APPLICATION_NUMBER IN (%1$s)
+      UNION
+      SELECT EPD.EXPORT_PERMIT_DETAIL_NUMBER
+        FROM EXPORT_PERMIT_DETAIL EPD
+       INNER JOIN EXPORT_PERMIT_STATUS_CODE EPSC
+          ON EPD.EXPORT_PERMIT_STATUS_CODE = EPSC.EXPORT_PERMIT_STATUS_CODE
+       WHERE EPD.OIC_APPLICATION_NUMBER IN (%1$s)
+         AND EXISTS (
+             SELECT 1
+               FROM EXPORT_EXEMPTION_APPLICATION EEA
+              WHERE EEA.EXEMPTION_NUMBER = EPD.EXEMPTION_NUMBER)
+      """;
+  // Each statement repeats the list twice, so this keeps each IN list under Oracle's 1,000.
+  private static final int PERMIT_NUMBER_LOOKUP_BATCH_SIZE = 500;
+
   public ApplicationDetailsRpcRepository(@Qualifier("oracleJdbcTemplate") JdbcTemplate jdbcTemplate) {
     super(jdbcTemplate);
+  }
+
+  /** Permit numbers linked to any of the applications, ordinarily or as their OIC application. */
+  public SortedSet<Long> findPermitNumbersForApplications(Collection<Long> applicationNumbers) {
+    SortedSet<Long> distinctNumbers = new TreeSet<>();
+    for (Long number : applicationNumbers) {
+      if (number == null || number < 1) {
+        throw new IllegalArgumentException("Application number must be positive.");
+      }
+      distinctNumbers.add(number);
+    }
+    List<Long> numbers = List.copyOf(distinctNumbers);
+    SortedSet<Long> permitNumbers = new TreeSet<>();
+    for (int start = 0; start < numbers.size(); start += PERMIT_NUMBER_LOOKUP_BATCH_SIZE) {
+      List<Long> batch =
+          numbers.subList(start, Math.min(numbers.size(), start + PERMIT_NUMBER_LOOKUP_BATCH_SIZE));
+      String placeholders = String.join(",", Collections.nCopies(batch.size(), "?"));
+      Object[] arguments = new Object[batch.size() * 2];
+      for (int index = 0; index < batch.size(); index++) {
+        arguments[index] = batch.get(index);
+        arguments[batch.size() + index] = batch.get(index);
+      }
+      jdbcTemplate.query(
+          String.format(PERMIT_NUMBERS_FOR_APPLICATIONS, placeholders),
+          resultSet -> {
+            long permitNumber = resultSet.getLong(1);
+            if (resultSet.wasNull() || permitNumber < 1) {
+              throw new DataRetrievalFailureException(
+                  "An application permit relationship returned an invalid permit number.");
+            }
+            permitNumbers.add(permitNumber);
+          },
+          arguments);
+    }
+    return permitNumbers;
   }
 
   public List<DocumentRow> findApplicationDocumentDetailsByApplicationNumber(Long applicationNumber) {
@@ -206,20 +272,6 @@ public class ApplicationDetailsRpcRepository extends OracleRepositorySupport {
       throw new IllegalArgumentException("Application number must be positive.");
     }
     return queryCursorSingleRequired(
-        FIND_PERMIT_DETAIL_BY_OIC_APPLICATION,
-        cs -> cs.setString(1, applicationNumber.toString()),
-        2,
-        rs ->
-            new ApplicationPermitRow(
-                getLong(rs, "EXPORT_PERMIT_DETAIL_NUMBER"), getString(rs, "STATUS_DESCRIPTION")));
-  }
-
-  public List<ApplicationPermitRow> findPermitsByOicApplicationNumberRequired(
-      Long applicationNumber) {
-    if (applicationNumber == null || applicationNumber < 1) {
-      throw new IllegalArgumentException("Application number must be positive.");
-    }
-    return queryCursorProcedureRequired(
         FIND_PERMIT_DETAIL_BY_OIC_APPLICATION,
         cs -> cs.setString(1, applicationNumber.toString()),
         2,
