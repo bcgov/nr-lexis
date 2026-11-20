@@ -25,7 +25,7 @@ const REVIEW_TIERS = {
     effort: "medium",
     models: {
       anthropic: { model: "claude-sonnet-5-5", displayName: "Claude Sonnet 5.5", usdPerMillionInputTokens: 2, usdPerMillionOutputTokens: 10, supportsRefusalFallback: true },
-      openai: { model: "gpt-6.1-sol", displayName: "GPT-6.1 Sol", usdPerMillionInputTokens: 2, usdPerMillionOutputTokens: 10 },
+      openai: { model: "gpt-6.2-sol", displayName: "GPT-6.2 Sol", effort: "max", maxOutputTokens: 128_000, usdPerMillionInputTokens: 2, usdPerMillionOutputTokens: 10 },
     },
   },
   deep: {
@@ -36,7 +36,7 @@ const REVIEW_TIERS = {
     effort: "xhigh",
     models: {
       anthropic: { model: "claude-fable-5-2", displayName: "Claude Fable 5.2", usdPerMillionInputTokens: 8, usdPerMillionOutputTokens: 40, supportsRefusalFallback: true },
-      openai: { model: "gpt-6-astra", displayName: "GPT-6 Astra", usdPerMillionInputTokens: 10, usdPerMillionOutputTokens: 50 },
+      openai: { model: "gpt-6.2-astra", displayName: "GPT-6.2 Astra", usdPerMillionInputTokens: 8, usdPerMillionOutputTokens: 40 },
     },
   },
   security: {
@@ -47,7 +47,7 @@ const REVIEW_TIERS = {
     effort: "high",
     models: {
       anthropic: { model: "claude-opus-5-5", displayName: "Claude Opus 5.5", usdPerMillionInputTokens: 4, usdPerMillionOutputTokens: 20, supportsRefusalFallback: true },
-      openai: { model: "gpt-6.1-sol", displayName: "GPT-6.1 Sol", usdPerMillionInputTokens: 2, usdPerMillionOutputTokens: 10 },
+      openai: { model: "gpt-6.2-sol", displayName: "GPT-6.2 Sol", effort: "max", maxOutputTokens: 128_000, usdPerMillionInputTokens: 2, usdPerMillionOutputTokens: 10 },
     },
   },
 };
@@ -263,8 +263,8 @@ async function reviewWithOpenAI(tier, modelConfig, systemPrompt, prompt) {
     model: modelConfig.model,
     instructions: systemPrompt,
     input: prompt,
-    reasoning: { effort: tier.effort },
-    max_output_tokens: tier.maxOutputTokens,
+    reasoning: { effort: modelConfig.effort ?? tier.effort },
+    max_output_tokens: modelConfig.maxOutputTokens ?? tier.maxOutputTokens,
     store: false,
     text: { format: { type: "json_schema", name: "pull_request_review", strict: true, schema: REVIEW_OUTPUT_SCHEMA } },
   });
@@ -334,7 +334,7 @@ function buildReviewBody(tierName, modelConfig, modelResult, reviewContext, inli
     : `≈ ${estimatedCostUsd < 0.01 ? "<$0.01" : `$${estimatedCostUsd.toFixed(2)}`}`;
   const tier = REVIEW_TIERS[tierName];
   sections.push([
-    `<sub>\`${modelResult.modelUsed}\` · effort ${tier.effort}`,
+    `<sub>\`${modelResult.modelUsed}\` · effort ${modelConfig.effort ?? tier.effort}`,
     `${reviewContext.reviewedFileCount} diffs${tier.includeFullFileContents ? ` + ${reviewContext.fullFileCount} full files` : ""}`,
     `${modelResult.inputTokens.toLocaleString("en-US")} in / ${modelResult.outputTokens.toLocaleString("en-US")} out tokens`,
     costEstimate,
