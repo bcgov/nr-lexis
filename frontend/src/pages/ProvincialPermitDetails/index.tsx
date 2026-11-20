@@ -66,6 +66,7 @@ import EmptyState from '@/components/EmptyState'
 import ForestClientComboBox from '@/components/ForestClientComboBox'
 import IsoDatePicker from '@/components/IsoDatePicker'
 import PageHeader from '@/components/PageHeader'
+import RecordHeaderSubtitle from '@/components/RecordHeaderSubtitle'
 import PendingIcon from '@/components/PendingIcon'
 import PermitCountrySelect from '@/components/PermitCountrySelect'
 import StatusTag from '@/components/StatusTag'
@@ -6224,6 +6225,20 @@ const ProvincialPermitDetailsPage = () => {
   // loads. A permit that fails to load is still named by its number.
   const permitPageTitle =
     detailMatchesRoute || errorMessage ? `Permit ${permitDisplayNumber}`.trim() : ''
+  // Header links follow the target page's route permissions; other records show as text.
+  const canOpenExemptions = canPerform('/exemptionSearch') && canPerform('/exemptionDetails')
+  const relatedRecordReturnState = withDetailReturnTo(
+    location.state,
+    { label: permitPageTitle, to: locationPath(location) },
+    detailReturnTo,
+  )
+  // The permit's own application stands in until its associated applications load.
+  const relatedApplicationNumbers =
+    associatedPermitApplications.length > 0
+      ? associatedPermitApplications
+      : detail?.applicationNumber
+        ? [String(detail.applicationNumber)]
+        : []
   const isReviewedPermitEdit = usesReviewedPermitFlow && isEditingPermit && !!permitForm
 
   const renderPermitClientEditActions = () => (
@@ -6310,14 +6325,7 @@ const ProvincialPermitDetailsPage = () => {
     const applicationLink = (applicationNumber: string) => (
       <Link
         to={`/provincial/application/${encodeURIComponent(applicationNumber)}`}
-        state={withDetailReturnTo(
-          location.state,
-          {
-            label: permitPageTitle,
-            to: locationPath(location),
-          },
-          detailReturnTo,
-        )}
+        state={relatedRecordReturnState}
       >
         {applicationNumber}
       </Link>
@@ -6528,14 +6536,7 @@ const ProvincialPermitDetailsPage = () => {
   const permitExemptionLink = detail?.exemptionNumber ? (
     <Link
       to={`/provincial/exemption/${encodeURIComponent(detail.exemptionNumber)}`}
-      state={withDetailReturnTo(
-        location.state,
-        {
-          label: permitPageTitle,
-          to: locationPath(location),
-        },
-        detailReturnTo,
-      )}
+      state={relatedRecordReturnState}
     >
       {detail.exemptionNumber}
     </Link>
@@ -7522,14 +7523,7 @@ const ProvincialPermitDetailsPage = () => {
                       {detail.exemptionNumber ? (
                         <Link
                           to={`/provincial/exemption/${encodeURIComponent(detail.exemptionNumber)}`}
-                          state={withDetailReturnTo(
-                            location.state,
-                            {
-                              label: permitPageTitle,
-                              to: locationPath(location),
-                            },
-                            detailReturnTo,
-                          )}
+                          state={relatedRecordReturnState}
                         >
                           {detail.exemptionNumber}
                         </Link>
@@ -7696,7 +7690,41 @@ const ProvincialPermitDetailsPage = () => {
         <PageHeader
           title={permitPageTitle}
           focusTitle={focusCreatedPermitTitle || 'whenFocusLost'}
-          subtitle={detailMatchesRoute ? `Author: ${displayValueText(detail.author)}` : undefined}
+          subtitle={
+            detailMatchesRoute ? (
+              <RecordHeaderSubtitle
+                relatedRecordGroups={[
+                  {
+                    label: 'Exemption number',
+                    pluralLabel: 'Exemption numbers',
+                    records: detail.exemptionNumber
+                      ? [
+                          {
+                            recordNumber: detail.exemptionNumber,
+                            to: canOpenExemptions
+                              ? `/provincial/exemption/${encodeURIComponent(detail.exemptionNumber)}`
+                              : undefined,
+                            state: relatedRecordReturnState,
+                          },
+                        ]
+                      : [],
+                  },
+                  {
+                    label: 'Application number',
+                    pluralLabel: 'Application numbers',
+                    records: relatedApplicationNumbers.map((applicationNumber) => ({
+                      recordNumber: applicationNumber,
+                      to: canPerform('/applicationDetails')
+                        ? `/provincial/application/${encodeURIComponent(applicationNumber)}`
+                        : undefined,
+                      state: relatedRecordReturnState,
+                    })),
+                  },
+                ]}
+                author={displayValueText(detail.author)}
+              />
+            ) : undefined
+          }
           status={
             detail && detailMatchesRoute ? (
               <StatusTag
@@ -8059,14 +8087,7 @@ const ProvincialPermitDetailsPage = () => {
                                       <TableCell>
                                         <Link
                                           to={`/provincial/application/${encodeURIComponent(applicationNumber)}`}
-                                          state={withDetailReturnTo(
-                                            location.state,
-                                            {
-                                              label: permitPageTitle,
-                                              to: locationPath(location),
-                                            },
-                                            detailReturnTo,
-                                          )}
+                                          state={relatedRecordReturnState}
                                         >
                                           {applicationNumber}
                                         </Link>

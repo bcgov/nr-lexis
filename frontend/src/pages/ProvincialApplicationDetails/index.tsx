@@ -58,6 +58,7 @@ import DetailBreadcrumb from '@/components/DetailBreadcrumb'
 import DetailCardTitle from '@/components/DetailCardTitle'
 import DetailLoadError from '@/components/DetailLoadError'
 import PageHeader from '@/components/PageHeader'
+import RecordHeaderSubtitle from '@/components/RecordHeaderSubtitle'
 import PendingIcon from '@/components/PendingIcon'
 import AuthoritativeOptionsUnavailableNotification from '@/components/AuthoritativeOptionsUnavailableNotification'
 import StatusTag from '@/components/StatusTag'
@@ -85,7 +86,9 @@ import { displayValue } from '@/pages/shared/detail-page-utils'
 import {
   applicationSearchReturnTo,
   landingPageReturnTo,
+  locationPath,
   readDetailReturnTo,
+  withDetailReturnTo,
 } from '@/pages/shared/detail-navigation'
 import {
   fetchProvincialApplicationDetail,
@@ -4133,6 +4136,14 @@ const ProvincialApplicationDetailsPage = () => {
   if (detailMatchesRoute && !isRefreshingDetail && focusCreatedApplicationTitle) {
     createdTitleFocusLatchedRef.current = true
   }
+  // Header links follow the target page's route permissions; other records show as text.
+  const canOpenExemptions = canPerform('/exemptionSearch') && canPerform('/exemptionDetails')
+  const canOpenPermits = canPerform('/permitSearch') && canPerform('/permitDetails')
+  const relatedRecordReturnState = withDetailReturnTo(
+    location.state,
+    { label: `Application ${applicationNumber ?? ''}`.trim(), to: locationPath(location) },
+    detailReturnTo,
+  )
 
   return (
     <Grid
@@ -4163,7 +4174,39 @@ const ProvincialApplicationDetailsPage = () => {
           }`.trim()}
           focusTitle={createdTitleFocusLatchedRef.current || 'whenFocusLost'}
           subtitle={
-            detail && detailMatchesRoute ? `Author: ${displayValueText(detail.author)}` : undefined
+            detail && detailMatchesRoute ? (
+              <RecordHeaderSubtitle
+                relatedRecordGroups={[
+                  {
+                    label: 'Exemption number',
+                    pluralLabel: 'Exemption numbers',
+                    records: detail.exemptionNumber
+                      ? [
+                          {
+                            recordNumber: detail.exemptionNumber,
+                            to: canOpenExemptions
+                              ? `/provincial/exemption/${encodeURIComponent(detail.exemptionNumber)}`
+                              : undefined,
+                            state: relatedRecordReturnState,
+                          },
+                        ]
+                      : [],
+                  },
+                  {
+                    label: 'Permit number',
+                    pluralLabel: 'Permit numbers',
+                    records: permitRows.map((permit) => ({
+                      recordNumber: permit.permitNumber,
+                      to: canOpenPermits
+                        ? `/provincial/permit/${encodeURIComponent(permit.permitNumber)}`
+                        : undefined,
+                      state: relatedRecordReturnState,
+                    })),
+                  },
+                ]}
+                author={displayValueText(detail.author)}
+              />
+            ) : undefined
           }
           status={
             detail && detailMatchesRoute ? (

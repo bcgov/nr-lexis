@@ -523,7 +523,11 @@ describe('Exemption and Federal Detail Document Actions', () => {
     )
 
     await selectDetailTab('Applications')
-    expect(await screen.findByRole('link', { name: '654' })).toBeInTheDocument()
+    expect(
+      await within(screen.getByRole('tabpanel', { name: 'Applications' })).findByRole('link', {
+        name: '654',
+      }),
+    ).toBeInTheDocument()
     expect(screen.queryByRole('columnheader', { name: 'Actions' })).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Add application' })).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: /Remove/ })).not.toBeInTheDocument()
@@ -1162,6 +1166,211 @@ describe('Exemption and Federal Detail Document Actions', () => {
     expect(screen.queryByLabelText('Filter permits')).not.toBeInTheDocument()
     expect(screen.queryByText('900102')).not.toBeInTheDocument()
     expect(screen.queryByText('10-Jul-2026')).not.toBeInTheDocument()
+  })
+
+  it('links the applications and visible permits in the header after the author', async () => {
+    const exemptionApplication = (applicationNumber: string, jurisdiction: string) => ({
+      applicationNumber,
+      requestedVolume: '12.5',
+      scaleVolume: '',
+      locked: false,
+      jurisdiction,
+      ownerClientNumber: '00055566',
+      agentClientNumber: '',
+      ownerClientLocationCode: '00',
+      agentClientLocationCode: '',
+      applicantTypeCode: 'O',
+      ownerContactName: '',
+      agentContactName: '',
+      ownerCompanyName: '',
+      agentCompanyName: '',
+      removable: false,
+    })
+    mockedUseAuth.mockReturnValue(
+      createTestAuthContext({
+        canPerform: (action: string) => action !== 'viewFederalApplication',
+      }),
+    )
+    mockedFetchExemptionApplications.mockResolvedValue({
+      applications: [exemptionApplication('654', 'P'), exemptionApplication('655', 'F')],
+      containsUnmanu: false,
+      ownerNumber: '00055566',
+    })
+    mockedFetchExemptionPermits.mockResolvedValue([
+      {
+        permitNumber: '900101',
+        permitVolume: '25.5',
+        permitStatus: 'Complete',
+        permitIssueDate: '12-Jul-2026',
+        canViewPermit: true,
+      },
+      {
+        permitNumber: '900102',
+        permitVolume: '14.0',
+        permitStatus: 'Complete',
+        permitIssueDate: '10-Jul-2026',
+        canViewPermit: false,
+      },
+    ])
+
+    render(
+      <MemoryRouter initialEntries={['/provincial/exemption/EX-777']}>
+        <Routes>
+          <Route
+            path="/provincial/exemption/:exemptionNumber"
+            element={<ProvincialExemptionDetailsPage />}
+          />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    const exemptionHeader = (
+      await screen.findByRole('heading', { name: 'Exemption EX-777', level: 1 })
+    ).closest('header') as HTMLElement
+    await waitFor(() =>
+      expect(
+        Array.from(
+          exemptionHeader.querySelectorAll('.record-header-subtitle__item'),
+          (item) => item.textContent,
+        ),
+      ).toEqual(['Author: —', 'Application numbers: 654, 655', 'Permit number: 900101']),
+    )
+    expect(within(exemptionHeader).getByRole('link', { name: '654' })).toHaveAttribute(
+      'href',
+      '/provincial/application/654',
+    )
+    expect(within(exemptionHeader).queryByRole('link', { name: '655' })).not.toBeInTheDocument()
+    expect(within(exemptionHeader).getByRole('link', { name: '900101' })).toHaveAttribute(
+      'href',
+      '/provincial/permit/900101',
+    )
+  })
+
+  it.each([
+    { group: 'Application numbers', tab: 'Applications' },
+    { group: 'Permit numbers', tab: 'Permits' },
+  ])('opens the $tab tab from the header when the $group list is long', async ({ group, tab }) => {
+    const applicationNumbers = ['601', '602', '603', '604', '605', '606', '607']
+    mockedFetchExemptionApplications.mockResolvedValue({
+      applications: applicationNumbers.map((applicationNumber) => ({
+        applicationNumber,
+        requestedVolume: '1.0',
+        scaleVolume: '',
+        locked: false,
+        jurisdiction: 'P',
+        ownerClientNumber: '00055566',
+        agentClientNumber: '',
+        ownerClientLocationCode: '00',
+        agentClientLocationCode: '',
+        applicantTypeCode: 'O',
+        ownerContactName: '',
+        agentContactName: '',
+        ownerCompanyName: '',
+        agentCompanyName: '',
+        removable: false,
+      })),
+      containsUnmanu: false,
+      ownerNumber: '00055566',
+    })
+    mockedFetchExemptionPermits.mockResolvedValue(
+      ['901', '902', '903', '904', '905', '906', '907'].map((permitNumber) => ({
+        permitNumber,
+        permitVolume: '1.0',
+        permitStatus: 'Complete',
+        permitIssueDate: '12-Jul-2026',
+        canViewPermit: true,
+      })),
+    )
+
+    render(
+      <MemoryRouter initialEntries={['/provincial/exemption/EX-777']}>
+        <Routes>
+          <Route
+            path="/provincial/exemption/:exemptionNumber"
+            element={<ProvincialExemptionDetailsPage />}
+          />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    const exemptionHeader = (
+      await screen.findByRole('heading', { name: 'Exemption EX-777', level: 1 })
+    ).closest('header') as HTMLElement
+    const groupItem = await waitFor(() => {
+      const item = Array.from(
+        exemptionHeader.querySelectorAll<HTMLElement>('.record-header-subtitle__item'),
+      ).find((candidate) => candidate.textContent?.startsWith(group))
+      expect(item).toBeTruthy()
+      return item as HTMLElement
+    })
+
+    await userEvent.click(within(groupItem).getByRole('button', { name: '+2 more' }))
+
+    const selectedTab = await screen.findByRole('tab', { name: tab, selected: true })
+    await waitFor(() => expect(selectedTab).toHaveFocus())
+    expect(within(groupItem).getAllByRole('link')).toHaveLength(5)
+  })
+
+  it('leaves out header groups whose tab the user cannot see', async () => {
+    mockedUseAuth.mockReturnValue(
+      createTestAuthContext({
+        canPerform: (action: string) => action !== '/permitDetails',
+      }),
+    )
+    mockedFetchProvincialExemptionDetail.mockResolvedValue({
+      ...exemptionDetail,
+      exemptionTypeCode: 'B',
+      exemptionTypeDescription: 'Blanket Order in Council',
+      blanketOic: true,
+    })
+    mockedFetchExemptionApplications.mockResolvedValue({
+      applications: [
+        {
+          applicationNumber: '654',
+          requestedVolume: '12.5',
+          scaleVolume: '',
+          locked: false,
+          jurisdiction: 'P',
+          ownerClientNumber: '00055566',
+          agentClientNumber: '',
+          ownerClientLocationCode: '00',
+          agentClientLocationCode: '',
+          applicantTypeCode: 'O',
+          ownerContactName: '',
+          agentContactName: '',
+          ownerCompanyName: '',
+          agentCompanyName: '',
+          removable: false,
+        },
+      ],
+      containsUnmanu: false,
+      ownerNumber: '00055566',
+    })
+
+    render(
+      <MemoryRouter initialEntries={['/provincial/exemption/EX-777']}>
+        <Routes>
+          <Route
+            path="/provincial/exemption/:exemptionNumber"
+            element={<ProvincialExemptionDetailsPage />}
+          />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    const exemptionHeader = (
+      await screen.findByRole('heading', { name: 'Exemption EX-777', level: 1 })
+    ).closest('header') as HTMLElement
+    await waitFor(() =>
+      expect(
+        Array.from(
+          exemptionHeader.querySelectorAll('.record-header-subtitle__item'),
+          (item) => item.textContent,
+        ),
+      ).toEqual(['Author: —']),
+    )
+    expect(screen.queryByRole('tab', { name: 'Applications' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('tab', { name: 'Permits' })).not.toBeInTheDocument()
   })
 
   it('keeps a visible permit as text when route permission is unavailable', async () => {

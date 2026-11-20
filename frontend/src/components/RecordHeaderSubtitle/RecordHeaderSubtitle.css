@@ -1,0 +1,23 @@
+.record-header-subtitle {
+  display: flex;
+  flex-direction: column;
+}
+
+.record-header-subtitle__toggle {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--csp-link-primary);
+  cursor: pointer;
+  font: inherit;
+  text-decoration: underline;
+}
+
+.record-header-subtitle__toggle:hover {
+  color: var(--csp-link-hover);
+}
+
+.record-header-subtitle__toggle:focus-visible {
+  outline: 2px solid var(--cds-focus, #0f62fe);
+  outline-offset: 1px;
+}

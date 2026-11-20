@@ -7,7 +7,9 @@ import {
   Route,
   RouterProvider,
   Routes,
+  useLocation,
 } from 'react-router-dom'
+import { readDetailReturnTo } from '@/pages/shared/detail-navigation'
 import type { ProvincialApplicationDetail } from '@/interfaces/LexisDetails'
 import { beforeEach, describe, expect, it, onTestFinished, vi } from 'vitest'
 import {
@@ -21,6 +23,7 @@ import {
   mockApplicationDetailAuth,
   mockedFetchApplicationClientData,
   mockedFetchApplicationClientLocations,
+  mockedFetchApplicationPermits,
   mockedFetchApplicationDocuments,
   mockedFetchApplicationSpecies,
   mockedFetchApplicationSummarySnapshot,
@@ -109,6 +112,130 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
         name: 'Application highlights',
       }),
     ).not.toBeInTheDocument()
+  })
+
+  // The heading renders from the route before the detail, so wait for the subtitle itself.
+  const getPageHeaderSubtitle = async (): Promise<HTMLElement> => {
+    const pageHeading = await screen.findByRole('heading', { level: 1, name: 'Application 321' })
+    return waitFor(() => {
+      const subtitle = pageHeading
+        .closest('.lexis-page-header')
+        ?.querySelector<HTMLElement>('.lexis-page-header__subtitle')
+      expect(subtitle).toBeTruthy()
+      return subtitle as HTMLElement
+    })
+  }
+
+  const subtitleItems = (subtitle: HTMLElement): (string | null)[] =>
+    Array.from(
+      subtitle.querySelectorAll('.record-header-subtitle__item'),
+      (item) => item.textContent,
+    )
+
+  it('links the exemption and permit numbers in the header after the author', async () => {
+    mockedFetchApplicationPermits.mockResolvedValue([
+      { permitNumber: '900101', permitStatusDescription: 'Cancelled' },
+      { permitNumber: '900102', permitStatusDescription: 'Complete' },
+    ])
+    const RelatedRecordReturnLabel = () => {
+      const location = useLocation()
+      return (
+        <p>
+          {location.pathname} returns to {readDetailReturnTo(location.state)?.label}
+        </p>
+      )
+    }
+    render(
+      <MemoryRouter initialEntries={['/provincial/application/321']}>
+        <Routes>
+          <Route
+            path="/provincial/application/:applicationNumber"
+            element={<ProvincialApplicationDetailsPage />}
+          />
+          <Route path="/provincial/permit/:permitNumber" element={<RelatedRecordReturnLabel />} />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    const subtitle = await getPageHeaderSubtitle()
+    const permitLink = await within(subtitle).findByRole('link', { name: '900102' })
+    expect(permitLink).toHaveAttribute('href', '/provincial/permit/900102')
+    expect(within(subtitle).getByRole('link', { name: '900101' })).toHaveAttribute(
+      'href',
+      '/provincial/permit/900101',
+    )
+    expect(within(subtitle).getByRole('link', { name: 'EX-555' })).toHaveAttribute(
+      'href',
+      '/provincial/exemption/EX-555',
+    )
+    expect(subtitleItems(subtitle)).toEqual([
+      'Author: idir\\application-author',
+      'Exemption number: EX-555',
+      'Permit numbers: 900101, 900102',
+    ])
+
+    await userEvent.click(permitLink)
+    expect(
+      await screen.findByText('/provincial/permit/900102 returns to Application 321'),
+    ).toBeInTheDocument()
+  })
+
+  it('opens the exemption from the header with a way back to the application', async () => {
+    const RelatedRecordReturnLabel = () => {
+      const location = useLocation()
+      return <p>Return to {readDetailReturnTo(location.state)?.label}</p>
+    }
+    render(
+      <MemoryRouter initialEntries={['/provincial/application/321']}>
+        <Routes>
+          <Route
+            path="/provincial/application/:applicationNumber"
+            element={<ProvincialApplicationDetailsPage />}
+          />
+          <Route
+            path="/provincial/exemption/:exemptionNumber"
+            element={<RelatedRecordReturnLabel />}
+          />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    const subtitle = await getPageHeaderSubtitle()
+    await userEvent.click(within(subtitle).getByRole('link', { name: 'EX-555' }))
+    expect(await screen.findByText('Return to Application 321')).toBeInTheDocument()
+  })
+
+  it('shows header records as text when the user cannot open their pages', async () => {
+    mockApplicationDetailAuth(
+      (action) => action !== '/permitDetails' && action !== '/exemptionDetails',
+    )
+    mockedFetchApplicationPermits.mockResolvedValue([
+      { permitNumber: '900101', permitStatusDescription: 'Complete' },
+    ])
+    renderApplicationDetailPage()
+
+    const subtitle = await getPageHeaderSubtitle()
+    await waitFor(() =>
+      expect(subtitleItems(subtitle)).toEqual([
+        'Author: idir\\application-author',
+        'Exemption number: EX-555',
+        'Permit number: 900101',
+      ]),
+    )
+    expect(within(subtitle).queryByRole('link')).not.toBeInTheDocument()
+  })
+
+  it('shows only the author in the header without an exemption or permit', async () => {
+    mockedFetchProvincialApplicationDetail.mockResolvedValue({
+      ...applicationDetail,
+      exemptionNumber: null,
+    })
+    renderApplicationDetailPage()
+
+    const subtitle = await getPageHeaderSubtitle()
+    await waitFor(() => expect(mockedFetchApplicationPermits).toHaveBeenCalled())
+    expect(subtitleItems(subtitle)).toEqual(['Author: idir\\application-author'])
+    expect(within(subtitle).queryByRole('link')).not.toBeInTheDocument()
   })
 
   it('opens the application summary in view mode without repeating the application number', async () => {
@@ -1820,7 +1947,7 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
     ).toBeInTheDocument()
     expect(within(summaryTile).queryByText('Exemption number')).not.toBeInTheDocument()
     expect(within(summaryTile).queryByText('Jurisdiction')).not.toBeInTheDocument()
-    expect(screen.queryByText('EX-555')).not.toBeInTheDocument()
+    expect(within(summaryTile).queryByText('EX-555')).not.toBeInTheDocument()
     expect(screen.queryByRole('heading', { name: 'Permits' })).not.toBeInTheDocument()
     expect(mockedFetchProvincialExemptionDetail).not.toHaveBeenCalled()
     expect(within(summaryTile).getByText('Jan 1, 2026')).toBeInTheDocument()
