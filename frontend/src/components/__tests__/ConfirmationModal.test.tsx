@@ -128,6 +128,37 @@ describe('ConfirmationModal', () => {
     expect(screen.queryByText('database unavailable')).not.toBeInTheDocument()
   })
 
+  it('stays open without a failure when the confirmation returns false', async () => {
+    const user = userEvent.setup()
+    const onConfirm = vi.fn().mockResolvedValue(false)
+    const onClose = vi.fn()
+    const onError = vi.fn()
+
+    render(
+      <ConfirmationModal
+        open
+        title="Send request?"
+        errorMessage="An earlier failure."
+        onConfirm={onConfirm}
+        onClose={onClose}
+        onError={onError}
+      />,
+    )
+
+    const errorNotice = screen.getByText('An earlier failure.')
+    const confirm = screen.getByRole('button', { name: 'Confirm' })
+    await user.click(confirm)
+
+    await waitFor(() => expect(onConfirm).toHaveBeenCalledTimes(1))
+    expect(onClose).not.toHaveBeenCalled()
+    expect(onError).not.toHaveBeenCalled()
+    expect(screen.getByRole('dialog', { name: 'Send request?' })).toBeVisible()
+    expect(
+      errorNotice.closest('.app-inline-notification, .cds--inline-notification'),
+    ).not.toHaveFocus()
+    expect(confirm).toBeEnabled()
+  })
+
   it('delegates rejected work when the caller owns error feedback', async () => {
     const user = userEvent.setup()
     const error = new Error('policy conflict')

@@ -36,6 +36,7 @@ import {
   Stamp,
 } from '@carbon/icons-react'
 import SearchableSelect from '../../components/SearchableSelect'
+import SelectedItemTags from '@/components/SelectedItemTags'
 import { AppNotification } from '../../components/AppNotification'
 import DetailCardTitle from '@/components/DetailCardTitle'
 import ForestClientComboBox from '@/components/ForestClientComboBox'
@@ -1498,6 +1499,13 @@ const ProvincialApplicationCreatePage = () => {
     setFormEdited(true)
   }
 
+  // A species change clears the end use, which depends on the species.
+  const onApplicationSpeciesChange = (speciesCodes: string[]) => {
+    markFormEdited()
+    setForm((current) => ({ ...current, speciesCodes, endUseCode: '' }))
+    markFieldTouched('speciesCodes')
+  }
+
   const fieldError = (field: ProvincialApplicationCreateField): string | undefined =>
     getVisibleFieldError(field, fieldErrors, touchedFields, showAllValidationErrors)
   const speciesCodesError = fieldError('speciesCodes')
@@ -1983,6 +1991,15 @@ const ProvincialApplicationCreatePage = () => {
                       disabled={isSubmitting}
                       onChange={(_, { checked }) => {
                         markFormEdited()
+                        // The client fields this choice changes show errors after a save attempt.
+                        setTouchedFields((current) => ({
+                          ...current,
+                          ownerClientNumber: false,
+                          ownerClientLocationCode: false,
+                          agentClientNumber: false,
+                          agentClientLocationCode: false,
+                          agentContactName: false,
+                        }))
                         if (provincialSubmitterIdentityLocked) {
                           setOwnerClientLocations([])
                           setOwnerClientData(null)
@@ -2402,15 +2419,20 @@ const ProvincialApplicationCreatePage = () => {
                             <span id="applicationSpecies-error">{speciesCodesError}</span>
                           }
                           helperText={speciesHelperText}
-                          onChange={({ selectedItems }) => {
-                            markFormEdited()
-                            setForm((current) => ({
-                              ...current,
-                              speciesCodes: selectedItems.map((item) => item.code),
-                              endUseCode: '',
-                            }))
-                            markFieldTouched('speciesCodes')
-                          }}
+                          onChange={({ selectedItems }) =>
+                            onApplicationSpeciesChange(selectedItems.map((item) => item.code))
+                          }
+                        />
+                        <SelectedItemTags
+                          items={form.speciesCodes}
+                          itemKey={(code) => code}
+                          itemText={(code) => code}
+                          disabled={isApplicationSpeciesSelectDisabled}
+                          onRemove={(code) =>
+                            onApplicationSpeciesChange(
+                              form.speciesCodes.filter((selected) => selected !== code),
+                            )
+                          }
                         />
                       </RecordFieldCell>
                       <RecordFieldCell>

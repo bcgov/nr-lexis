@@ -823,7 +823,6 @@ const ProvincialExemptionCreatePage = () => {
                               selectedItems={selectedRegions}
                               invalid={!!fieldError('regionNumbers')}
                               invalidText={fieldError('regionNumbers')}
-                              showSelectedNames
                               disabled={!optionsLoaded || optionsUnavailable}
                               onChange={(selectedItems) => {
                                 const regionNumbers = selectedItems.map((item) => item.id)

@@ -79,6 +79,10 @@ export const focusDateCalendarDay = (calendar: DateCalendar, preferredDay?: stri
     days.querySelector<HTMLElement>('.flatpickr-day.today') ??
     days.querySelector<HTMLElement>('.flatpickr-day[tabindex]')
   day?.focus()
+  // A calendar that has just opened keeps its days hidden until its open animation ends.
+  if (day && document.activeElement !== day) {
+    days.addEventListener('animationend', () => day.focus(), { once: true })
+  }
   return !!day
 }
 

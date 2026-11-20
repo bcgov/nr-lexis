@@ -1848,6 +1848,8 @@ public class PermitDetailsRpcController {
       throw new AccessDeniedException(
           "Document is not a " + expectedSource + " attachment for the supplied permit.");
     }
+    // Deleting needs the same write access as adding: the permit's region for staff.
+    authorization().requirePermitAttachmentMutation(authentication, permitNumber);
     return document;
   }
 

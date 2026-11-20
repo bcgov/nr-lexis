@@ -123,7 +123,6 @@ public class ApplicationDetailsRpcController {
   private static final String APPLICATION_APPLICANT_TYPE_AGENT = "A";
   private static final String APPLICATION_STATUS_APPROVED = "APP";
   private static final String APPLICATION_STATUS_EXPIRED = "EXP";
-  private static final String APPLICATION_STATUS_PERMITTED = "PMT";
   private static final int APPLICATION_REMARK_MAX_BYTES = 254;
   private static final String APPLICATION_REMARK_UNSUPPORTED_CHARACTERS_MESSAGE =
       "Application remarks contain unsupported special characters. Remove them and try again.";
@@ -290,7 +289,7 @@ public class ApplicationDetailsRpcController {
     }
     Long parsedDocumentId = parsePositiveLong(documentId);
     Long parsedApplicationNumber = parsePositiveLong(applicationNumber);
-    requireApplicationAccess(parsedApplicationNumber, authentication);
+    requireApplicationDocumentWrite(parsedApplicationNumber, authentication);
     if (!applicationDocumentCanBeRemovedFromApplication(
         service, parsedDocumentId, parsedApplicationNumber)) {
       return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
@@ -307,7 +306,7 @@ public class ApplicationDetailsRpcController {
     return operationCoordinator.executeApplicationLocalMutation(
         parsedApplicationNumber,
         () -> {
-          requireApplicationAccess(parsedApplicationNumber, authentication);
+          requireApplicationDocumentWrite(parsedApplicationNumber, authentication);
           if (!applicationDocumentCanBeRemovedFromApplication(
               service, parsedDocumentId, parsedApplicationNumber)) {
             return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
@@ -1994,6 +1993,14 @@ public class ApplicationDetailsRpcController {
     provincialAuthorizationService.requireApplication(authentication, applicationNumber);
   }
 
+  // Deleting a document needs the same write access as adding one: the application's region for
+  // staff, the scoped client for a Provincial Submitter.
+  private void requireApplicationDocumentWrite(Long applicationNumber, Authentication authentication) {
+    requireApplicationAccess(applicationNumber, authentication);
+    provincialAuthorizationService.requireApplicationAttachmentMutation(
+        authentication, applicationNumber);
+  }
+
   private void requirePermitAccess(Long permitNumber, Authentication authentication) {
     provincialAuthorizationService.requirePermit(authentication, permitNumber);
   }
@@ -2192,17 +2199,14 @@ public class ApplicationDetailsRpcController {
 
   private boolean canRemoveApplicationDocumentWithCurrentStatus(
       ApplicationDetailsRpcService service, Long applicationNumber, List<String> roles) {
-    return service
-        .getApplicationSummarySnapshot(applicationNumber)
-        // Federal application records have no documents to maintain.
-        .filter(snapshot -> !"F".equalsIgnoreCase(trimToNull(snapshot.jurisdictionCode())))
-        .map(snapshot -> canRemoveApplicationDocumentWithStatus(snapshot.applicationStatusCode(), roles))
-        .orElse(false);
-  }
-
-  private boolean canRemoveApplicationDocumentWithStatus(String applicationStatusCode, List<String> roles) {
-    String status = applicationStatusCode == null ? "" : applicationStatusCode.trim().toUpperCase(Locale.ROOT);
-    if (status.isBlank()) {
+    boolean hasStatus =
+        service
+            .getApplicationSummarySnapshot(applicationNumber)
+            // Federal application records have no documents to maintain.
+            .filter(snapshot -> !"F".equalsIgnoreCase(trimToNull(snapshot.jurisdictionCode())))
+            .map(snapshot -> trimToNull(snapshot.applicationStatusCode()) != null)
+            .orElse(false);
+    if (!hasStatus) {
       return false;
     }
 
@@ -2219,8 +2223,13 @@ public class ApplicationDetailsRpcController {
                 role ->
                     APPLICATION_DOCUMENT_INDUSTRY_ROLES.contains(role)
                         || role.startsWith("LEXIS_PROVINCIAL_SUBMITTER_"));
+    // INTENTIONAL_LEGACY_DIVERGENCE(CLIENT_APPLICATION_DOCUMENTS): industry users add and delete
+    // documents until the application is on a Complete permit.
     return industryUser
-        && (APPLICATION_STATUS_PERMITTED.equals(status) || APPLICATION_STATUS_EXPIRED.equals(status));
+        && service
+            .getApplicationEditContext(applicationNumber)
+            .map(context -> !context.hasCompletePermit())
+            .orElse(false);
   }
 
   private boolean hasApplicationDocumentDeleteRole(List<String> roles) {

@@ -174,7 +174,7 @@ function MultiFileDropZone({
             <p>
               {multiple
                 ? variant === 'fspts'
-                  ? 'Drag and drop files here or click to upload'
+                  ? 'Drag and drop one or more files here or click to upload'
                   : 'Drag and drop files here, or browse for files.'
                 : 'Drag and drop a file here or click to upload'}
             </p>

@@ -244,10 +244,10 @@ describe('Upload applications', () => {
     })
     await addFiles(xmlFile('test-2026-10-20-01.xml'), xmlFile('test-2026-10-20-02.xml'), oversized)
 
-    expect(await screen.findByText('2 of 3 files failed validation')).toBeVisible()
+    expect(await screen.findByText("2 of 3 files can't be created")).toBeVisible()
     expect(
       screen.getByText(
-        'Correct the failed files and add them again, or review the 1 valid file and create its application.',
+        'Correct the issues listed below in your files, then add them again. You can also review and create the valid file now.',
       ),
     ).toBeVisible()
     expect(screen.getAllByText('Failed')).toHaveLength(2)
@@ -275,9 +275,18 @@ describe('Upload applications', () => {
       '"Application file","Detail"',
     )
 
+    // The remove control says what it does on hover and focus.
+    expect(
+      screen.getAllByRole('tooltip', { hidden: true }).map((tooltip) => tooltip.textContent),
+    ).toContain('Remove test-2026-10-20-02.xml')
     await userEvent.click(screen.getByRole('button', { name: 'Remove test-2026-10-20-02.xml' }))
 
-    expect(screen.getByText('1 of 2 files failed validation')).toBeVisible()
+    expect(screen.getByText("1 of 2 files can't be created")).toBeVisible()
+    expect(
+      screen.getByText(
+        'Correct the issues listed below in your files, then add them again. You can also review and create the valid file now.',
+      ),
+    ).toBeVisible()
     expect(screen.getByRole('table', { name: 'Validation issues (1)' })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Remove test-2026-10-20-03.xml' })).toHaveFocus()
 

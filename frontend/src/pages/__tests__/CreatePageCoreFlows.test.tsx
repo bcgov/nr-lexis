@@ -424,7 +424,7 @@ describe('Create Page Core Flows', () => {
     const submitButton = await screen.findByRole('button', { name: 'Save application' })
     await waitFor(() => expect(submitButton).toBeEnabled())
     await userEvent.click(submitButton)
-    expect(screen.queryByRole('dialog', { name: 'Confirm application accuracy' })).toBeNull()
+    expect(screen.queryByRole('dialog', { name: 'Confirm application details' })).toBeNull()
 
     expect(mockedFetchApplicationClientData).toHaveBeenCalledWith('11111', '00')
     expect(mockedFetchApplicationClientLocations).toHaveBeenCalledWith('00011111', 'owner')
@@ -641,7 +641,7 @@ describe('Create Page Core Flows', () => {
     const feedback = await screen.findByRole('status')
     expect(feedback).toHaveTextContent('Cannot save yet.')
     expect(
-      screen.queryByRole('dialog', { name: 'Confirm application accuracy' }),
+      screen.queryByRole('dialog', { name: 'Confirm application details' }),
     ).not.toBeInTheDocument()
     expect(mockedSubmitProvincialApplicationCreate).not.toHaveBeenCalled()
 
@@ -826,27 +826,44 @@ describe('Create Page Core Flows', () => {
     await waitForApplicationCreateLoads('Applicant client details')
     await userEvent.click(saveButton)
 
-    const firstDialog = screen.getByRole('dialog', { name: 'Confirm application accuracy' })
-    const firstAcknowledgement = within(firstDialog).getByRole('checkbox', { name: 'I Agree' })
+    const firstDialog = screen.getByRole('dialog', { name: 'Confirm application details' })
+    const firstAcknowledgement = within(firstDialog).getByRole('checkbox', {
+      name: 'I confirm the application details are accurate',
+    })
     const firstConfirm = within(firstDialog).getByRole('button', { name: 'Save application' })
     expect(firstAcknowledgement).not.toBeChecked()
-    expect(firstConfirm).toBeDisabled()
+    await waitFor(() => expect(firstAcknowledgement).toHaveFocus())
+    expect(within(firstDialog).queryByText(/Required fields/)).toBeNull()
+    expect(firstConfirm).toBeEnabled()
     await userEvent.click(firstConfirm)
+    expect(
+      await within(firstDialog).findByText('Confirm the application details are accurate to save'),
+    ).toBeVisible()
+    expect(firstAcknowledgement).toHaveFocus()
+    expect(firstDialog).toBeInTheDocument()
     expect(mockedSubmitProvincialApplicationCreate).not.toHaveBeenCalled()
 
     await userEvent.click(firstAcknowledgement)
-    expect(firstConfirm).toBeEnabled()
+    expect(
+      within(firstDialog).queryByText('Confirm the application details are accurate to save'),
+    ).toBeNull()
+    // Unticking again shows no error until the next save attempt.
+    await userEvent.click(firstAcknowledgement)
+    expect(
+      within(firstDialog).queryByText('Confirm the application details are accurate to save'),
+    ).toBeNull()
+    await userEvent.click(firstAcknowledgement)
     await userEvent.click(within(firstDialog).getByRole('button', { name: 'Cancel' }))
     await waitFor(() =>
       expect(
-        screen.queryByRole('dialog', { name: 'Confirm application accuracy' }),
+        screen.queryByRole('dialog', { name: 'Confirm application details' }),
       ).not.toBeInTheDocument(),
     )
 
     await userEvent.click(saveButton)
-    const reopenedDialog = screen.getByRole('dialog', { name: 'Confirm application accuracy' })
+    const reopenedDialog = screen.getByRole('dialog', { name: 'Confirm application details' })
     const reopenedAcknowledgement = within(reopenedDialog).getByRole('checkbox', {
-      name: 'I Agree',
+      name: 'I confirm the application details are accurate',
     })
     expect(reopenedAcknowledgement).not.toBeChecked()
     await userEvent.click(reopenedAcknowledgement)
@@ -862,14 +879,14 @@ describe('Create Page Core Flows', () => {
     })
     await waitFor(() =>
       expect(
-        screen.queryByRole('dialog', { name: 'Confirm application accuracy' }),
+        screen.queryByRole('dialog', { name: 'Confirm application details' }),
       ).not.toBeInTheDocument(),
     )
 
     await userEvent.click(screen.getByRole('button', { name: 'Save application' }))
-    const postSaveDialog = screen.getByRole('dialog', { name: 'Confirm application accuracy' })
+    const postSaveDialog = screen.getByRole('dialog', { name: 'Confirm application details' })
     const postSaveAcknowledgement = within(postSaveDialog).getByRole('checkbox', {
-      name: 'I Agree',
+      name: 'I confirm the application details are accurate',
     })
     expect(postSaveAcknowledgement).not.toBeChecked()
 
@@ -890,7 +907,7 @@ describe('Create Page Core Flows', () => {
     const callsBeforeReopen = mockedSubmitProvincialApplicationCreate.mock.calls.length
     await userEvent.click(within(postSaveDialog).getByRole('button', { name: 'Cancel' }))
     await userEvent.click(screen.getByRole('button', { name: 'Save application' }))
-    const cleanDialog = screen.getByRole('dialog', { name: 'Confirm application accuracy' })
+    const cleanDialog = screen.getByRole('dialog', { name: 'Confirm application details' })
     expect(mockedSubmitProvincialApplicationCreate).toHaveBeenCalledTimes(callsBeforeReopen)
     expect(
       within(cleanDialog).queryByText('Application agent location does not exist.'),
@@ -1684,8 +1701,12 @@ describe('Create Page Core Flows', () => {
 
   const confirmSubmitterSave = async () => {
     await userEvent.click(screen.getByRole('button', { name: 'Save application' }))
-    const dialog = await screen.findByRole('dialog', { name: 'Confirm application accuracy' })
-    await userEvent.click(within(dialog).getByRole('checkbox', { name: 'I Agree' }))
+    const dialog = await screen.findByRole('dialog', { name: 'Confirm application details' })
+    await userEvent.click(
+      within(dialog).getByRole('checkbox', {
+        name: 'I confirm the application details are accurate',
+      }),
+    )
     await userEvent.click(within(dialog).getByRole('button', { name: 'Save application' }))
   }
 
@@ -1706,6 +1727,22 @@ describe('Create Page Core Flows', () => {
       ),
     )
     expect(mockedFetchApplicationClientLocations).not.toHaveBeenCalledWith('00033333', 'agent')
+  })
+
+  it('shows no field errors when a provincial submitter ticks the agent choice', async () => {
+    renderSubmitterApplicationCreate(READY_SUBMITTER_APPLICATION_QUERY)
+
+    await selectApplicationCreateTab('Applicant')
+    await waitForApplicationCreateLoads('Applicant client details')
+    // The client field was visited before the choice moved the client to the agent.
+    await userEvent.click(screen.getByRole('textbox', { name: 'Client' }))
+    await userEvent.click(screen.getByRole('checkbox', { name: "I'm an agent" }))
+
+    const panel = screen.getByRole('tabpanel')
+    expect(
+      [...panel.querySelectorAll('.cds--form-requirement')].map((error) => error.textContent),
+    ).toEqual([])
+    expect(panel.querySelector('[aria-invalid="true"]')).toBeNull()
   })
 
   it('lets a provincial submitter create an application as the owner', async () => {

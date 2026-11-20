@@ -2661,7 +2661,6 @@ const ProvincialExemptionDetailsPage = () => {
                                       id="exemptionDetailRegions"
                                       titleText={requiredLabel('Region')}
                                       required
-                                      showSelectedNames
                                       items={regionOptions}
                                       selectedItems={selectedRegions}
                                       disabled={

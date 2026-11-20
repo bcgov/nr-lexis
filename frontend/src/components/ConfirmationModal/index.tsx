@@ -24,6 +24,8 @@ type ConfirmationModalProps = {
   size?: 'xs' | 'sm' | 'md' | 'lg'
   className?: string
   launcherButtonRef?: RefObject<HTMLElement | null>
+  /** The control that takes focus as the dialog opens; Cancel by default. */
+  initialFocusSelector?: string
   /**
    * False when confirming or cancelling moves focus itself, so the dialog leaves focus alone.
    * Closing with the X button or Escape still returns focus.
@@ -31,7 +33,8 @@ type ConfirmationModalProps = {
   restoreFocusAfterAction?: boolean
   errorTitle?: string
   errorMessage?: string
-  onConfirm: () => Promise<void> | void
+  /** Returning false keeps the dialog open without treating it as a failure, e.g. for a field error. */
+  onConfirm: () => Promise<boolean | void> | boolean | void
   onCancel?: () => void
   onClose: () => void
   onError?: (error: unknown) => void
@@ -57,6 +60,7 @@ const ConfirmationModal = ({
   className,
   launcherButtonRef,
   restoreFocusAfterAction = true,
+  initialFocusSelector,
   errorTitle = 'Action failed',
   errorMessage,
   onConfirm,
@@ -133,7 +137,7 @@ const ConfirmationModal = ({
     if (document.activeElement === confirmButtonRef.current) findDialog()?.focus()
     setPending(true)
     try {
-      await onConfirm()
+      if ((await onConfirm()) === false) return
       setFailedAttempts(0)
       closeAndRestoreFocus(false, true)
     } catch (error) {
@@ -163,7 +167,7 @@ const ConfirmationModal = ({
         aria-describedby={description ? descriptionId : undefined}
         className={['lexis-confirmation-modal', className].filter(Boolean).join(' ')}
         launcherButtonRef={launcherButtonRef}
-        selectorPrimaryFocus={`#${cancelButtonId}`}
+        selectorPrimaryFocus={initialFocusSelector ?? `#${cancelButtonId}`}
         preventCloseOnClickOutside
         onRequestClose={requestClose}
       >

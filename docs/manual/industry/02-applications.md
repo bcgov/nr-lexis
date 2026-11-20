@@ -53,8 +53,8 @@ make offers on it.
      on the region and product type;
    - **End use**, which depends on the region and species.
 5. Select **Save application**.
-6. In **Confirm application accuracy**, tick **I Agree** and select **Save
-   application** again.
+6. In **Confirm application details**, tick **I confirm the application
+   details are accurate** and select **Save application** again.
 
 ![Create new application: the Applicant tab](images/02-create-application.png)
 
@@ -146,7 +146,8 @@ For the file format, ask your regional export office.
 
 Open the application and select the edit button on the card you want to
 change: **Edit applicant details**, **Edit application details** or **Edit
-scale details**. Each save asks you to confirm accuracy with **I Agree**.
+scale details**. Each save asks you to tick **I confirm the application
+details are accurate**.
 
 - You can change a **New** application up to and including its list date.
 - You can change an **Approved** application only before its list date, and
@@ -155,6 +156,9 @@ scale details**. Each save asks you to confirm accuracy with **I Agree**.
   organization is the agent, you can't remove the agent.
 - After that, the edit buttons are no longer shown. Ask your regional
   export office if something must change.
+- You can add and delete documents on the **Documents** tab until the
+  application is on a **Complete** permit. Documents listed from a permit
+  can't be deleted here.
 
 Packages and scale lines follow their own rules:
 
