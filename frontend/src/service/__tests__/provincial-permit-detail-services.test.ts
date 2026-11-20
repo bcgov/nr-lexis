@@ -234,6 +234,7 @@ describe('provincial permit detail services', () => {
     expect(result).toEqual({
       applications: ['1000456'],
       applicationTotals: [],
+      applicationStatuses: {},
       packages: [
         {
           packageNumber: 'PKG-100',
@@ -904,6 +905,7 @@ describe('provincial permit detail services', () => {
           { applicationNumber: '1000456', pieces: 2515, volume: 847.7 },
           { applicationNumber: 1000457, pieces: 58, volume: 70.7 },
         ],
+        applicationStatuses: { '1000456': 'Permitted', '1000457': 7 },
         packageList: [],
       }),
     )
@@ -914,6 +916,7 @@ describe('provincial permit detail services', () => {
       { applicationNumber: '1000456', pieces: 2515, volume: 847.7 },
       { applicationNumber: '1000457', pieces: 58, volume: 70.7 },
     ])
+    expect(core.applicationStatuses).toEqual({ '1000456': 'Permitted' })
   })
 
   it('reads core tabs without application totals as having none', async () => {
@@ -924,6 +927,7 @@ describe('provincial permit detail services', () => {
     const core = await fetchProvincialPermitDetailCoreTabs('P-777')
 
     expect(core.applicationTotals).toEqual([])
+    expect(core.applicationStatuses).toEqual({})
   })
 
   it.each([

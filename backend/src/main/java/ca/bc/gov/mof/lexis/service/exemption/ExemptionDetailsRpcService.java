@@ -114,7 +114,8 @@ public interface ExemptionDetailsRpcService {
       String agentContactName,
       String ownerCompanyName,
       String agentCompanyName,
-      boolean removable) {
+      boolean removable,
+      String statusDescription) {
     public ApplicationItem(
         long applicationNumber,
         String requestedVolume,
@@ -136,7 +137,8 @@ public interface ExemptionDetailsRpcService {
           "",
           "",
           "",
-          false);
+          false,
+          "");
     }
   }
 

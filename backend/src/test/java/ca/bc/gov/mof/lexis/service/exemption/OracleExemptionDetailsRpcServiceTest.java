@@ -601,7 +601,8 @@ class OracleExemptionDetailsRpcServiceTest {
                     "SAMPLE AGENT LTD",
                     "P",
                     "T",
-                    "EXE"),
+                    "EXE",
+                    "Exempted"),
                 new ExemptionDetailsRpcRepository.ApplicationSummaryRow(
                     1000457L, 11.0d, 11.0d, "00077881", "P", "S")));
 
@@ -626,6 +627,7 @@ class OracleExemptionDetailsRpcServiceTest {
                   .isEqualTo("SAMPLE OWNER LTD");
               assertThat(application.agentCompanyName())
                   .isEqualTo("SAMPLE AGENT LTD");
+              assertThat(application.statusDescription()).isEqualTo("Exempted");
             });
     assertThat(response.containsUnmanu()).isTrue();
     assertThat(response.ownerNumber()).isEqualTo("00077881");

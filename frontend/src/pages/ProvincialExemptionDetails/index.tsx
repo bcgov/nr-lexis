@@ -67,6 +67,7 @@ import ExemptionApprovalModal, {
 } from '@/components/ExemptionApprovalModal'
 import { exemptionApprovalResults } from '@/components/exemption-approval-results'
 import PageHeader from '@/components/PageHeader'
+import { formatPermitStatus } from '@/utils/permit'
 import RecordHeaderSubtitle from '@/components/RecordHeaderSubtitle'
 import AuthoritativeOptionsUnavailableNotification from '@/components/AuthoritativeOptionsUnavailableNotification'
 import StatusTag from '@/components/StatusTag'
@@ -2355,6 +2356,7 @@ const ProvincialExemptionDetailsPage = () => {
                           recordNumber: application.applicationNumber,
                           to: applicationRecordPath(application),
                           state: relatedRecordReturnState,
+                          status: application.statusDescription,
                         }))
                       : [],
                     onShowAllRecords: () => openFullListTab('applications'),
@@ -2367,6 +2369,7 @@ const ProvincialExemptionDetailsPage = () => {
                           recordNumber: permit.permitNumber,
                           to: permitRecordPath(permit),
                           state: relatedRecordReturnState,
+                          status: formatPermitStatus(null, permit.permitStatus),
                         }))
                       : [],
                     onShowAllRecords: () => openFullListTab('permits'),

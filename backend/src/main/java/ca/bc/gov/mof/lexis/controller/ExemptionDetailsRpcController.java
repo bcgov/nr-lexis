@@ -1146,7 +1146,8 @@ public class ExemptionDetailsRpcController {
                         row.agentContactName(),
                         row.ownerCompanyName(),
                         row.agentCompanyName(),
-                        row.removable()))
+                        row.removable(),
+                        row.statusDescription()))
             .toList();
 
     return new ExemptionApplicationsResponseDto(
@@ -1678,7 +1679,8 @@ public class ExemptionDetailsRpcController {
       String agentContactName,
       String ownerCompanyName,
       String agentCompanyName,
-      boolean removable) {}
+      boolean removable,
+      String statusDescription) {}
 
   public record PermitItemDto(
       long permitNumber,

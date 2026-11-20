@@ -160,7 +160,8 @@ public class OracleExemptionDetailsRpcService implements ExemptionDetailsRpcServ
               row.agentContactName(),
               row.ownerCompanyName(),
               row.agentCompanyName(),
-              isRemovableFromExemption(exemptionStatus, row)));
+              isRemovableFromExemption(exemptionStatus, row),
+              row.statusDescription()));
     }
 
     String ownerNumber = blanketOic ? "Blanket OIC" : Optional.ofNullable(previousOwnerClientNumber).orElse("");

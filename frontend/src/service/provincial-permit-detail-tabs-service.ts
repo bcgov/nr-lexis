@@ -98,6 +98,8 @@ export type ProvincialPermitDetailTabsData = {
   applications: string[]
   /** Each listed application's pieces and volume on this permit; empty for Blanket OIC. */
   applicationTotals: PermitApplicationTotals[]
+  /** Status description by listed application number. */
+  applicationStatuses: Record<string, string>
   packages: ProvincialPermitPackageInfoRow[]
   items: ProvincialPermitItemRow[]
   fees: ProvincialPermitFeeRow[]
@@ -208,6 +210,7 @@ const PERMIT_TAB_ARRAY_KEYS = ['scaleList', ...DEFAULT_PAYLOAD_ARRAY_KEYS]
 export const EMPTY_PROVINCIAL_PERMIT_DETAIL_TABS: ProvincialPermitDetailTabsData = {
   applications: [],
   applicationTotals: [],
+  applicationStatuses: {},
   packages: [],
   items: [],
   fees: [],
@@ -408,10 +411,20 @@ const normalizePackageDetailsFields = (
 
 type ProvincialPermitCoreTabs = Pick<
   ProvincialPermitDetailTabsData,
-  'applications' | 'applicationTotals' | 'packages' | 'items'
+  'applications' | 'applicationTotals' | 'applicationStatuses' | 'packages' | 'items'
 > & {
   packageNumbers: string[]
 }
+
+// Statuses are display text only, so entries that aren't strings are left out.
+const parseApplicationStatuses = (value: unknown): Record<string, string> =>
+  isRecord(value)
+    ? Object.fromEntries(
+        Object.entries(value).filter(
+          (entry): entry is [string, string] => typeof entry[1] === 'string',
+        ),
+      )
+    : {}
 
 // A response without totals has none; a malformed entry makes the whole response invalid.
 const parseApplicationTotals = (value: unknown, path: string): PermitApplicationTotals[] => {
@@ -501,6 +514,7 @@ const fetchCoreTabs = async (
     return {
       applications: payload.applicationList.map(asString).filter(Boolean),
       applicationTotals: parseApplicationTotals(payload.applicationTotals, path),
+      applicationStatuses: parseApplicationStatuses(payload.applicationStatuses),
       packageNumbers: corePackages.map((corePackage) => corePackage.packageNumber),
       packages: corePackages.map((corePackage) => corePackage.package),
       items: corePackages.flatMap((corePackage) => corePackage.items),
@@ -623,6 +637,7 @@ const fetchProvincialPermitDetailTabsData = async (
   return {
     applications: coreTabs.applications,
     applicationTotals: coreTabs.applicationTotals,
+    applicationStatuses: coreTabs.applicationStatuses,
     packages: coreTabs.packages,
     items: coreTabs.items,
     fees: feeData?.fees ?? [],

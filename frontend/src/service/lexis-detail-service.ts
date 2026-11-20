@@ -139,7 +139,11 @@ export const releaseOfferEditLock = async (offerNumber: string): Promise<void> =
 
 type ProvincialPermitExemptionContext = Pick<
   ProvincialPermitDetail,
-  'approvedExemptionVolume' | 'exemptionVolumeRemaining' | 'exemptionTypeDescription' | 'blanketOic'
+  | 'approvedExemptionVolume'
+  | 'exemptionVolumeRemaining'
+  | 'exemptionTypeDescription'
+  | 'exemptionStatusCode'
+  | 'blanketOic'
 >
 
 export const fetchProvincialPermitExemptionContext = async (
@@ -170,6 +174,7 @@ export const fetchProvincialPermitExemptionContext = async (
     approvedExemptionVolume,
     exemptionVolumeRemaining,
     exemptionTypeDescription: response.data.exemptionTypeDescription ?? null,
+    exemptionStatusCode: response.data.exemptionStatusCode ?? null,
     blanketOic: response.data.blanketOic,
   }
 }

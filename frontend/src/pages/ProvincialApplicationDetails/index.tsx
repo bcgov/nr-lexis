@@ -58,6 +58,7 @@ import DetailBreadcrumb from '@/components/DetailBreadcrumb'
 import DetailCardTitle from '@/components/DetailCardTitle'
 import DetailLoadError from '@/components/DetailLoadError'
 import PageHeader from '@/components/PageHeader'
+import { formatPermitStatus } from '@/utils/permit'
 import RecordHeaderSubtitle from '@/components/RecordHeaderSubtitle'
 import PendingIcon from '@/components/PendingIcon'
 import AuthoritativeOptionsUnavailableNotification from '@/components/AuthoritativeOptionsUnavailableNotification'
@@ -4188,6 +4189,7 @@ const ProvincialApplicationDetailsPage = () => {
                               ? `/provincial/exemption/${encodeURIComponent(detail.exemptionNumber)}`
                               : undefined,
                             state: relatedRecordReturnState,
+                            status: detail.exemptionStatusCode,
                           },
                         ]
                       : [],
@@ -4201,6 +4203,7 @@ const ProvincialApplicationDetailsPage = () => {
                         ? `/provincial/permit/${encodeURIComponent(permit.permitNumber)}`
                         : undefined,
                       state: relatedRecordReturnState,
+                      status: formatPermitStatus(null, permit.permitStatusDescription),
                     })),
                   },
                 ]}

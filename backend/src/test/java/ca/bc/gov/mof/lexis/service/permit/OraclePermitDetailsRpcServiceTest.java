@@ -1,6 +1,7 @@
 package ca.bc.gov.mof.lexis.service.permit;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.entry;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.assertj.core.groups.Tuple.tuple;
 import static org.mockito.ArgumentMatchers.any;
@@ -1486,9 +1487,11 @@ class OraclePermitDetailsRpcServiceTest {
     when(repository.findCorePackageContexts(7000123L, true))
         .thenReturn(List.of(
             new PermitCorePackageContextRow(plain.packageRow(), plain.applicationInfo(), "P", "B",
-                "Timber", "Timber", "Second Growth", "Second Growth", "Active", true),
+                "Timber", "Timber", "Second Growth", "Second Growth", "Active", true,
+                null),
             new PermitCorePackageContextRow(padded.packageRow(), padded.applicationInfo(), "P", "B",
-                "Timber", "Timber", "Second Growth", "Second Growth", "Active", true)));
+                "Timber", "Timber", "Second Growth", "Second Growth", "Active", true,
+                null)));
     when(repository.findCoreScaleRows(List.of("PKG-100", "PKG-100  "), 7000123L, true))
         .thenReturn(List.of(
             coreScale(scale("101", "TM1", "HE", "A", 1d, 1L, "7000123", "PKG-100", 1000456L)),
@@ -1527,7 +1530,8 @@ class OraclePermitDetailsRpcServiceTest {
     when(repository.findCorePackageContexts(7000123L, true))
         .thenReturn(List.of(
             new PermitCorePackageContextRow(context.packageRow(), context.applicationInfo(), "P",
-                "B", "Timber", "Timber", "Second Growth", "Second Growth", "Active", true)));
+                "B", "Timber", "Timber", "Second Growth", "Second Growth", "Active", true,
+                null)));
     when(repository.findCoreScaleRows(List.of("PKG-100"), 7000123L, true))
         .thenReturn(List.of(
             coreScale(scale("101", "TM1", "HE", "A", 0.05d, 1L, "7000123", "PKG-100", 1000456L)),
@@ -1571,12 +1575,46 @@ class OraclePermitDetailsRpcServiceTest {
   }
 
   @Test
+  void coreTabsShouldReturnTheStatusOfEachListedApplication() {
+    when(repository.findCorePackageContexts(7000123L, false))
+        .thenReturn(
+            List.of(
+                withApplicationStatus(coreContext("MIN-1", 1000457L, true), "Permitted"),
+                withApplicationStatus(coreContext("MIN-2", 1000456L, true), " Exempted "),
+                withApplicationStatus(coreContext("MIN-3", 1000458L, true), "Permitted")));
+
+    PermitCoreTabsRpcResponseDto response =
+        service.getCoreTabs(
+            7000123L, false, application -> application.applicationNumber() != 1000458L);
+
+    assertThat(response.applicationStatuses())
+        .containsExactly(entry("1000456", "Exempted"), entry("1000457", "Permitted"));
+  }
+
+  private static PermitCorePackageContextRow withApplicationStatus(
+      PermitCorePackageContextRow context, String applicationStatusDescription) {
+    return new PermitCorePackageContextRow(
+        context.packageRow(),
+        context.applicationInfo(),
+        context.jurisdictionCode(),
+        context.exemptionTypeCode(),
+        context.applicationProductTypeDescription(),
+        context.packageProductTypeDescription(),
+        context.applicationGrowthTypeDescription(),
+        context.packageGrowthTypeDescription(),
+        context.packageStatusDescription(),
+        context.assignedToPermit(),
+        applicationStatusDescription);
+  }
+
+  @Test
   void blanketCoreTabsShouldReturnNoApplicationTotals() {
     var context = coreContext("PKG-100", 1000456L, true);
     when(repository.findCorePackageContexts(7000123L, true))
         .thenReturn(List.of(
             new PermitCorePackageContextRow(context.packageRow(), context.applicationInfo(), "P",
-                "B", "Timber", "Timber", "Second Growth", "Second Growth", "Active", true)));
+                "B", "Timber", "Timber", "Second Growth", "Second Growth", "Active", true,
+                null)));
     when(repository.findCoreScaleRows(List.of("PKG-100"), 7000123L, true))
         .thenReturn(List.of(
             coreScale(scale("101", "TM1", "HE", "A", 2d, 2L, "7000123", "PKG-100", 1000456L))));
@@ -10323,7 +10361,8 @@ class OraclePermitDetailsRpcServiceTest {
         growthDescription(applicationGrowth),
         growthDescription(packageGrowth),
         "Active",
-        assignedToPermit);
+        assignedToPermit,
+        null);
   }
 
   private static String growthDescription(String growthTypeCode) {

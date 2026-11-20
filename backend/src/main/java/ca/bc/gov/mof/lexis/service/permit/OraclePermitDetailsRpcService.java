@@ -879,12 +879,22 @@ public class OraclePermitDetailsRpcService implements PermitDetailsRpcService {
                     .toList(),
                 packageNumbers)));
 
+    Map<String, String> applicationStatuses = new LinkedHashMap<>();
+    for (PermitCorePackageContextRow contextRow : applicationContexts.values()) {
+      String applicationNumber = String.valueOf(contextRow.packageRow().applicationNumber());
+      String statusDescription = trimToNull(contextRow.applicationStatusDescription());
+      if (statusDescription != null && applicationList.contains(applicationNumber)) {
+        applicationStatuses.put(applicationNumber, statusDescription);
+      }
+    }
+
     return new PermitCoreTabsRpcResponseDto(
         applicationList,
         loadCorePackages(permitNumber, blanketOic, packageRows, lookupContext),
         blanketOic
             ? List.of()
-            : permitApplicationTotals(permitNumber, applicationList, coreScaleRows));
+            : permitApplicationTotals(permitNumber, applicationList, coreScaleRows),
+        applicationStatuses);
   }
 
   /**
