@@ -184,7 +184,7 @@ class ExemptionActivationEligibilityValidatorTest {
             "Application 1000456 must have a status of EXE before the exemption can be active.",
             "Application 1000456 is not linked to exemption EX-205.",
             "Application 1000456 is associated with permit 7000123 outside this exemption.",
-            "The approved volume must be greater than or equal to the total requested volume (95.0).");
+            "The approval volume must be greater than or equal to the total requested volume (95.0).");
   }
 
   @Test
@@ -278,9 +278,31 @@ class ExemptionActivationEligibilityValidatorTest {
     when(repository.findApplicationSummariesByExemptionNumber("EX-205")).thenReturn(List.of());
 
     assertThat(validator.validate(existingCandidate("O", 10_000_000.0d, false)))
-        .contains("The approved volume must be less than or equal to 9999999.99.");
+        .contains("The approval volume must be less than or equal to 9999999.99.");
     assertThat(validator.validate(existingCandidate("O", 100.001d, false)))
-        .contains("The approved volume must have no more than two decimal places.");
+        .contains("The approval volume must have no more than two decimal places.");
+  }
+
+  @Test
+  void activationShouldShowOnlyTotalRequestedMessageWhenApprovalVolumeIsZeroForMinisterial() {
+    when(repository.findApplicationSummariesByExemptionNumber("EX-205"))
+        .thenReturn(List.of(summary(1000456L, 95.0d)));
+    when(repository.findApplicationLinkRecord(1000456L))
+        .thenReturn(Optional.of(application(1000456L, "EXE", "EX-205", 95.0d)));
+    when(repository.findPermitsByApplicationNumberRequired(1000456L)).thenReturn(List.of());
+
+    assertThat(validator.validate(existingCandidate("M", 0.0d, true)))
+        .contains(
+            "The approval volume must be greater than or equal to the total requested volume (95.0).")
+        .doesNotContain("The approval volume must be greater than 0");
+  }
+
+  @Test
+  void activationShouldKeepGreaterThanZeroMessageForOicWithZeroApprovalVolume() {
+    when(repository.findApplicationSummariesByExemptionNumber("EX-205")).thenReturn(List.of());
+
+    assertThat(validator.validate(existingCandidate("O", 0.0d, false)))
+        .contains("The approval volume must be greater than 0");
   }
 
   @Test
@@ -384,7 +406,7 @@ class ExemptionActivationEligibilityValidatorTest {
 
     assertThat(validator.validate(existingCandidate("M", 300.5d, true)))
         .containsExactly(
-            "The approved volume must be greater than or equal to the total requested volume (300.6).");
+            "The approval volume must be greater than or equal to the total requested volume (300.6).");
     assertThat(validator.validate(existingCandidate("M", 300.6d, true))).isEmpty();
   }
 

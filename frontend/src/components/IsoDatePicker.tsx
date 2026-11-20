@@ -2,6 +2,7 @@ import { DatePicker, DatePickerInput } from '@carbon/react'
 import { type ComponentProps, type ReactNode, useEffect, useRef } from 'react'
 import { isValidIsoDate } from '@/pages/shared/create-form-utils'
 import { fieldErrorText } from '@/utils/field-error'
+import { closeDateCalendar, focusDateCalendarDay, type DateInput } from '@/utils/focus'
 
 const ISO_DATE_INPUT_PATTERN = String.raw`\d{4}-\d{2}-\d{2}`
 
@@ -71,6 +72,28 @@ export default function IsoDatePicker({
   useEffect(() => {
     latestInputValueRef.current = value
   }, [value])
+
+  useEffect(() => {
+    // An ancestor's capture listener runs before Carbon's own listener on the input.
+    const picker = document.getElementById(id)?.parentElement
+    if (!picker) return
+    // Tab leaves the date for the next field and closes its calendar; the Down arrow moves into
+    // the calendar. Carbon would move Tab into the calendar instead.
+    const onKeyDown = (event: KeyboardEvent) => {
+      const input = event.target as DateInput
+      if (!(input instanceof HTMLInputElement)) return
+      if (event.key === 'Tab' && !event.shiftKey) {
+        event.stopPropagation()
+        closeDateCalendar(input)
+        return
+      }
+      const calendar = input._flatpickr
+      if (event.key !== 'ArrowDown' || !calendar) return
+      if (focusDateCalendarDay(calendar)) event.preventDefault()
+    }
+    picker.addEventListener('keydown', onKeyDown, true)
+    return () => picker.removeEventListener('keydown', onKeyDown, true)
+  }, [id])
 
   return (
     <DatePicker

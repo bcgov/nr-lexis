@@ -101,7 +101,7 @@ describe('BlanketOicScaleCodeFields', () => {
     expect(onChange).not.toHaveBeenCalledWith('gradeCode', 'W')
     expect(screen.queryByText('Available once species are selected')).not.toBeInTheDocument()
 
-    await chooseOption('Grade', 'Chipper')
+    await chooseOption('Grade', 'X')
     expect(onChange).toHaveBeenLastCalledWith('gradeCode', 'X')
   })
 
@@ -133,8 +133,8 @@ describe('BlanketOicScaleCodeFields', () => {
     await waitFor(() => expect(screen.getByRole('combobox', { name: 'Grade' })).toBeEnabled())
     await act(async () => resolveAlderGrades?.([{ code: 'W', description: 'Utility' }]))
     await userEvent.click(screen.getByRole('combobox', { name: 'Grade' }))
-    expect(screen.getByRole('option', { name: 'Sawlog' })).toBeInTheDocument()
-    expect(screen.queryByRole('option', { name: 'Utility' })).not.toBeInTheDocument()
+    expect(screen.getByRole('option', { name: 'A' })).toBeInTheDocument()
+    expect(screen.queryByRole('option', { name: 'W' })).not.toBeInTheDocument()
   })
 
   it('reports a failed lookup to the panel and treats an empty grade list as loaded', async () => {

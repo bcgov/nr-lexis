@@ -490,7 +490,7 @@ const fetchCoreTabs = async (
           ...(packageDetails ? { remainingVolume: packageDetails.remainingVolume } : {}),
           status: packageDetails?.status || '',
           reprocessed: packageDetails?.reprocessed || '',
-          comments: packageDetails?.comments || '',
+          comments: asString(corePackage.comments ?? packageDetails?.comments),
         },
         items: blanketOic
           ? normalizedItems

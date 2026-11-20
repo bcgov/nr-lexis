@@ -521,6 +521,12 @@ const ProvincialPermitPage = () => {
             >
               <div className="legacy-search-grid provincial-permit-search-grid">
                 <TextInput
+                  id="permitNumber"
+                  labelText="Permit number"
+                  value={filters.permitNumber}
+                  onChange={(event) => updateFilter('permitNumber', event.target.value)}
+                />
+                <TextInput
                   id="applicationNumber"
                   labelText="Application number"
                   value={filters.applicationNumber}
@@ -531,12 +537,6 @@ const ProvincialPermitPage = () => {
                   labelText="Package number"
                   value={filters.packageNumber}
                   onChange={(event) => updateFilter('packageNumber', event.target.value)}
-                />
-                <TextInput
-                  id="permitNumber"
-                  labelText="Permit number"
-                  value={filters.permitNumber}
-                  onChange={(event) => updateFilter('permitNumber', event.target.value)}
                 />
                 <RegionMultiSelect
                   id="region"

@@ -24,7 +24,7 @@ notify the applicant. Completing a permit creates its invoice.
 
 | Menu item | Use it to |
 |---|---|
-| **Provincial › Permit search** | Find permits by application, package or permit number, region, issued date, status, owner client or agent client. |
+| **Provincial › Permit search** | Find permits by permit number, application number, package number, region, issued date, status, owner client or agent client. |
 | **Provincial › Exemption search** | Open the exemption to start a new permit. | <!-- roles: administrator, application-approver -->
 
 A permit record has these tabs: **Permit**, **Applicant**, **Shipping**,
@@ -85,8 +85,8 @@ You can correct the client's entries while the permit is **Active**.
 <!-- roles: read-only -->
 ### Find a permit
 
-**Provincial › Permit search** finds permits by application, package or
-permit number, region, issued date, status, owner client or agent client.
+**Provincial › Permit search** finds permits by permit number, application number,
+package number, region, issued date, status, owner client or agent client.
 Select the number in the first column to open the permit. Active permits
 show **(Pending)** beside the number.
 <!-- /roles -->
@@ -99,11 +99,13 @@ show **(Pending)** beside the number.
 ### Read the fees
 <!-- /roles -->
 
-![A permit's Fees tab](images/05-permit-fees.png)
+![Package fees and the rates for a scale line](images/05-permit-fees.png)
 
 **Permit fees** shows **Total volume (m³)** and **Total fees (CAD)**.
 **Package fees** shows each scale line with its **AMV ($/m³)**, volume,
-**EWB**, **FIL**, **MF** and **Fee (CAD)**.
+**EWB**, **Fee in lieu %**, **Multiplication factor** and **Fee (CAD)**.
+When a Blanket OIC permit has a fee override, the line fees and their
+rates show a dash. The override appears in **Permit fees**.
 
 In outline, LEXIS works out the fee for each scale line:
 
@@ -138,7 +140,9 @@ prepaid fee receipt.
 2. Set **Status** to **Complete**.
 3. Enter the **Issued date** and check the **Expiry date**. A Ministerial
    permit can't expire after its exemption.
-4. Select **Save changes**.
+4. Select **Save changes**. If LEXIS names another tab, complete its
+   required fields and save again. If the permit still needs an
+   application, package or scale line, the message lists what is missing.
 5. In **Email permit … approval?**, check the **Applicant email address**
    and select **Send approval**, or close the dialog to skip the email.
 
@@ -152,10 +156,14 @@ If the invoice can't be created, nothing is saved and the permit stays as
 it was. An application becomes **Permitted** when it is added to a
 Ministerial permit, or when its Order in Council permit is completed.
 
-> **Interior permits without a receipt:** LEXIS asks **Save as Payment
-> pending?** Select **Save** and the permit becomes **Payment pending**
-> instead of Complete. When payment arrives, enter the receipt number and
-> set the status to **Complete**. No approval email is offered until then.
+> For an Interior permit with no receipt, LEXIS asks **Save as Payment
+> pending?** Choose **Cancel** to keep the saved status. You can add a
+> receipt on **Fees** later and save it separately. Choose **Save as
+> Payment pending** to put the permit in that status. When payment
+> arrives, enter the **Receipt number** and choose **Complete** again.
+
+After completion, the notice above the tabs gives the permit number and
+says whether the confirmation email was sent.
 
 The approval email goes from the export mailbox for the permit's region to
 the address you confirm. It gives the permit number and lists its packages.

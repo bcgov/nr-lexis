@@ -38,8 +38,8 @@ date. Permits are issued against it.
 
 ### Find an exemption
 
-**Provincial › Exemption search** filters by **Application number**,
-**Package number**, **Exemption number**, **Region**, **Exemption type**,
+**Provincial › Exemption search** filters by **Exemption number**,
+**Application number**, **Package number**, **Region**, **Exemption type**,
 **Exemption status**, **Owner client** and **Agent client**. Select the
 number in the first column to open the exemption. Its **Applications** tab
 lists the applications it covers: select a number to open one.
@@ -143,8 +143,9 @@ number and lists its application numbers, and its text can't be changed.
 
 An exemption is not approved, and stays **New**, if it has no application,
 if its approval volume is less than the total requested volume, or if its
-expiry date is missing or already past. The reason is shown: correct it and
-approve again. You need every region the exemption covers.
+expiry date is missing or already past. If the approval volume is too
+low, the message gives the total requested volume. Enter at least that
+amount in **Approval volume (m³)** and approve again. You need every region the exemption covers.
 <!-- /roles -->
 
 <!-- roles: exemption-approver -->

@@ -231,11 +231,37 @@
   }
 }
 
-// A divider separates the package's fields from its Summary of scale.
-.boic-package-summary__scale {
-  margin-block-start: 1.5rem;
-  padding-block-start: 1.5rem;
-  border-block-start: 1px solid var(--cds-border-subtle-01);
+// A divider separates the package's fields from its Summary of scale, 32px from each.
+.permit-scale-summary {
+  margin-block-start: 2rem;
+  padding-block-start: 2rem;
+  border-block-start: 1px solid #dfdfe1;
+}
+
+:root[data-carbon-theme='g100'] .permit-scale-summary {
+  border-block-start-color: var(--csp-border-subtle-01);
+}
+
+// The Ministerial package fields end at the divider's 32px, without the fieldset's own margin.
+.legacy-form-fieldset:has(+ .permit-scale-summary) {
+  margin-block-end: 0;
+}
+
+// The summary's title row, result, totals and table or empty line sit 32px apart.
+.permit-scale-summary > :is(.record-field-grid, .lexis-table-frame, .permit-scale-summary__empty) {
+  margin-block: 2rem 0;
+}
+
+.permit-scale-summary > .app-notification-container .app-inline-notification {
+  margin-block: 2rem 0;
+}
+
+.permit-scale-summary .lexis-table-frame {
+  border-color: #dfdfe1;
+}
+
+:root[data-carbon-theme='g100'] .permit-scale-summary .lexis-table-frame {
+  border-color: var(--csp-border-subtle-01);
 }
 
 .permit-scale-summary__header {
@@ -244,20 +270,15 @@
   align-items: center;
   justify-content: space-between;
   gap: 1rem;
-  margin-block-end: 1.5rem;
 
   .detail-section-subtitle {
     margin: 0;
   }
 }
 
-.permit-scale-summary__empty {
-  margin: 0;
-}
-
 .permit-scale-summary__actions {
   justify-content: flex-end;
-  margin-block-start: 1.5rem;
+  margin-block-start: 2rem;
 }
 
 // The federal permit notice adds no margin of its own: the card or grid around it spaces it.

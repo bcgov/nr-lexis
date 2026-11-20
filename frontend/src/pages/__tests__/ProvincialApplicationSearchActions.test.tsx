@@ -923,6 +923,7 @@ describe('Provincial Application Search Actions', () => {
   it('renders readable results with the count in the toolbar and the pagination', async () => {
     renderPage()
     const link = await screen.findByRole('link', { name: '321' })
+    expect(link).toHaveAttribute('href', expect.stringContaining('fromApplicationSearch=true'))
     const row = within(link.closest('tr')!)
     expect(screen.getByRole('heading', { name: 'Application search' })).toBeVisible()
     expect(screen.getByText('Find applications and check their status')).toBeVisible()

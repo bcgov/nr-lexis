@@ -36,6 +36,22 @@ describe('shipping-reference-service', () => {
     })
   })
 
+  it('lists the Other port after the named ports', async () => {
+    getCachedDataMock.mockResolvedValue({
+      countries: [{ code: 'US', name: 'United States' }],
+      transportTypes: [{ code: 'S', name: 'Ship' }],
+      ports: [
+        { code: 'NA', name: 'Nanaimo' },
+        { code: 'OT', name: 'Other' },
+        { code: 'VA', name: 'Vancouver' },
+      ],
+    })
+
+    const { ports } = await fetchShippingReferenceOptions()
+
+    expect(ports.map((port) => port.code)).toEqual(['NA', 'VA', 'OT'])
+  })
+
   it.each([
     {
       countries: [],

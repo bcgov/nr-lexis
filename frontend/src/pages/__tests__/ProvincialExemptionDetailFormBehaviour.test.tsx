@@ -14,6 +14,7 @@ import {
   fetchExemptionPermits,
   updateExemption,
 } from '@/service/provincial-exemption-detail-service'
+import { expectResultAboveCard } from '@/test-utils/exemptionSectionResult'
 import { createTestAuthContext, createTestCapabilities } from '@/test-utils/auth'
 import type * as ExemptionDetailService from '@/service/provincial-exemption-detail-service'
 
@@ -275,6 +276,10 @@ describe('Provincial exemption detail form behaviour', () => {
     ).toBeVisible()
     await waitFor(() => expect(expiry).toHaveFocus())
     expect(screen.getByText('Exemption details not saved.')).toBeInTheDocument()
+    expectResultAboveCard(
+      screen.getByText('Exemption details not saved.'),
+      screen.getByRole('heading', { name: 'Exemption details', level: 2 }),
+    )
     expect(
       screen.getByText('A valid approval date is required for an active exemption.'),
     ).toBeInTheDocument()
@@ -304,6 +309,10 @@ describe('Provincial exemption detail form behaviour', () => {
       await screen.findByText('An active exemption cannot have an expiry date before today.'),
     ).toBeInTheDocument()
     expect(screen.getByText('Fees not saved.')).toBeInTheDocument()
+    expectResultAboveCard(
+      screen.getByText('Fees not saved.'),
+      screen.getByRole('heading', { name: 'Fees', level: 2 }),
+    )
     expect(screen.getByLabelText('Fee rate ($/m³)')).not.toHaveAttribute('aria-invalid', 'true')
   })
 

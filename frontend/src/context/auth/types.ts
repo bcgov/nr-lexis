@@ -12,7 +12,8 @@ export type AuthContextType = {
   defaultRoute: string
   refresh: () => Promise<void>
   selectForestClient: (forestClientNumber: string) => Promise<void>
-  login: (provider?: LoginProvider) => Promise<void>
+  /** sessionChecked skips the session read, for a caller that knows this tab is signed out. */
+  login: (provider?: LoginProvider, options?: { sessionChecked?: boolean }) => Promise<void>
   logout: () => Promise<void>
   /**
    * With a record argument (even undefined), also requires the action's regions to cover the

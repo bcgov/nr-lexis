@@ -318,11 +318,15 @@ public class ExemptionActivationEligibilityValidator {
           errors);
     }
 
-    if (!oicLike
-        && approvedVolume != null
-        && totalRequestedVolume.compareTo(oneDecimalVolume(approvedVolume)) > 0) {
+    boolean approvalBelowTotalRequested =
+        approvedVolume == null
+            ? totalRequestedVolume.signum() > 0
+            : totalRequestedVolume.compareTo(oneDecimalVolume(approvedVolume)) > 0;
+    if (!oicLike && approvalBelowTotalRequested) {
+      // The total-requested message replaces "greater than 0" when both rules fail.
+      errors.remove(APPROVAL_VOLUME_POSITIVE_MESSAGE);
       errors.add(
-          "The approved volume must be greater than or equal to the total requested volume ("
+          "The approval volume must be greater than or equal to the total requested volume ("
               + totalRequestedVolume.toPlainString()
               + ").");
     }
@@ -350,16 +354,19 @@ public class ExemptionActivationEligibilityValidator {
     }
   }
 
+  private static final String APPROVAL_VOLUME_POSITIVE_MESSAGE =
+      "The approval volume must be greater than 0";
+
   private void validateApprovedVolume(Double approvedVolume, List<String> errors) {
     if (approvedVolume == null || approvedVolume <= 0.0d) {
-      errors.add("The approved volume must be greater than 0");
+      errors.add(APPROVAL_VOLUME_POSITIVE_MESSAGE);
       return;
     }
     if (approvedVolume > MAX_APPROVED_VOLUME) {
-      errors.add("The approved volume must be less than or equal to 9999999.99.");
+      errors.add("The approval volume must be less than or equal to 9999999.99.");
     }
     if (BigDecimal.valueOf(approvedVolume).stripTrailingZeros().scale() > 2) {
-      errors.add("The approved volume must have no more than two decimal places.");
+      errors.add("The approval volume must have no more than two decimal places.");
     }
   }
 

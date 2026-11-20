@@ -1,10 +1,15 @@
 import { Loading } from '@carbon/react'
-import { lazy, Suspense, useEffect, useState, type ReactNode } from 'react'
+import { lazy, Suspense, useEffect, useRef, useState, type ReactNode } from 'react'
 import { matchRoutes, Navigate, useLocation, useNavigate, type RouteObject } from 'react-router-dom'
 import AppLayout from '../components/Layout'
 import { hasProvincialSubmitterRole, hasRole } from '@/context/auth/role-utils'
 import { useAuth } from '@/context/auth/useAuth'
-import { clearLoginDestination, getLoginDestination } from '@/context/auth/login-destination'
+import {
+  clearLoginDestination,
+  getLoginDestination,
+  setLoginDestination,
+} from '@/context/auth/login-destination'
+import { automaticLoginProvider, markAutomaticLoginAttempted } from '@/context/auth/login-provider'
 import LandingPage from '@/pages/Landing'
 import AuthCallback from '@/pages/AuthCallback'
 import NotFoundPage from '@/pages/NotFound'
@@ -55,9 +60,32 @@ type RouteDescription = {
   roleScope?: RouteRoleScope
 } & RouteObject
 
+// A signed-out tab opened on a page link signs in with the provider this browser last used, so a
+// record opened in a new tab loads without the login page. Otherwise the login page shows.
 function ProtectedLoginEntry() {
   const { pathname, search, hash } = useLocation()
-  return <LandingPage loginDestination={`${pathname}${search}${hash}`} />
+  const { login, usesExternalLogin } = useAuth()
+  const loginDestination = `${pathname}${search}${hash}`
+  const [provider, setProvider] = useState(() =>
+    usesExternalLogin ? automaticLoginProvider() : null,
+  )
+  const loginStartedRef = useRef(false)
+
+  useEffect(() => {
+    if (!provider || loginStartedRef.current) return
+    loginStartedRef.current = true
+    markAutomaticLoginAttempted()
+    setLoginDestination(loginDestination)
+    // The app read this tab's session as it loaded, so the page stays up until the redirect.
+    login(provider, { sessionChecked: true }).catch((error: unknown) => {
+      console.error(error)
+      clearLoginDestination()
+      setProvider(null)
+    })
+  }, [login, loginDestination, provider])
+
+  if (provider) return <Loading withOverlay description="Signing in…" />
+  return <LandingPage loginDestination={loginDestination} />
 }
 
 function ForestClientSelectionRoute() {

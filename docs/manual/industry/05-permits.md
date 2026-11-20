@@ -34,7 +34,7 @@ the issued permit.
 
 | Menu item | Use it to |
 |---|---|
-| **Provincial › Permit search** | Find your permits by application, package or permit number, region, issued date or status. |
+| **Provincial › Permit search** | Find your permits by permit number, application number, package number, region, issued date or status. |
 | **Provincial › Summary** | See **My permits** and, with **Display fees**, **My fees**. |
 | **Provincial › Exemption search** | Open the exemption to start a new permit. |
 
@@ -122,7 +122,8 @@ Then add what is being shipped, on the saved permit's **Scale** tab:
    Select **Save package**.
 2. Under **Summary of scale**, select **Add scale** for each line: **Timber
    mark**, **Pieces**, **Species**, **Grade** and **Volume (m³)**. Select
-   **Save scale**.
+   **Save scale**. You can type the timber mark in lowercase and select
+   the grade by its code.
 3. Add documents on the **Documents** tab, then select **Email review
    request**.
 
@@ -161,8 +162,11 @@ The **Fees** tab shows the fee in lieu of manufacture for the permit.
 
 - **Total volume (m³)** and **Total fees (CAD)** are for the whole permit.
 - **Package fee (CAD)** is the total for the selected package.
-- **Fee details** lists each scale line with its timber mark, species,
-  grade, average market value (**AMV**), volume and fee.
+- **Fee details** shows the timber mark, species, grade and volume of
+  each scale line, along with its **AMV ($/m³)**, **Fee in lieu %**,
+  **Multiplication factor** and **Fee (CAD)**. On a Blanket OIC permit
+  with a fee override, the total uses the override and the line fees and
+  rates show a dash.
 
 Fees are calculated from the summary of scale and confirmed by staff when
 the permit is issued. You can't change them.

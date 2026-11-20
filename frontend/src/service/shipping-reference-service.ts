@@ -32,6 +32,12 @@ const normalizeOptions = (
   })
 }
 
+// Other follows the named ports instead of sorting among them.
+const otherPortLast = (ports: ShippingReferenceOption[]): ShippingReferenceOption[] => [
+  ...ports.filter((port) => port.code !== 'OT'),
+  ...ports.filter((port) => port.code === 'OT'),
+]
+
 // INTENTIONAL_LEGACY_DIVERGENCE(COMPLETE_SHIPPING_COUNTRY_OPTIONS):
 // Preserve the complete authoritative country list so valid persisted codes never render blank.
 export const fetchShippingReferenceOptions = async (): Promise<ShippingReferenceOptions> => {
@@ -43,7 +49,7 @@ export const fetchShippingReferenceOptions = async (): Promise<ShippingReference
   return {
     countries: normalizeOptions(payload?.countries, 2),
     transportTypes: normalizeOptions(payload?.transportTypes, 1),
-    ports: normalizeOptions(payload?.ports, 2),
+    ports: otherPortLast(normalizeOptions(payload?.ports, 2)),
   }
 }
 

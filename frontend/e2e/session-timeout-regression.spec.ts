@@ -341,6 +341,40 @@ test.describe('session timeout regression', () => {
     await expect(dialog.getByText('5:00', { exact: true })).toBeVisible()
   })
 
+  test('keeps an idle tab signed in while another tab is active and warns both after inactivity', async ({
+    page,
+    context,
+  }) => {
+    const otherTab = await context.newPage()
+    await page.clock.install({ time: new Date(SESSION_START_ISO) })
+    for (const tab of [page, otherTab]) {
+      await installSyntheticOidcSession(tab, {
+        username: TEST_USERNAME,
+        orgUnitNo: '1903',
+        issuedAtSeconds: Date.parse(SESSION_START_ISO) / 1000,
+      })
+      await installSyntheticLexisApi(tab)
+      await gotoWithRecovery(tab, new URL('/provincial/application', E2E_BASE_URL).toString(), {
+        ready: tab.getByRole('heading', { name: 'Application search' }),
+      })
+    }
+
+    await page.clock.fastForward(15 * 60 * 1000)
+    await page.getByRole('textbox', { name: 'Application number' }).press('1')
+    await page.clock.fastForward(11 * 60 * 1000)
+    for (const tab of [page, otherTab]) {
+      await expect(tab.getByRole('heading', { name: 'Application search' })).toBeVisible()
+      await expect(tab.getByRole('alertdialog')).toHaveCount(0)
+    }
+
+    await page.clock.fastForward(9 * 60 * 1000)
+    for (const tab of [page, otherTab]) {
+      await expect(
+        tab.getByRole('alertdialog', { name: 'You’re about to be logged out' }),
+      ).toBeVisible()
+    }
+  })
+
   test('ends the session when Stay logged in cannot renew it', async ({ page }) => {
     await page.clock.install({ time: new Date(SESSION_START_ISO) })
     const sessionState = { authenticated: true }

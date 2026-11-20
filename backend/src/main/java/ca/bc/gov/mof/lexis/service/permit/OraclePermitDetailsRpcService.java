@@ -1086,7 +1086,8 @@ public class OraclePermitDetailsRpcService implements PermitDetailsRpcService {
                   })
               .toList();
     }
-    return new PermitCorePackageRpcResponseDto(packageNumber, packageInfo, packageDetails, scaleList);
+    return new PermitCorePackageRpcResponseDto(
+        packageNumber, nonNull(packageRow.comments()), packageInfo, packageDetails, scaleList);
   }
 
   private List<String> getApplicationList(

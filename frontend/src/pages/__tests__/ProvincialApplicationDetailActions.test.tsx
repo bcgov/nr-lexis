@@ -49,6 +49,14 @@ const getOwnerClientDetailsTile = (): HTMLElement => {
   return tile as HTMLElement
 }
 
+// The save notice renders in the tab panel directly before its card.
+const expectSavedNoticeAboveTile = (tile: HTMLElement): void => {
+  const notice = screen.getByText('The application was saved.')
+  expect(tile.contains(notice)).toBe(false)
+  expect(tile.closest('.application-detail-tab-panel')?.contains(notice)).toBe(true)
+  expect(notice.compareDocumentPosition(tile) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+}
+
 const getAgentDetailsTile = (): HTMLElement => {
   const title = screen.getByRole('heading', {
     name: 'Agent information',
@@ -68,9 +76,9 @@ const getReadOnlyField = (container: HTMLElement, label: string): HTMLElement =>
 describe.sequential('Provincial Application Detail Actions - application', () => {
   beforeEach(setupApplicationDetailTests)
 
-  const renderApplicationDetailPage = () =>
+  const renderApplicationDetailPage = (path = '/provincial/application/321') =>
     render(
-      <MemoryRouter initialEntries={['/provincial/application/321']}>
+      <MemoryRouter initialEntries={[path]}>
         <Routes>
           <Route
             path="/provincial/application/:applicationNumber"
@@ -187,6 +195,48 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
     )
     document.removeEventListener('focusin', recordTitleFocus)
     expect(focusedWhileInert).toEqual([false])
+  })
+
+  it('hides the Application search link after Create application, even once the notice is removed', async () => {
+    render(
+      <MemoryRouter
+        initialEntries={[
+          {
+            pathname: '/provincial/application/321',
+            state: { applicationCreationNotice: { applicationNumber: '321' } },
+          },
+        ]}
+      >
+        <Routes>
+          <Route
+            path="/provincial/application/:applicationNumber"
+            element={<ProvincialApplicationDetailsPage />}
+          />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    await screen.findByRole('tab', { name: 'Application' })
+    expect(
+      screen.queryByRole('link', { name: 'Back to Application search' }),
+    ).not.toBeInTheDocument()
+    expect(await screen.findByText('The application was saved.')).toBeInTheDocument()
+    await act(async () => {
+      await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()))
+    })
+    expect(
+      screen.queryByRole('link', { name: 'Back to Application search' }),
+    ).not.toBeInTheDocument()
+  })
+
+  it('returns a new tab opened from Application search to its filtered results', async () => {
+    renderApplicationDetailPage(
+      '/provincial/application/321?region=1903&fromApplicationSearch=true&tab=items',
+    )
+    expect(await screen.findByRole('link', { name: 'Back to Application search' })).toHaveAttribute(
+      'href',
+      '/provincial/application?region=1903',
+    )
   })
 
   it('focuses the title when a record opens with focus lost', async () => {
@@ -371,10 +421,9 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
     expect(
       within(pageHeader as HTMLElement).getByText('Author: idir\\application-author'),
     ).toBeInTheDocument()
-    expect(screen.getByRole('link', { name: 'Back to Application search' })).toHaveAttribute(
-      'href',
-      '/provincial/application',
-    )
+    expect(
+      screen.queryByRole('link', { name: 'Back to Application search' }),
+    ).not.toBeInTheDocument()
     const status = within(pageHeader as HTMLElement).getByText('Approved')
     expect(status).toHaveClass('lexis-status-tag')
     expect(status).toHaveAttribute('data-status-variant', 'positive')
@@ -466,7 +515,8 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
     const save = screen.getByRole('button', { name: 'Save changes' })
     expect(save).toBeEnabled()
     await userEvent.click(save)
-    expect(await summary.findByText(missingOptions)).toBeInTheDocument()
+    await waitFor(() => expect(screen.getAllByText(missingOptions)).toHaveLength(2))
+    expect(summary.queryByText(missingOptions)).not.toBeInTheDocument()
     expect(mockedUpdateApplicationSummary).not.toHaveBeenCalled()
 
     await selectApplicationDetailTab('Applicant')
@@ -979,6 +1029,7 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
     expect(
       screen.getByText('The application was saved.').closest('.cds--inline-notification'),
     ).toHaveClass('cds--inline-notification--success')
+    expectSavedNoticeAboveTile(getOwnerClientDetailsTile())
     expect(screen.queryByText('Review package volumes')).not.toBeInTheDocument()
   })
 
@@ -1753,7 +1804,8 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
       Array.from(rows, (row) => Array.from(row.querySelectorAll('dt'), (term) => term.textContent)),
     ).toEqual([
       ['Region', 'Product type', 'Exemption reason'],
-      ['Application date', 'List date'],
+      ['Application date'],
+      ['List date'],
       ['Exemption term (days)'],
     ])
     expect(
@@ -2059,6 +2111,7 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
       expect(mockedFetchProvincialApplicationDetail).toHaveBeenCalledTimes(2)
     })
     expect(await screen.findByText('The application was saved.')).toBeInTheDocument()
+    expectSavedNoticeAboveTile(getApplicationSummaryTile())
     expect(screen.queryByText('Review package volumes')).not.toBeInTheDocument()
   }, 30000)
 
@@ -3188,7 +3241,7 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
     const averageLogVolumeInput = await itemDetails.findByLabelText('Average log volume (m³)')
 
     await waitFor(() => {
-      expect(applicationVolumeInput).toHaveValue(100)
+      expect(applicationVolumeInput).toHaveValue('100.0')
     })
 
     fireEvent.change(applicationVolumeInput, { target: { value: '10000000' } })
@@ -3321,6 +3374,7 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
         expect.objectContaining({ applicationVolume: '9999999.99' }),
       ),
     )
+    expectSavedNoticeAboveTile(document.getElementById('application-item-details') as HTMLElement)
   })
 
   it.each(['H', 'T'])(

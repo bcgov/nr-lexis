@@ -378,7 +378,7 @@ describe('Provincial exemption create layout', () => {
     vi.mocked(submitProvincialExemptionCreate).mockResolvedValue({
       success: false,
       message: 'The exemption could not be saved.',
-      errors: ['The approved volume must be greater than 0'],
+      errors: ['The approval volume must be greater than 0'],
       warnings: [],
     })
     renderCreatePage()
@@ -389,7 +389,7 @@ describe('Provincial exemption create layout', () => {
 
     const volume = await screen.findByRole('textbox', { name: /^Approval volume/ })
     await waitFor(() => expect(volume).toHaveFocus())
-    expect(errorMessageFor(volume)).toBe('The approved volume must be greater than 0')
+    expect(errorMessageFor(volume)).toBe('The approval volume must be greater than 0')
     expect(screen.queryByText('Save failed')).not.toBeInTheDocument()
     expect(screen.getByRole('textbox', { name: 'Exemption number' })).not.toHaveAttribute(
       'aria-invalid',

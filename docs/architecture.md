@@ -148,8 +148,11 @@ sequenceDiagram
 ```
 
 The browser uses the public LEXIS client with no secret and keeps tokens in sessionStorage, so
-each tab signs in separately. It renews from the refresh token on activity and before API calls,
-sharing one renewal between concurrent callers, and signs out after 25 idle minutes. A failed
+each tab signs in separately. A signed-out tab opened on a page link starts that sign-in itself
+with the provider the browser last completed a sign-in with; localStorage keeps that provider's
+name, never a token, until logout or session expiry. It renews from the refresh token on activity and before API calls,
+sharing one renewal between concurrent callers, and signs out after 25 idle minutes. Activity in
+one tab counts for the browser's other LEXIS tabs, so an idle tab does not end their sign-in. A failed
 renewal ends the session only when SSO rejects the refresh token as `invalid_grant` or none is
 stored. A network failure or temporary SSO error fails only the affected request, and later activity
 tries again. Logout chains SiteMinder `logoff.cgi` before Keycloak end-session so a Business BCeID

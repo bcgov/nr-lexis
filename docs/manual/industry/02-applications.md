@@ -47,7 +47,7 @@ make offers on it.
 4. On the **Scale** tab, enter:
    - **Location of logs** (up to 250 characters);
    - **Age class**;
-   - **Average log volume (m³)**, to one decimal place;
+   - **Average log volume (m³)**, to one decimal place (for example, `1.2`);
    - **Application volume (m³)**;
    - **Species list**: choose every species that applies. The list depends
      on the region and product type;
@@ -96,7 +96,8 @@ application's **Scale** tab.
 
 ![A package and its summary of scale, on an application's Scale tab](images/02-application-scale.png)
 
-**Total pieces** and **Total scale volume (m³)** add up as you go.
+LEXIS capitalizes the **Timber mark** as you type. Select the **Grade** by
+its code. **Total pieces** and **Total scale volume (m³)** add up as you go.
 
 | Rule | Detail |
 |---|---|

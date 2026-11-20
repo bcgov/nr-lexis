@@ -2333,7 +2333,7 @@ describe('Create Page Core Flows', () => {
     expect(await screen.findByRole('textbox', { name: 'Application volume (m³)' })).toHaveValue(
       '0.0',
     )
-    expect(screen.getByRole('spinbutton', { name: 'Average log volume (m³)' })).toHaveValue(0)
+    expect(screen.getByRole('textbox', { name: 'Average log volume (m³)' })).toHaveValue('0.0')
   })
 
   it('refuses an Application volume left at its 0.0 starting value', async () => {
@@ -2418,10 +2418,10 @@ describe('Create Page Core Flows', () => {
     const expectScaleFields = (logDetailsRequired: boolean) => {
       const ageClass = screen.getByRole('combobox', { name: 'Age class' })
       const location = screen.getByRole('textbox', { name: 'Location of logs' })
-      const logVolume = screen.getByRole('spinbutton', { name: 'Average log volume (m³)' })
+      const logVolume = screen.getByRole('textbox', { name: 'Average log volume (m³)' })
       expect(ageClass).toHaveValue('Old Growth')
       expect(location).toHaveValue('Camp 1')
-      expect(logVolume).toHaveValue(1.2)
+      expect(logVolume).toHaveValue('1.2')
       expect(ageClass).toHaveAttribute('aria-required', 'true')
       for (const field of [location, logVolume]) {
         expect(field).toHaveAttribute('aria-required', String(logDetailsRequired))
@@ -2554,7 +2554,7 @@ describe('Create Page Core Flows', () => {
 
       await userEvent.click(await screen.findByRole('button', { name: 'Save application' }))
 
-      const logVolume = await screen.findByRole('spinbutton', { name: 'Average log volume (m³)' })
+      const logVolume = await screen.findByRole('textbox', { name: 'Average log volume (m³)' })
       await waitFor(() => expect(logVolume).toHaveAttribute('aria-invalid', 'true'))
       expect(screen.getByText('Average log volume must be 99.9 or less')).toBeInTheDocument()
       expect(mockedSubmitProvincialApplicationCreate).not.toHaveBeenCalled()
@@ -3249,7 +3249,7 @@ describe('Create Page Core Flows', () => {
     expect(mockedSubmitProvincialExemptionCreate).not.toHaveBeenCalled()
   })
 
-  it('blocks provincial exemption submit when approved volume exceeds Oracle precision', async () => {
+  it('blocks provincial exemption submit when approval volume exceeds Oracle precision', async () => {
     render(
       <MemoryRouter initialEntries={['/provincial/exemption/create']}>
         <Routes>
@@ -3316,7 +3316,7 @@ describe('Create Page Core Flows', () => {
     )
   })
 
-  it('blocks provincial exemption submit when approved volume has three decimals', async () => {
+  it('blocks provincial exemption submit when approval volume has three decimals', async () => {
     render(
       <MemoryRouter initialEntries={['/provincial/exemption/create']}>
         <Routes>

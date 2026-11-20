@@ -10,7 +10,6 @@ const REVIEW_TIERS = {
     reviewFocus: GENERAL_REVIEW_FOCUS,
     includeFullFileContents: false,
     maxPromptCharacters: 120_000,
-    maxOutputTokens: 16_000,
     effort: "low",
     models: {
       anthropic: { model: "claude-haiku-5-5", displayName: "Claude Haiku 5.5", usdPerMillionInputTokens: 0.1, usdPerMillionOutputTokens: 0.5, supportsRefusalFallback: false },
@@ -21,37 +20,35 @@ const REVIEW_TIERS = {
     reviewFocus: GENERAL_REVIEW_FOCUS,
     includeFullFileContents: true,
     maxPromptCharacters: 400_000,
-    maxOutputTokens: 32_000,
     effort: "medium",
     models: {
       anthropic: { model: "claude-sonnet-5-5", displayName: "Claude Sonnet 5.5", usdPerMillionInputTokens: 2, usdPerMillionOutputTokens: 10, supportsRefusalFallback: true },
-      openai: { model: "gpt-6.1-sol", displayName: "GPT-6.1 Sol", usdPerMillionInputTokens: 2, usdPerMillionOutputTokens: 10 },
+      openai: { model: "gpt-6.2-sol", displayName: "GPT-6.2 Sol", effort: "max", usdPerMillionInputTokens: 2, usdPerMillionOutputTokens: 10 },
     },
   },
   deep: {
     reviewFocus: GENERAL_REVIEW_FOCUS,
     includeFullFileContents: true,
     maxPromptCharacters: 800_000,
-    maxOutputTokens: 64_000,
     effort: "xhigh",
     models: {
       anthropic: { model: "claude-fable-5-2", displayName: "Claude Fable 5.2", usdPerMillionInputTokens: 8, usdPerMillionOutputTokens: 40, supportsRefusalFallback: true },
-      openai: { model: "gpt-6-astra", displayName: "GPT-6 Astra", usdPerMillionInputTokens: 10, usdPerMillionOutputTokens: 50 },
+      openai: { model: "gpt-6.2-astra", displayName: "GPT-6.2 Astra", usdPerMillionInputTokens: 8, usdPerMillionOutputTokens: 40 },
     },
   },
   security: {
     reviewFocus: SECURITY_REVIEW_FOCUS,
     includeFullFileContents: true,
     maxPromptCharacters: 800_000,
-    maxOutputTokens: 64_000,
     effort: "high",
     models: {
       anthropic: { model: "claude-opus-5-5", displayName: "Claude Opus 5.5", usdPerMillionInputTokens: 4, usdPerMillionOutputTokens: 20, supportsRefusalFallback: true },
-      openai: { model: "gpt-6.1-sol", displayName: "GPT-6.1 Sol", usdPerMillionInputTokens: 2, usdPerMillionOutputTokens: 10 },
+      openai: { model: "gpt-6.2-sol", displayName: "GPT-6.2 Sol", effort: "max", usdPerMillionInputTokens: 2, usdPerMillionOutputTokens: 10 },
     },
   },
 };
 
+const ANTHROPIC_MAX_OUTPUT_TOKENS = 128_000;
 const PROVIDERS_BY_OPTION = { anthropic: ["anthropic"], openai: ["openai"], both: ["anthropic", "openai"] };
 const REVIEW_COMMAND_USAGE = "/ai-review [light|standard|deep|security] [anthropic|openai|both]";
 const GENERATED_FILE_PATTERN = /(^|\/)(package-lock\.json|yarn\.lock|pnpm-lock\.yaml)$|\.min\.(js|css)$|\.map$/;
@@ -234,7 +231,7 @@ async function reviewWithAnthropic(tier, modelConfig, systemPrompt, prompt) {
   const client = new Anthropic({ apiKey: requireEnv("ANTHROPIC_REVIEWER_API_KEY") });
   const request = {
     model: modelConfig.model,
-    max_tokens: tier.maxOutputTokens,
+    max_tokens: ANTHROPIC_MAX_OUTPUT_TOKENS,
     system: systemPrompt,
     messages: [{ role: "user", content: prompt }],
     thinking: { type: "adaptive" },
@@ -245,7 +242,7 @@ async function reviewWithAnthropic(tier, modelConfig, systemPrompt, prompt) {
     : await client.messages.stream(request).finalMessage();
 
   if (message.stop_reason === "refusal") throw new Error(`${message.model} declined the review (${message.stop_details?.category ?? "no category"}).`);
-  if (message.stop_reason === "max_tokens") throw new Error(`${message.model} hit the ${tier.maxOutputTokens} max_tokens limit before finishing.`);
+  if (message.stop_reason === "max_tokens") throw new Error(`${message.model} hit the ${ANTHROPIC_MAX_OUTPUT_TOKENS} max_tokens limit before finishing.`);
   const lastFallbackIndex = message.content.findLastIndex((block) => block.type === "fallback");
   const reviewJson = message.content.slice(lastFallbackIndex + 1).filter((block) => block.type === "text").map((block) => block.text).join("");
   return {
@@ -258,13 +255,12 @@ async function reviewWithAnthropic(tier, modelConfig, systemPrompt, prompt) {
 }
 
 async function reviewWithOpenAI(tier, modelConfig, systemPrompt, prompt) {
-  const client = new OpenAI({ apiKey: requireEnv("OPENAI_API_REVIEWER_KEY"), timeout: 20 * 60 * 1000 });
+  const client = new OpenAI({ apiKey: requireEnv("OPENAI_API_REVIEWER_KEY"), timeout: 55 * 60 * 1000 });
   const response = await client.responses.create({
     model: modelConfig.model,
     instructions: systemPrompt,
     input: prompt,
-    reasoning: { effort: tier.effort },
-    max_output_tokens: tier.maxOutputTokens,
+    reasoning: { effort: modelConfig.effort ?? tier.effort },
     store: false,
     text: { format: { type: "json_schema", name: "pull_request_review", strict: true, schema: REVIEW_OUTPUT_SCHEMA } },
   });
@@ -334,7 +330,7 @@ function buildReviewBody(tierName, modelConfig, modelResult, reviewContext, inli
     : `≈ ${estimatedCostUsd < 0.01 ? "<$0.01" : `$${estimatedCostUsd.toFixed(2)}`}`;
   const tier = REVIEW_TIERS[tierName];
   sections.push([
-    `<sub>\`${modelResult.modelUsed}\` · effort ${tier.effort}`,
+    `<sub>\`${modelResult.modelUsed}\` · effort ${modelConfig.effort ?? tier.effort}`,
     `${reviewContext.reviewedFileCount} diffs${tier.includeFullFileContents ? ` + ${reviewContext.fullFileCount} full files` : ""}`,
     `${modelResult.inputTokens.toLocaleString("en-US")} in / ${modelResult.outputTokens.toLocaleString("en-US")} out tokens`,
     costEstimate,

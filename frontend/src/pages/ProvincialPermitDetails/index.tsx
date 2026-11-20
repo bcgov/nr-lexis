@@ -240,8 +240,8 @@ const gbmsInvoiceAmountLabel = (amount: string) => {
 
 /**
  * Where a result shows: Documents results in the Documents tab, package results at the top of the
- * Scale tab, scale results in the package's Summary of scale, and a section's save inside that
- * section's card below its title. An application added to or removed from a permit other than a
+ * Scale tab, scale results in the package's Summary of scale, and a section's save above that
+ * section's card. An application added to or removed from a permit other than a
  * Ministerial permit shows in its Associated applications card; a Ministerial permit's
  * applications save with its Permit details. Every other result stays at page level, where an
  * email action's result also takes focus.
@@ -260,7 +260,11 @@ type PermitActionResult = ActionResult & {
   source?: PermitActionResultSource
   /** Moves focus to the notice, for a save that removes the control focus would return to. */
   focusOnReveal?: boolean
+  /** The save that completed the permit; its notice says whether the client was emailed. */
+  completion?: boolean
 }
+
+const COMPLETION_EMAIL_NOT_SENT = 'The confirmation email was not sent to the client.'
 const SECTION_SAVE_RESULT_SOURCES = new Set<PermitActionResultSource>([
   'permit',
   'applications',
@@ -711,8 +715,6 @@ type PermitClientTileProps = {
   errorMessage: string
   icon?: ReactNode
   headerAction?: ReactNode
-  /** A save result, shown in the card below its title. */
-  result?: ReactNode
   reviewedLayout?: boolean
 }
 
@@ -745,7 +747,6 @@ const PermitClientTile = ({
   errorMessage,
   icon,
   headerAction,
-  result,
   reviewedLayout = false,
 }: PermitClientTileProps) => {
   const labels = permitClientLabels(kind)
@@ -779,7 +780,6 @@ const PermitClientTile = ({
         </section>
       ) : (
         <DetailFieldTile title={title} icon={icon} headerAction={headerAction} fields={[]}>
-          {result}
           {fields}
         </DetailFieldTile>
       )}
@@ -1213,6 +1213,39 @@ const sectionSaveError = (
   focusOnReveal: true,
 })
 
+/** A refused save: one error reads as the message, several list one per line. */
+const serverSaveError = (
+  subject: string,
+  source: PermitActionResultSource,
+  errors: string[],
+  message: string | undefined,
+  fallback: string,
+): PermitActionResult => {
+  const distinct = [...new Set(errors.map((error) => error.trim()).filter(Boolean))]
+  return distinct.length > 1
+    ? {
+        ...sectionSaveError(subject, source, ''),
+        items: distinct.map((error) => ({ id: error, text: '' })),
+      }
+    : sectionSaveError(subject, source, distinct[0] || message || fallback)
+}
+
+/** The tabs a blocked save needs completed, as on the create pages. */
+const tabsToCompleteResult = (tabIds: readonly PermitDetailTabId[]): PermitActionResult => {
+  const labels = PERMIT_DETAIL_TABS.filter(({ id }) => tabIds.includes(id)).map(
+    ({ label }) => label,
+  )
+  return {
+    kind: 'error',
+    title: 'Cannot save yet.',
+    message:
+      labels.length > 1
+        ? `Complete the required fields in ${labels.slice(0, -1).join(', ')} and ${labels.at(-1)} tabs.`
+        : `Complete the required fields in the ${labels[0]} tab.`,
+    focusOnReveal: true,
+  }
+}
+
 /** Every error a save returned, in one message. */
 const serverErrorText = (errors: string[], message: string | undefined, fallback: string): string =>
   [...new Set(errors.map((error) => error.trim()).filter(Boolean))].join(' ') || message || fallback
@@ -1383,6 +1416,7 @@ const ProvincialPermitDetailsPage = () => {
   }, [])
   const [isRemovingDocumentId, setIsRemovingDocumentId] = useState<string | null>(null)
   const [permitReceiptWarningOpen, setPermitReceiptWarningOpen] = useState(false)
+  const paymentPendingSaveSucceededRef = useRef(false)
   const [permitReviewRequestOpen, setPermitReviewRequestOpen] = useState(false)
   const [permitReviewRequestSendTo, setPermitReviewRequestSendTo] = useState('')
   const [permitReviewRequestCopyTo, setPermitReviewRequestCopyTo] = useState('')
@@ -3168,6 +3202,22 @@ const ProvincialPermitDetailsPage = () => {
   const hasShippingValidationError = Object.entries(permitFieldErrors).some(
     ([field, error]) => !!error && SHIPPING_PERMIT_FIELDS.has(field as PermitDetailFormField),
   )
+  // Every permit save needs these Shipping fields, including a save from another tab.
+  const shippingRequiredFieldsMissing =
+    !!permitForm &&
+    (
+      [
+        'destinationCompanyName',
+        'destinationCountry',
+        'transportType',
+        'transportName',
+        'estimatedShippingDate',
+        'portOfExport',
+        ...(permitForm.portOfExport.trim().toUpperCase() === 'OT'
+          ? (['otherPortOfExport'] as const)
+          : []),
+      ] as const
+    ).some((field) => !permitForm[field].trim())
   const permitFieldError = (field: PermitDetailFormField): string | undefined => {
     if (!showPermitValidationErrors) return undefined
     if (
@@ -3562,12 +3612,20 @@ const ProvincialPermitDetailsPage = () => {
       } catch (error) {
         console.error(error)
         if (!onSamePermit()) return
-        setActionResult({
-          kind: 'error',
-          title: 'Approval email unavailable.',
-          message: 'Unable to resolve the permit applicant notification email.',
-          source: 'email',
-        })
+        setActionResult((current) =>
+          current?.completion
+            ? {
+                ...current,
+                kind: 'warning',
+                message: `${current.message} Unable to resolve the permit applicant notification email.`,
+              }
+            : {
+                kind: 'error',
+                title: 'Approval email unavailable.',
+                message: 'Unable to resolve the permit applicant notification email.',
+                source: 'email',
+              },
+        )
       } finally {
         if (onSamePermit()) setIsSendingPermitEmail(false)
       }
@@ -3966,10 +4024,12 @@ const ProvincialPermitDetailsPage = () => {
         }
         if (!result.success) {
           setActionResult(
-            sectionSaveError(
+            serverSaveError(
               resultSubject,
               resultSource,
-              serverErrorText(result.errors, result.message, 'Unable to save permit.'),
+              result.errors,
+              result.message,
+              'Unable to save permit.',
             ),
           )
           return false
@@ -4082,7 +4142,25 @@ const ProvincialPermitDetailsPage = () => {
         const editButtonRemoved =
           !permitDetailsEditableInStatus(savedPermitStatus, provincialSubmitter) ||
           (resultSource === 'fees' && (savedPermitStatus === 'PPD' || savedPermitStatus === 'COM'))
-        setActionResult(editButtonRemoved ? { ...savedResult, focusOnReveal: true } : savedResult)
+        const offersApprovalEmail =
+          canReviewPermits && !permitDetailRefreshFailed && savedPermitStatus === 'COM'
+        // A save that completes the permit says so at page level, with the email's outcome.
+        const completedNow =
+          savedPermitStatus === 'COM' &&
+          detailValue(detail.permitStatusCode).trim().toUpperCase() !== 'COM'
+        setActionResult(
+          completedNow
+            ? {
+                kind: savedResult.kind,
+                title: `Permit ${confirmedRequest.permitNumber} completed.`,
+                message: [COMPLETION_EMAIL_NOT_SENT, savedResult.message].filter(Boolean).join(' '),
+                source: 'email',
+                completion: true,
+              }
+            : editButtonRemoved
+              ? { ...savedResult, focusOnReveal: true }
+              : savedResult,
+        )
         refreshLoadedPermitFees()
         // A status change can cancel or create GBMS invoices, so their history is read again.
         loadPermitGbmsEvents({
@@ -4090,7 +4168,7 @@ const ProvincialPermitDetailsPage = () => {
           receiptNumber: persistedUpdatedDetail.receiptNumber,
           blanketOic: persistedUpdatedDetail.blanketOic,
         })
-        if (canReviewPermits && !permitDetailRefreshFailed && savedPermitStatus === 'COM') {
+        if (offersApprovalEmail) {
           void onOpenPermitApprovalEmail(
             String(confirmedRequest.permitNumber),
             beginPermitRouteWork(),
@@ -4230,10 +4308,12 @@ const ProvincialPermitDetailsPage = () => {
         }
         if (!result.success) {
           setActionResult(
-            sectionSaveError(
+            serverSaveError(
               'Shipping details',
               resultSource,
-              serverErrorText(result.errors, result.message, 'Unable to save shipping.'),
+              result.errors,
+              result.message,
+              'Unable to save shipping.',
             ),
           )
           return false
@@ -4556,18 +4636,69 @@ const ProvincialPermitDetailsPage = () => {
         setActionResult(sectionSaveError(resultSubject, resultSource, permitOptionsSaveError))
         return false
       }
-      // A new permit's first save also checks Shipping fields nobody has touched yet, and opens the
-      // first tab with an error.
+      // A new permit's first save also checks Shipping fields nobody has touched yet. It names the
+      // tabs to complete and opens the first of them, unless the open tab is one.
       if (
         permitEditSection === 'newPermit' &&
         (hasPermitValidationError || hasShippingValidationError)
       ) {
-        showPermitFieldErrors(
-          Object.values(permitFieldErrors).find((error): error is string => !!error) ??
-            'Please fix validation errors before saving the permit.',
-          hasPermitValidationError ? 'permit' : 'shipping',
-        )
+        const tabsToComplete: PermitDetailTabId[] = [
+          ...(hasPermitValidationError ? (['permit'] as const) : []),
+          ...(hasShippingValidationError ? (['shipping'] as const) : []),
+        ]
+        setShowPermitValidationErrors(true)
+        if (!tabsToComplete.includes(activePermitTabId)) selectPermitTab(tabsToComplete[0])
+        setActionResult(tabsToCompleteResult(tabsToComplete))
         return false
+      }
+      // The server refuses any permit save while required Shipping fields are blank, so a save
+      // from another tab says so before the Payment pending warning and before anything is sent.
+      if (
+        permitEditSection !== 'newPermit' &&
+        !permitShippingUnsaved &&
+        !hasPermitValidationError &&
+        shippingRequiredFieldsMissing
+      ) {
+        setActionResult(tabsToCompleteResult(['shipping']))
+        return false
+      }
+      if (completingPermit && !hasPermitValidationError && detail) {
+        if (!permitTablesAvailable) {
+          const message = permitTablesErrorMessage
+            ? `${permitTablesErrorMessage} Reload the permit before completing it.`
+            : 'Permit applications and scales are still loading. Try saving again when they are ready.'
+          setActionResult(sectionSaveError(resultSubject, resultSource, message))
+          return false
+        }
+        // A ticked application with no unassigned scale rows isn't added, so it doesn't count.
+        const hasApplication = detail.blanketOic
+          ? detail.oicApplicationNumber != null
+          : ministerialApplicationSelectionDirty
+            ? ministerialApplicationRows.some(
+                (row) => row.checked && (row.included || row.pieces != null || row.volume != null),
+              )
+            : tabsData.applications.length > 0
+        // Changing the applications also changes their packages and scales on the server.
+        // Removing the last application leaves neither, regardless of the previously loaded rows.
+        const hasPackage = ministerialApplicationSelectionDirty
+          ? hasApplication
+          : tabsData.packages.length > 0
+        const hasScale = ministerialApplicationSelectionDirty
+          ? hasApplication
+          : tabsData.items.some(
+              (row) => ministerialScaleSelectionDraft?.[row.id] ?? row.includedInPermit,
+            )
+        const missing = [
+          hasApplication
+            ? ''
+            : 'At least one application is required before a permit can be completed.',
+          hasPackage ? '' : 'At least one package is required before a permit can be completed.',
+          hasScale ? '' : 'At least one scale detail is required before a permit can be completed.',
+        ]
+        if (missing.some(Boolean)) {
+          setActionResult(serverSaveError(resultSubject, resultSource, missing, undefined, ''))
+          return false
+        }
       }
       // The server saves a completed Interior permit with no receipt as Payment pending, so the
       // user confirms before anything is sent.
@@ -4687,6 +4818,15 @@ const ProvincialPermitDetailsPage = () => {
       permitShippingUnsaved,
       permitStatusTransitionDraft,
       savePermitMutation,
+      completingPermit,
+      detail,
+      ministerialApplicationRows,
+      ministerialScaleSelectionDraft,
+      permitTablesAvailable,
+      permitTablesErrorMessage,
+      selectPermitTab,
+      shippingRequiredFieldsMissing,
+      tabsData,
     ],
   )
 
@@ -5636,7 +5776,7 @@ const ProvincialPermitDetailsPage = () => {
         return false
       }
       // A failure shows in the dialog, which stays open to retry.
-      setActionResult(null)
+      setActionResult((current) => (current?.completion ? current : null))
       setPermitApprovalEmailErrorMessage('')
       const clientEmail = normalizeTrimmedText(approvalEmailAddress)
       if (!isValidEmail(clientEmail)) {
@@ -5649,12 +5789,22 @@ const ProvincialPermitDetailsPage = () => {
         const result = await sendPermitApprovalEmail(resolvedPermitNumber, clientEmail)
         if (!onSamePermit()) return false
         if (result.success) {
-          setActionResult({
-            kind: 'success',
-            title: 'Permit approval email sent.',
-            message: `Sent to the applicant (${clientEmail}).`,
-            source: 'email',
-          })
+          setActionResult((current) =>
+            current?.completion
+              ? {
+                  ...current,
+                  message: current.message.replace(
+                    COMPLETION_EMAIL_NOT_SENT,
+                    `The confirmation email was sent to the client (${clientEmail}).`,
+                  ),
+                }
+              : {
+                  kind: 'success',
+                  title: 'Permit approval email sent.',
+                  message: `Sent to the applicant (${clientEmail}).`,
+                  source: 'email',
+                },
+          )
           return true
         }
         setPermitApprovalEmailErrorMessage(result.message || 'Permit email could not be sent.')
@@ -7100,6 +7250,16 @@ const ProvincialPermitDetailsPage = () => {
             </Button>
           )}
         </div>
+        {scaleSummaryActionResult && (
+          <ActionResultNotification
+            result={scaleSummaryActionResult}
+            onClose={() => setActionResult(null)}
+            focusOnReveal={
+              scaleSummaryActionResult.focusOnReveal ||
+              (ministerialPermit && packageScopedItems.length === 0)
+            }
+          />
+        )}
         {detail.blanketOic && selectedBlanketOicPackage && (
           <RecordFieldGrid>
             <RecordFieldRow>
@@ -7157,16 +7317,6 @@ const ProvincialPermitDetailsPage = () => {
               </RecordFieldRow>
             </RecordFieldGrid>
           )}
-        {scaleSummaryActionResult && (
-          <ActionResultNotification
-            result={scaleSummaryActionResult}
-            onClose={() => setActionResult(null)}
-            focusOnReveal={
-              scaleSummaryActionResult.focusOnReveal ||
-              (ministerialPermit && packageScopedItems.length === 0)
-            }
-          />
-        )}
         {!permitTablesErrorMessage &&
           !permitScaleEmpty &&
           (packageScopedItems.length > 0 ? (
@@ -7266,14 +7416,8 @@ const ProvincialPermitDetailsPage = () => {
                 </TableBody>
               </Table>
             </TableFrame>
-          ) : usesReviewedPermitFlow ? (
-            <p className="permit-scale-summary__empty">No scales yet.</p>
           ) : (
-            <EmptyState
-              title="No permit items available"
-              description="No permit item rows are available for this permit."
-              headingLevel={3}
-            />
+            <p className="permit-scale-summary__empty">No scales yet.</p>
           ))}
         {ministerialPermit && ministerialScaleSelectionDraft !== null && (
           <div className="legacy-search-actions permit-scale-summary__actions">
@@ -7318,6 +7462,9 @@ const ProvincialPermitDetailsPage = () => {
     const selectedPackageFeeSummary = detail.blanketOic
       ? selectedBlanketOicPackageFeeSummary
       : selectedNormalPermitPackageFeeSummary
+    // A Blanket OIC fee override replaces the calculated fee, so its rates are left blank too.
+    const feeOverrideHidesRates = (row: { amountDisplay: string }): boolean =>
+      detail.blanketOic && feeOverrideContext?.overrideEnabled === true && !row.amountDisplay.trim()
     return (
       <>
         {feeSummaryStatus === null && packageOptions.length > 0 && selectedPackage && (
@@ -7436,8 +7583,8 @@ const ProvincialPermitDetailsPage = () => {
                   {showDisplayedMinistryFeeColumn && (
                     <TableHeader>{usesReviewedPermitFlow ? 'EWB' : 'EWB$'}</TableHeader>
                   )}
-                  <TableHeader>{usesReviewedPermitFlow ? 'FIL' : 'FIL%'}</TableHeader>
-                  <TableHeader>{usesReviewedPermitFlow ? 'MF' : 'MF%'}</TableHeader>
+                  <TableHeader>Fee in lieu %</TableHeader>
+                  <TableHeader>Multiplication factor</TableHeader>
                   <TableHeader>Fee (CAD)</TableHeader>
                 </TableRow>
               </TableHead>
@@ -7459,8 +7606,12 @@ const ProvincialPermitDetailsPage = () => {
                     {showDisplayedMinistryFeeColumn && (
                       <TableCell>{displayTableValue(row.ewb)}</TableCell>
                     )}
-                    <TableCell>{displayTableValue(row.filPercent)}</TableCell>
-                    <TableCell>{displayTableValue(row.mfPercent)}</TableCell>
+                    <TableCell>
+                      {displayTableValue(feeOverrideHidesRates(row) ? '' : row.filPercent)}
+                    </TableCell>
+                    <TableCell>
+                      {displayTableValue(feeOverrideHidesRates(row) ? '' : row.mfPercent)}
+                    </TableCell>
                     <TableCell>
                       {row.amountDisplay.trim()
                         ? `$${formatAmount(row.amount)}`
@@ -7726,10 +7877,10 @@ const ProvincialPermitDetailsPage = () => {
                     className="application-detail-tab-grid"
                   >
                     <Column sm={4} md={8} lg={16}>
+                      {renderSectionSaveResult('permit')}
                       {isReviewedPermitEdit ? (
                         <Tile className="ministerial-permit-details">
                           <DetailCardTitle icon={Certificate}>Permit details</DetailCardTitle>
-                          {renderSectionSaveResult('permit')}
                           <RequiredFieldsLegend />
                           {renderReviewedPermitFields()}
                           {isMinisterialPermitEdit && renderFederalPermitNotice()}
@@ -7742,7 +7893,6 @@ const ProvincialPermitDetailsPage = () => {
                           <DetailCardTitle icon={Certificate}>
                             {usesReviewedPermitFlow ? 'Permit details' : 'Permit summary'}
                           </DetailCardTitle>
-                          {renderSectionSaveResult('permit')}
                           <RequiredFieldsLegend />
                           {renderPermitSummaryFields()}
                         </Tile>
@@ -7762,7 +7912,6 @@ const ProvincialPermitDetailsPage = () => {
                               </Button>
                             )}
                           </div>
-                          {renderSectionSaveResult('permit')}
                           {renderReviewedPermitFields()}
                         </Tile>
                       ) : detail.blanketOic ? (
@@ -7781,7 +7930,6 @@ const ProvincialPermitDetailsPage = () => {
                               </Button>
                             )}
                           </div>
-                          {renderSectionSaveResult('permit')}
                           {renderReviewedPermitFields()}
                         </Tile>
                       ) : (
@@ -7802,7 +7950,6 @@ const ProvincialPermitDetailsPage = () => {
                           }
                           fields={[]}
                         >
-                          {renderSectionSaveResult('permit')}
                           {renderPermitSummaryFields()}
                         </DetailFieldTile>
                       )}
@@ -7839,11 +7986,11 @@ const ProvincialPermitDetailsPage = () => {
                       )}
                     {!ministerialPermit && !detail.blanketOic && (
                       <Column sm={4} md={8} lg={16}>
+                        {renderSectionSaveResult('applications')}
                         <Tile>
                           <DetailCardTitle icon={Certificate}>
                             Associated applications
                           </DetailCardTitle>
-                          {renderSectionSaveResult('applications')}
                           {isPermitTablesLoading ? (
                             <InlineLoading description="Loading associated permit applications…" />
                           ) : permitTablesErrorMessage ? (
@@ -7983,6 +8130,7 @@ const ProvincialPermitDetailsPage = () => {
                   >
                     {!ownerEditMode && (
                       <Column sm={4} md={8} lg={16}>
+                        {renderSectionSaveResult('applicant')}
                         {usesReviewedPermitFlow ? (
                           <Tile className="detail-section-card permit-applicant-card">
                             <div className="detail-section-card__header">
@@ -7999,7 +8147,6 @@ const ProvincialPermitDetailsPage = () => {
                                 </Button>
                               )}
                             </div>
-                            {renderSectionSaveResult('applicant')}
                             <PermitClientTile
                               title="Owner"
                               kind="owner"
@@ -8059,7 +8206,6 @@ const ProvincialPermitDetailsPage = () => {
                                   </Button>
                                 ) : undefined
                               }
-                              result={renderSectionSaveResult('applicant')}
                               clientNumber={detail.ownerClientNumber}
                               locationCode={detail.ownerClientLocationCode}
                               clientData={ownerClientData}
@@ -8093,6 +8239,7 @@ const ProvincialPermitDetailsPage = () => {
                     )}
                     {ownerEditMode && permitForm && (
                       <Column sm={4} md={8} lg={16}>
+                        {renderSectionSaveResult('applicant')}
                         {/* Editing the applicant, focus waits for the owner's locations, so it
                         lands on the owner's fields rather than the fields after them. */}
                         <Tile
@@ -8103,7 +8250,6 @@ const ProvincialPermitDetailsPage = () => {
                           }
                         >
                           <DetailCardTitle icon={Enterprise}>Applicant details</DetailCardTitle>
-                          {renderSectionSaveResult('applicant')}
                           <RequiredFieldsLegend className="permit-client-editor__required-hint" />
                           {usesReviewedPermitFlow && (
                             <h3 className="permit-client-subheading">Owner</h3>
@@ -8148,53 +8294,55 @@ const ProvincialPermitDetailsPage = () => {
                   >
                     <Column sm={4} md={8} lg={16}>
                       {isEditingShipping && permitForm ? (
-                        <Tile>
-                          <DetailCardTitle icon={EarthFilled}>
-                            {usesReviewedPermitFlow ? 'Shipping details' : 'Shipping'}
-                          </DetailCardTitle>
+                        <>
                           {renderSectionSaveResult('shipping')}
-                          <RequiredFieldsLegend />
-                          {shippingReferencesErrorMessage && (
-                            <InlineNotification
-                              className="detail-context-notification"
-                              kind="warning"
-                              lowContrast
-                              hideCloseButton
-                              title="Shipping options unavailable"
-                              subtitle={shippingReferencesErrorMessage}
-                            />
-                          )}
-                          {renderShippingFields()}
-                          {canEditShipping && (
-                            <div className="legacy-search-actions">
-                              <Button
-                                kind="tertiary"
-                                size="md"
-                                disabled={isSavingShippingAction}
-                                onClick={permitEditSections.cancelEditing}
-                              >
-                                Cancel
-                              </Button>
-                              <Button
-                                kind="primary"
-                                size="md"
-                                disabled={isSavingShippingAction || isRefreshingPermitForEdit}
-                                renderIcon={isSavingShippingAction ? PendingIcon : undefined}
-                                onClick={() =>
-                                  void (permitEditSection === 'newPermit'
-                                    ? onSavePermit()
-                                    : onSaveShipping())
-                                }
-                              >
-                                {isSavingShippingAction
-                                  ? 'Saving…'
-                                  : usesReviewedPermitFlow
-                                    ? 'Save changes'
-                                    : 'Save shipping'}
-                              </Button>
-                            </div>
-                          )}
-                        </Tile>
+                          <Tile>
+                            <DetailCardTitle icon={EarthFilled}>
+                              {usesReviewedPermitFlow ? 'Shipping details' : 'Shipping'}
+                            </DetailCardTitle>
+                            <RequiredFieldsLegend />
+                            {shippingReferencesErrorMessage && (
+                              <InlineNotification
+                                className="detail-context-notification"
+                                kind="warning"
+                                lowContrast
+                                hideCloseButton
+                                title="Shipping options unavailable"
+                                subtitle={shippingReferencesErrorMessage}
+                              />
+                            )}
+                            {renderShippingFields()}
+                            {canEditShipping && (
+                              <div className="legacy-search-actions">
+                                <Button
+                                  kind="tertiary"
+                                  size="md"
+                                  disabled={isSavingShippingAction}
+                                  onClick={permitEditSections.cancelEditing}
+                                >
+                                  Cancel
+                                </Button>
+                                <Button
+                                  kind="primary"
+                                  size="md"
+                                  disabled={isSavingShippingAction || isRefreshingPermitForEdit}
+                                  renderIcon={isSavingShippingAction ? PendingIcon : undefined}
+                                  onClick={() =>
+                                    void (permitEditSection === 'newPermit'
+                                      ? onSavePermit()
+                                      : onSaveShipping())
+                                  }
+                                >
+                                  {isSavingShippingAction
+                                    ? 'Saving…'
+                                    : usesReviewedPermitFlow
+                                      ? 'Save changes'
+                                      : 'Save shipping'}
+                                </Button>
+                              </div>
+                            )}
+                          </Tile>
+                        </>
                       ) : (
                         <>
                           {shippingReferencesErrorMessage && (
@@ -8207,6 +8355,7 @@ const ProvincialPermitDetailsPage = () => {
                               subtitle={shippingReferencesErrorMessage}
                             />
                           )}
+                          {renderSectionSaveResult('shipping')}
                           <DetailFieldTile
                             title={usesReviewedPermitFlow ? 'Shipping details' : 'Shipping'}
                             icon={<EarthFilled size={24} aria-hidden="true" />}
@@ -8228,7 +8377,6 @@ const ProvincialPermitDetailsPage = () => {
                             }
                             fields={[]}
                           >
-                            {renderSectionSaveResult('shipping')}
                             {renderShippingFields()}
                           </DetailFieldTile>
                         </>
@@ -8453,13 +8601,7 @@ const ProvincialPermitDetailsPage = () => {
                                       )}
                                     />
                                   </RecordFieldRow>
-                                  {/* Users who can't open Edit package read the comments here. */}
-                                  <RecordFieldRow
-                                    hidden={
-                                      canEditBlanketOicPackages ||
-                                      !selectedBlanketOicPackage.comments.trim()
-                                    }
-                                  >
+                                  <RecordFieldRow>
                                     <RecordField
                                       label="Comments"
                                       span="full"
@@ -8467,9 +8609,7 @@ const ProvincialPermitDetailsPage = () => {
                                     />
                                   </RecordFieldRow>
                                 </RecordFieldGrid>
-                                <div className="boic-package-summary__scale">
-                                  {renderScaleSummary()}
-                                </div>
+                                {renderScaleSummary()}
                               </DetailFieldTile>
                             ) : ministerialPermit && selectedNormalPermitPackage ? (
                               <RecordFieldGrid>
@@ -8518,6 +8658,13 @@ const ProvincialPermitDetailsPage = () => {
                                   <RecordField
                                     label="Average top diameter (rads)"
                                     value={selectedNormalPermitPackage.averageTopDiameter}
+                                  />
+                                </RecordFieldRow>
+                                <RecordFieldRow>
+                                  <RecordField
+                                    label="Comments"
+                                    span="full"
+                                    value={selectedNormalPermitPackage.comments}
                                   />
                                 </RecordFieldRow>
                               </RecordFieldGrid>
@@ -8569,11 +8716,16 @@ const ProvincialPermitDetailsPage = () => {
                                       ),
                                     },
                                   ],
+                                  [
+                                    {
+                                      label: 'Comments',
+                                      span: 'full',
+                                      value: displayValue(selectedNormalPermitPackage.comments),
+                                    },
+                                  ],
                                 ]}
                               >
-                                <div className="boic-package-summary__scale">
-                                  {renderScaleSummary()}
-                                </div>
+                                {renderScaleSummary()}
                               </DetailFieldTile>
                             ) : detail.blanketOic ? (
                               <EmptyState
@@ -8636,6 +8788,7 @@ const ProvincialPermitDetailsPage = () => {
                     ) : usesReviewedPermitFlow ? (
                       <>
                         <Column sm={4} md={8} lg={16}>
+                          {renderSectionSaveResult('fees')}
                           <Tile>
                             <div className="detail-section-card__header">
                               <DetailCardTitle icon={Currency}>Permit fees</DetailCardTitle>
@@ -8674,7 +8827,6 @@ const ProvincialPermitDetailsPage = () => {
                                   </div>
                                 )}
                             </div>
-                            {renderSectionSaveResult('fees')}
                             {renderPermitFeeSummary()}
                           </Tile>
                         </Column>
@@ -8687,9 +8839,9 @@ const ProvincialPermitDetailsPage = () => {
                       </>
                     ) : (
                       <Column sm={4} md={8} lg={16}>
+                        {renderSectionSaveResult('fees')}
                         <Tile>
                           <DetailCardTitle icon={Currency}>Fee calculation details</DetailCardTitle>
-                          {renderSectionSaveResult('fees')}
                           {renderPermitFeeSummary()}
                           {renderPackageFees()}
                         </Tile>
@@ -8862,13 +9014,23 @@ const ProvincialPermitDetailsPage = () => {
         <ConfirmationModal
           open
           title="Save as Payment pending?"
-          description="Receipt number should not be empty for a complete permit so it will be saved as Payment pending."
-          confirmLabel="Save"
-          cancelLabel="Discard"
+          description="To complete the permit, add the Receipt number on the Fees tab. Without a Receipt number, the permit is saved as Payment pending."
+          confirmLabel="Save as Payment pending"
           pendingLabel="Saving…"
-          onClose={() => setPermitReceiptWarningOpen(false)}
+          onClose={() => {
+            setPermitReceiptWarningOpen(false)
+            // Closing without saving drops the change to Complete, so a later save can't apply it.
+            if (!paymentPendingSaveSucceededRef.current && permitBaselineForm) {
+              setPermitForm((current) =>
+                current ? { ...current, permitStatus: permitBaselineForm.permitStatus } : current,
+              )
+            }
+            paymentPendingSaveSucceededRef.current = false
+          }}
           onConfirm={async () => {
-            await (permitEditSection === 'shipping' ? onSaveShipping(true) : onSavePermit(true))
+            paymentPendingSaveSucceededRef.current = await (permitEditSection === 'shipping'
+              ? onSaveShipping(true)
+              : onSavePermit(true))
           }}
         />
       )}

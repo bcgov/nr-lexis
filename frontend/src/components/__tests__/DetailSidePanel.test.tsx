@@ -128,9 +128,10 @@ describe('DetailSidePanel', () => {
     it('opens the calendar from the keyboard on the focused date', async () => {
       await openDatePanel()
 
-      await userEvent.tab()
+      await userEvent.keyboard('{ArrowDown}')
 
       expect(document.querySelector('.flatpickr-calendar.open')).not.toBeNull()
+      expect(document.activeElement).toHaveClass('flatpickr-day')
     })
   })
 

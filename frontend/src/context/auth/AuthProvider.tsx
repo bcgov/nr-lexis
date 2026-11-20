@@ -12,6 +12,7 @@ import { AppToastNotification } from '@/components/AppToastNotification'
 import SessionTimeoutWarning from '@/components/SessionTimeoutWarning'
 import { AuthContext } from '@/context/auth/AuthContext'
 import { clearLoginDestination } from '@/context/auth/login-destination'
+import { forgetLoginProvider, setPendingLoginProvider } from '@/context/auth/login-provider'
 import {
   allowedRegions,
   normalizeAction,
@@ -22,7 +23,10 @@ import {
 import { hasRole, isPureReadOnlyRole } from '@/context/auth/role-utils'
 import {
   clearSessionExpiredLoginNotice,
+  isSessionActivityEvent,
+  lastSessionActivity,
   markSessionExpiredLoginNotice,
+  recordSessionActivity,
   redirectToLoginShell,
   SESSION_EXPIRED_EVENT,
   SESSION_IDLE_WARNING_MS,
@@ -319,6 +323,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
         clearAllPageDataCache()
         clearPersistedSearchState()
         clearLoginDestination()
+        forgetLoginProvider()
         authenticatedSessionRef.current = false
         if (reason === 'idle-timeout') {
           markSessionExpiredLoginNotice()
@@ -459,6 +464,9 @@ export function AuthProvider({ children }: AuthProviderProps) {
         window.clearTimeout(expiryTimeoutId)
       }
     }
+    // A tab resuming from a freeze can run these timers before other tabs' activity events
+    // arrive, so each deadline also checks the activity time the tabs share.
+    const sharedIdleDeadline = () => lastSessionActivity() + SESSION_IDLE_TIMEOUT_MS
     const startSessionWarning = (expiresAt: number) => {
       sessionWarningOpenRef.current = true
       const activeElement = document.activeElement
@@ -467,12 +475,21 @@ export function AuthProvider({ children }: AuthProviderProps) {
       setSessionWarningExpiresAt(expiresAt)
       expiryTimeoutId = window.setTimeout(
         () => {
+          if (sharedIdleDeadline() > Date.now()) {
+            closeSessionWarning()
+            resetIdleTimer(lastSessionActivity())
+            return
+          }
           void expireSession('idle-timeout')
         },
         Math.max(0, expiresAt - Date.now()),
       )
     }
     const checkIdleDeadline = (expiresAt: number) => {
+      if (sharedIdleDeadline() > expiresAt) {
+        resetIdleTimer(lastSessionActivity())
+        return
+      }
       const remaining = expiresAt - Date.now()
       if (remaining <= 0) {
         void expireSession('idle-timeout')
@@ -480,16 +497,30 @@ export function AuthProvider({ children }: AuthProviderProps) {
       }
       startSessionWarning(expiresAt)
     }
-    const resetIdleTimer = () => {
+    function resetIdleTimer(lastActivity = Date.now()) {
       if (sessionWarningOpenRef.current) {
         return
       }
       clearTimers()
-      const expiresAt = Date.now() + SESSION_IDLE_TIMEOUT_MS
+      const expiresAt = lastActivity + SESSION_IDLE_TIMEOUT_MS
       warningTimeoutId = window.setTimeout(
         () => checkIdleDeadline(expiresAt),
-        SESSION_IDLE_TIMEOUT_MS - SESSION_IDLE_WARNING_MS,
+        Math.max(0, expiresAt - SESSION_IDLE_WARNING_MS - Date.now()),
       )
+    }
+    const keepSessionAlive = (now: number) => {
+      if (now - lastKeepalive < SESSION_KEEPALIVE_THROTTLE_MS) return
+      lastKeepalive = now
+      void getOidcUser()
+        .then((session) => {
+          if (!session?.access_token) {
+            void expireSession('token-unavailable')
+          }
+        })
+        .catch((error: unknown) => {
+          // After a temporary failure, later activity tries again instead of signing out.
+          if (isSessionEnded(error)) void expireSession('token-unavailable')
+        })
     }
     const onActivity = () => {
       if (sessionWarningOpenRef.current) {
@@ -499,41 +530,41 @@ export function AuthProvider({ children }: AuthProviderProps) {
       const now = Date.now()
       if (now - lastActivityReset >= SESSION_ACTIVITY_THROTTLE_MS) {
         lastActivityReset = now
+        recordSessionActivity()
         resetIdleTimer()
       }
-      if (now - lastKeepalive >= SESSION_KEEPALIVE_THROTTLE_MS) {
-        lastKeepalive = now
-        void getOidcUser()
-          .then((session) => {
-            if (!session?.access_token) {
-              void expireSession('token-unavailable')
-            }
-          })
-          .catch((error: unknown) => {
-            // After a temporary failure, later activity tries again instead of signing out.
-            if (isSessionEnded(error)) void expireSession('token-unavailable')
-          })
-      }
+      keepSessionAlive(now)
+    }
+    // Activity in another tab keeps this one signed in, with a fresh token and no warning.
+    const onOtherTabActivity = (event: StorageEvent) => {
+      if (!isSessionActivityEvent(event)) return
+      if (sessionWarningOpenRef.current) closeSessionWarning()
+      resetIdleTimer()
+      keepSessionAlive(Date.now())
     }
 
+    // Signing in or choosing to stay logged in counts as activity for the other tabs.
+    recordSessionActivity()
     resetIdleTimer()
     SESSION_ACTIVITY_EVENTS.forEach((eventName) => {
       window.addEventListener(eventName, onActivity, { passive: true })
     })
+    window.addEventListener('storage', onOtherTabActivity)
 
     return () => {
       clearTimers()
       SESSION_ACTIVITY_EVENTS.forEach((eventName) => {
         window.removeEventListener(eventName, onActivity)
       })
+      window.removeEventListener('storage', onOtherTabActivity)
     }
-  }, [capabilities.authenticated, expireSession, idleTimerVersion])
+  }, [capabilities.authenticated, closeSessionWarning, expireSession, idleTimerVersion])
 
   const login = useCallback(
-    async (provider: LoginProvider = 'idir') => {
+    async (provider: LoginProvider = 'idir', { sessionChecked = false } = {}) => {
       sessionExpiryInFlightRef.current = false
 
-      if (isOidcConfigured) {
+      if (isOidcConfigured && !sessionChecked) {
         await refresh()
         if (authenticatedSessionRef.current) {
           return
@@ -544,6 +575,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
       apiService.clearCachedGetData()
       clearPersistedSearchState()
       if (isOidcConfigured) {
+        setPendingLoginProvider(provider)
         await startOidcLogin(provider)
         return
       }
@@ -567,6 +599,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
       clearAllPageDataCache()
       clearPersistedSearchState()
       clearLoginDestination()
+      forgetLoginProvider()
       authenticatedSessionRef.current = false
 
       setCapabilities(DEFAULT_CAPABILITIES)
