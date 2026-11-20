@@ -774,7 +774,11 @@ test.describe('FSPTS-aligned LEXIS shell', () => {
       name: /^Region\s*Total items selected:\s*3/,
     })
     await expect(selectedRegions).toBeVisible()
-    await expect(page.locator('.region-multi-select .cds--tag--filter')).toHaveText('3')
+    await expect(page.locator('.region-multi-select .cds--list-box .cds--tag--filter')).toHaveText(
+      '3',
+    )
+    // The chosen regions are listed as removable tags below the field.
+    await expect(page.locator('.region-multi-select .selected-item-tags .cds--tag')).toHaveCount(3)
     // With regions selected, the count tag stands alone, without "All" beside it.
     await expect(selectedRegions).not.toHaveAttribute('placeholder')
     await expect(page.getByRole('list', { name: 'Selected regions' })).toHaveCount(0)
