@@ -1,7 +1,7 @@
 import { render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router-dom'
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 
 import RecordHeaderSubtitle, { type RelatedRecordLink } from '@/components/RecordHeaderSubtitle'
 
@@ -74,6 +74,33 @@ describe('RecordHeaderSubtitle', () => {
 
     await userEvent.click(showFewer)
     expect(within(applicationItem).getAllByRole('link')).toHaveLength(5)
+  })
+
+  it('hands "+N more" to the page when the page shows the full list itself', async () => {
+    const onShowAllRecords = vi.fn()
+    render(
+      <MemoryRouter>
+        <RecordHeaderSubtitle
+          relatedRecordGroups={[
+            {
+              label: 'Application number',
+              pluralLabel: 'Application numbers',
+              records: applicationRecords(23),
+              onShowAllRecords,
+            },
+          ]}
+          author={'IDIR\\SAMPLE'}
+        />
+      </MemoryRouter>,
+    )
+
+    const showAll = screen.getByRole('button', { name: '+18 more' })
+    expect(showAll).not.toHaveAttribute('aria-expanded')
+    await userEvent.click(showAll)
+
+    expect(onShowAllRecords).toHaveBeenCalledTimes(1)
+    expect(screen.getAllByRole('link')).toHaveLength(5)
+    expect(screen.getByRole('button', { name: '+18 more' })).toBeInTheDocument()
   })
 
   it('shows every record when the list has five', () => {

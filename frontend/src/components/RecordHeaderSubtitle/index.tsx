@@ -14,11 +14,18 @@ export type RelatedRecordGroup = {
   label: string
   pluralLabel: string
   records: RelatedRecordLink[]
+  /** Opens the full list elsewhere, such as a tab, instead of expanding it in the header. */
+  onShowAllRecords?: () => void
 }
 
 export const COLLAPSED_RELATED_RECORD_COUNT = 5
 
-const RelatedRecordGroupLinks = ({ label, pluralLabel, records }: RelatedRecordGroup) => {
+const RelatedRecordGroupLinks = ({
+  label,
+  pluralLabel,
+  records,
+  onShowAllRecords,
+}: RelatedRecordGroup) => {
   const [showAllRecords, setShowAllRecords] = useState(false)
   const revealedRecordsRef = useRef<HTMLSpanElement>(null)
   const collapsible = records.length > COLLAPSED_RELATED_RECORD_COUNT
@@ -58,8 +65,8 @@ const RelatedRecordGroupLinks = ({ label, pluralLabel, records }: RelatedRecordG
           <button
             type="button"
             className="record-header-subtitle__toggle"
-            aria-expanded={showAllRecords}
-            onClick={() => setShowAllRecords((current) => !current)}
+            aria-expanded={onShowAllRecords ? undefined : showAllRecords}
+            onClick={onShowAllRecords ?? (() => setShowAllRecords((current) => !current))}
           >
             {showAllRecords
               ? 'Show fewer'

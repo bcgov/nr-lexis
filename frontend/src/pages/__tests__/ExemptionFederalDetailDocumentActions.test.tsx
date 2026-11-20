@@ -1246,6 +1246,71 @@ describe('Exemption and Federal Detail Document Actions', () => {
     )
   })
 
+  it.each([
+    { group: 'Application numbers', tab: 'Applications' },
+    { group: 'Permit numbers', tab: 'Permits' },
+  ])('opens the $tab tab from the header when the $group list is long', async ({ group, tab }) => {
+    const applicationNumbers = ['601', '602', '603', '604', '605', '606', '607']
+    mockedFetchExemptionApplications.mockResolvedValue({
+      applications: applicationNumbers.map((applicationNumber) => ({
+        applicationNumber,
+        requestedVolume: '1.0',
+        scaleVolume: '',
+        locked: false,
+        jurisdiction: 'P',
+        ownerClientNumber: '00055566',
+        agentClientNumber: '',
+        ownerClientLocationCode: '00',
+        agentClientLocationCode: '',
+        applicantTypeCode: 'O',
+        ownerContactName: '',
+        agentContactName: '',
+        ownerCompanyName: '',
+        agentCompanyName: '',
+        removable: false,
+      })),
+      containsUnmanu: false,
+      ownerNumber: '00055566',
+    })
+    mockedFetchExemptionPermits.mockResolvedValue(
+      ['901', '902', '903', '904', '905', '906', '907'].map((permitNumber) => ({
+        permitNumber,
+        permitVolume: '1.0',
+        permitStatus: 'Complete',
+        permitIssueDate: '12-Jul-2026',
+        canViewPermit: true,
+      })),
+    )
+
+    render(
+      <MemoryRouter initialEntries={['/provincial/exemption/EX-777']}>
+        <Routes>
+          <Route
+            path="/provincial/exemption/:exemptionNumber"
+            element={<ProvincialExemptionDetailsPage />}
+          />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    const exemptionHeader = (
+      await screen.findByRole('heading', { name: 'Exemption EX-777', level: 1 })
+    ).closest('header') as HTMLElement
+    const groupItem = await waitFor(() => {
+      const item = Array.from(
+        exemptionHeader.querySelectorAll<HTMLElement>('.record-header-subtitle__item'),
+      ).find((candidate) => candidate.textContent?.startsWith(group))
+      expect(item).toBeTruthy()
+      return item as HTMLElement
+    })
+
+    await userEvent.click(within(groupItem).getByRole('button', { name: '+2 more' }))
+
+    const selectedTab = await screen.findByRole('tab', { name: tab, selected: true })
+    await waitFor(() => expect(selectedTab).toHaveFocus())
+    expect(within(groupItem).getAllByRole('link')).toHaveLength(5)
+  })
+
   it('leaves out header groups whose tab the user cannot see', async () => {
     mockedUseAuth.mockReturnValue(
       createTestAuthContext({

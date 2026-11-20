@@ -2309,6 +2309,19 @@ const ProvincialExemptionDetailsPage = () => {
       />
     ) : null
 
+  // The header's "+N more" opens the tab with the full list and puts focus on that tab.
+  const openFullListTab = (tab: ExemptionDetailTabKey) =>
+    sections.confirmLeave(() => {
+      selectExemptionTab(tab)
+      requestAnimationFrame(() =>
+        document
+          .querySelector<HTMLElement>(
+            '[aria-label="Exemption detail sections"] [role="tab"][aria-selected="true"]',
+          )
+          ?.focus(),
+      )
+    })
+
   return (
     <Grid fullWidth className="default-grid detail-page-grid provincial-exemption-detail">
       <Column sm={4} md={8} lg={16}>
@@ -2344,6 +2357,7 @@ const ProvincialExemptionDetailsPage = () => {
                           state: relatedRecordReturnState,
                         }))
                       : [],
+                    onShowAllRecords: () => openFullListTab('applications'),
                   },
                   {
                     label: 'Permit number',
@@ -2355,6 +2369,7 @@ const ProvincialExemptionDetailsPage = () => {
                           state: relatedRecordReturnState,
                         }))
                       : [],
+                    onShowAllRecords: () => openFullListTab('permits'),
                   },
                 ]}
                 author={displayValueText(currentDetail.author)}
