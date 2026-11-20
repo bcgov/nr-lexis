@@ -1,8 +1,12 @@
-import { render, screen } from '@testing-library/react'
+import { fireEvent, render, screen } from '@testing-library/react'
 import { Dropdown, TextInput } from '@carbon/react'
 import { describe, expect, it } from 'vitest'
 import IsoDateRangePicker from '@/components/IsoDateRangePicker'
-import { focusFirstEditableField, focusFirstInvalidField } from '@/utils/focus'
+import {
+  focusDateCalendarDay,
+  focusFirstEditableField,
+  focusFirstInvalidField,
+} from '@/utils/focus'
 
 describe('focusFirstEditableField', () => {
   it('skips disabled, read-only and hidden fields', () => {
@@ -101,5 +105,38 @@ describe('focusFirstInvalidField', () => {
     const { container } = render(<TextInput id="volume" labelText="Volume" />)
 
     expect(focusFirstInvalidField(container)).toBe(false)
+  })
+})
+
+describe('focusDateCalendarDay', () => {
+  it('focuses the day once a calendar that has just opened finishes its open animation', () => {
+    const { container } = render(
+      <div className="flatpickr-calendar">
+        <span className="flatpickr-day today" tabIndex={-1}>
+          19
+        </span>
+      </div>,
+    )
+    const calendarContainer = container.firstElementChild as HTMLElement
+    const day = screen.getByText('19')
+    // The day can't take focus while the opening calendar still hides it.
+    let dayHidden = true
+    const focusDay = day.focus.bind(day)
+    day.focus = () => {
+      if (!dayHidden) focusDay()
+    }
+    const calendar = {
+      isOpen: false,
+      open: () => undefined,
+      close: () => undefined,
+      calendarContainer,
+    }
+
+    expect(focusDateCalendarDay(calendar)).toBe(true)
+    expect(day).not.toHaveFocus()
+
+    dayHidden = false
+    fireEvent.animationEnd(calendarContainer)
+    expect(day).toHaveFocus()
   })
 })
