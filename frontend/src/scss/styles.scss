@@ -2024,37 +2024,19 @@ $notification-types: 'error', 'info', 'success', 'warning';
   color: var(--cds-text-primary);
 }
 
-// From and To sit side by side at about the calendar's width, as in Carbon, so it opens under both.
-.legacy-search-grid:has(> .search-date-range) {
-  container: search-filters / inline-size;
-}
-
 .legacy-search-grid > .search-date-range {
-  grid-column-end: span 2;
+  grid-column: span 2;
 
   .cds--date-picker {
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 1px;
+    gap: 1rem;
     inline-size: 100%;
-    max-inline-size: 20rem;
   }
 
   .cds--date-picker-container {
     min-inline-size: 0;
     margin: 0;
-  }
-}
-
-// A range starts its row; a second range sits beside it.
-.legacy-search-grid > :not(.search-date-range) + .search-date-range {
-  grid-column-start: 1;
-}
-
-// One column per range once four columns are each as wide as the calendar (18rem).
-@container search-filters (min-width: 75rem) {
-  .legacy-search-grid > .search-date-range {
-    grid-column-end: span 1;
   }
 }
 
@@ -6140,8 +6122,6 @@ $notification-types: 'error', 'info', 'success', 'warning';
 
   .legacy-search-grid > .search-date-range .cds--date-picker {
     grid-template-columns: 1fr;
-    gap: 1rem;
-    max-inline-size: none;
   }
 
   .provincial-review-search-grid {
