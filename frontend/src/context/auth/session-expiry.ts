@@ -40,6 +40,15 @@ export const recordSessionActivity = (): void => {
   }
 }
 
+/** When any of the browser's LEXIS tabs last saw activity, or 0 when it isn't known. */
+export const lastSessionActivity = (): number => {
+  try {
+    return Number(window.localStorage.getItem(SESSION_ACTIVITY_KEY)) || 0
+  } catch {
+    return 0
+  }
+}
+
 export const isSessionActivityEvent = (event: StorageEvent): boolean =>
   event.key === SESSION_ACTIVITY_KEY && event.newValue !== null
 

@@ -24,6 +24,7 @@ import { hasRole, isPureReadOnlyRole } from '@/context/auth/role-utils'
 import {
   clearSessionExpiredLoginNotice,
   isSessionActivityEvent,
+  lastSessionActivity,
   markSessionExpiredLoginNotice,
   recordSessionActivity,
   redirectToLoginShell,
@@ -463,6 +464,9 @@ export function AuthProvider({ children }: AuthProviderProps) {
         window.clearTimeout(expiryTimeoutId)
       }
     }
+    // A tab resuming from a freeze can run these timers before other tabs' activity events
+    // arrive, so each deadline also checks the activity time the tabs share.
+    const sharedIdleDeadline = () => lastSessionActivity() + SESSION_IDLE_TIMEOUT_MS
     const startSessionWarning = (expiresAt: number) => {
       sessionWarningOpenRef.current = true
       const activeElement = document.activeElement
@@ -471,12 +475,21 @@ export function AuthProvider({ children }: AuthProviderProps) {
       setSessionWarningExpiresAt(expiresAt)
       expiryTimeoutId = window.setTimeout(
         () => {
+          if (sharedIdleDeadline() > Date.now()) {
+            closeSessionWarning()
+            resetIdleTimer(lastSessionActivity())
+            return
+          }
           void expireSession('idle-timeout')
         },
         Math.max(0, expiresAt - Date.now()),
       )
     }
     const checkIdleDeadline = (expiresAt: number) => {
+      if (sharedIdleDeadline() > expiresAt) {
+        resetIdleTimer(lastSessionActivity())
+        return
+      }
       const remaining = expiresAt - Date.now()
       if (remaining <= 0) {
         void expireSession('idle-timeout')
@@ -484,15 +497,15 @@ export function AuthProvider({ children }: AuthProviderProps) {
       }
       startSessionWarning(expiresAt)
     }
-    const resetIdleTimer = () => {
+    function resetIdleTimer(lastActivity = Date.now()) {
       if (sessionWarningOpenRef.current) {
         return
       }
       clearTimers()
-      const expiresAt = Date.now() + SESSION_IDLE_TIMEOUT_MS
+      const expiresAt = lastActivity + SESSION_IDLE_TIMEOUT_MS
       warningTimeoutId = window.setTimeout(
         () => checkIdleDeadline(expiresAt),
-        SESSION_IDLE_TIMEOUT_MS - SESSION_IDLE_WARNING_MS,
+        Math.max(0, expiresAt - SESSION_IDLE_WARNING_MS - Date.now()),
       )
     }
     const keepSessionAlive = (now: number) => {
