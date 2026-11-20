@@ -7083,7 +7083,7 @@ const ProvincialPermitDetailsPage = () => {
             </RecordFieldRow>
           </RecordFieldGrid>
         )}
-        {showReviewedPermitFeeSummary
+        {showReviewedPermitFeeSummary || editingNewPermit
           ? null
           : (isEditingPermit || canEditReceiptNumber) && (
               <div className="legacy-search-actions">

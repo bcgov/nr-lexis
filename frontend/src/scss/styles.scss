@@ -6486,4 +6486,14 @@ $notification-types: 'error', 'info', 'success', 'warning';
   .cds--tag {
     margin: 0 0.5rem 0.5rem 0;
   }
+
+  // A tag can be as wide as the field, so long names such as regions show in full.
+  .cds--tag.cds--tag--filter {
+    max-inline-size: 100%;
+  }
+
+  .cds--interactive--tag-children {
+    min-inline-size: 0;
+    max-inline-size: 100%;
+  }
 }

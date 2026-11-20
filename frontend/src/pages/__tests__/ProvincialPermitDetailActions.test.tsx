@@ -1667,6 +1667,7 @@ describe('Provincial Permit Detail Action Smoke', () => {
     expect(
       within(screen.getByRole('tabpanel')).queryByRole('button', { name: /^(Save|Cancel)/ }),
     ).toBeNull()
+    expect(screen.queryAllByRole('button', { name: 'Save changes', hidden: true })).toHaveLength(0)
     await waitFor(() => {
       expect(router.state.location.state).toEqual({ source: 'permit-create' })
       expect(router.state.location.search).toBe('?from=create')
