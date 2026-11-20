@@ -1638,6 +1638,90 @@ describe('Provincial exemption edit context', () => {
     ).not.toBeInTheDocument()
   })
 
+  it('confirms a save before the refresh finishes and stays busy until it does', async () => {
+    const editContext = {
+      rateOverrideEnabled: false,
+      fixedFeeRate: '',
+      regionNumbers: ['1903', '1904'],
+      locked: false,
+      lockMessage: '',
+    }
+    let resolveRefreshedEditContext: (value: typeof editContext) => void = () => undefined
+    const refreshedEditContext = new Promise<typeof editContext>((resolve) => {
+      resolveRefreshedEditContext = resolve
+    })
+    vi.mocked(fetchExemptionEditContext)
+      .mockResolvedValueOnce(editContext)
+      .mockImplementationOnce(() => refreshedEditContext)
+    vi.mocked(updateExemption).mockResolvedValue({
+      success: true,
+      message: 'The exemption was updated successfully.',
+      exemptionNumber: 'BOIC-205',
+      errors: [],
+      warnings: [],
+    })
+    renderBoicExemption()
+
+    await userEvent.click(await screen.findByRole('button', { name: 'Edit exemption details' }))
+    await userEvent.type(screen.getByLabelText('Conditions'), ' Updated')
+    await userEvent.click(screen.getByRole('button', { name: 'Save changes' }))
+
+    expect(await screen.findByText(/^(Exemption details|Fees) saved\.$/)).toBeInTheDocument()
+    expect(vi.mocked(fetchExemptionEditContext)).toHaveBeenCalledTimes(2)
+    expect(screen.queryByRole('button', { name: 'Edit exemption details' })).not.toBeInTheDocument()
+    const refreshingUnload = new Event('beforeunload', { cancelable: true })
+    window.dispatchEvent(refreshingUnload)
+    expect(refreshingUnload.defaultPrevented).toBe(true)
+
+    await act(async () => {
+      resolveRefreshedEditContext(editContext)
+    })
+
+    expect(
+      await screen.findByRole('button', { name: 'Edit exemption details' }),
+    ).toBeInTheDocument()
+    expect(screen.getByText(/^(Exemption details|Fees) saved\.$/)).toBeInTheDocument()
+    const settledUnload = new Event('beforeunload', { cancelable: true })
+    window.dispatchEvent(settledUnload)
+    expect(settledUnload.defaultPrevented).toBe(false)
+  })
+
+  it('reads the lists covered by the record version only after the detail', async () => {
+    vi.mocked(fetchExemptionEditContext).mockResolvedValue({
+      rateOverrideEnabled: false,
+      fixedFeeRate: '',
+      regionNumbers: ['1903', '1904'],
+      locked: false,
+      lockMessage: '',
+    })
+    let resolveDetail: (value: ProvincialExemptionDetail) => void = () => undefined
+    vi.mocked(fetchProvincialExemptionDetail).mockImplementationOnce(
+      () =>
+        new Promise<ProvincialExemptionDetail>((resolve) => {
+          resolveDetail = resolve
+        }),
+    )
+    renderBoicExemption()
+
+    await waitFor(() =>
+      expect(vi.mocked(fetchProvincialExemptionDetail)).toHaveBeenCalledWith('BOIC-205'),
+    )
+    expect(vi.mocked(fetchExemptionApplications)).not.toHaveBeenCalled()
+    expect(vi.mocked(fetchExemptionEditContext)).not.toHaveBeenCalled()
+    expect(vi.mocked(fetchExemptionPermits)).not.toHaveBeenCalled()
+
+    await act(async () => {
+      resolveDetail(exemptionDetail)
+    })
+
+    expect(
+      await screen.findByRole('button', { name: 'Edit exemption details' }),
+    ).toBeInTheDocument()
+    expect(vi.mocked(fetchExemptionApplications)).toHaveBeenCalledWith('BOIC-205')
+    expect(vi.mocked(fetchExemptionEditContext)).toHaveBeenCalledWith('BOIC-205')
+    expect(vi.mocked(fetchExemptionPermits)).toHaveBeenCalledWith('BOIC-205')
+  })
+
   it('does not show an editing warning while initial edit settings load', async () => {
     const editContext = {
       rateOverrideEnabled: false,
