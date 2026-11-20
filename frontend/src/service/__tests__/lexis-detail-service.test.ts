@@ -101,6 +101,7 @@ describe('lexis detail service', () => {
         approvedVolume: '250.5',
         remainingVolume: 130,
         exemptionTypeDescription: 'Blanket OIC',
+        exemptionStatusCode: 'ACT',
         blanketOic: true,
       }),
     )
@@ -109,6 +110,7 @@ describe('lexis detail service', () => {
       approvedExemptionVolume: 250.5,
       exemptionVolumeRemaining: 130,
       exemptionTypeDescription: 'Blanket OIC',
+      exemptionStatusCode: 'ACT',
       blanketOic: true,
     })
 

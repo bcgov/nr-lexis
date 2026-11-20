@@ -25,6 +25,7 @@ export type ExemptionApplicationRow = {
   agentCompanyName: string
   /** Whether the server allows removing the application from the exemption. */
   removable: boolean
+  statusDescription: string
 }
 
 type ExemptionApplicationsResult = {
@@ -189,6 +190,7 @@ export const fetchExemptionApplications = async (
         ownerCompanyName: asString(row.ownerCompanyName),
         agentCompanyName: asString(row.agentCompanyName),
         removable: asBoolean(row.removable),
+        statusDescription: asString(row.statusDescription),
       }
     }),
     containsUnmanu: asBoolean(payload.containsUnmanu),

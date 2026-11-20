@@ -329,7 +329,8 @@ public class LexisApplicationController {
         detail.author(),
         effectivePolicy.canDeletePackages(),
         effectivePolicy.canDeleteScales(),
-        effectivePolicy.canChangeAgent());
+        effectivePolicy.canChangeAgent(),
+        detail.exemptionStatusCode());
   }
 
   private LexisApplicationSearchResponseDto withSearchLocks(

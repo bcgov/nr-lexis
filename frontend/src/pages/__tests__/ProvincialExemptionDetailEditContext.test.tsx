@@ -3291,6 +3291,7 @@ describe('exemption edit choices', () => {
     ownerCompanyName: '',
     agentCompanyName: '',
     removable,
+    statusDescription: '',
   })
 
   const renderExemption = () =>

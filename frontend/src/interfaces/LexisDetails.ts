@@ -1,6 +1,7 @@
 export type ProvincialApplicationDetail = {
   applicationNumber: number
   exemptionNumber: string | null
+  exemptionStatusCode?: string | null
   applicationStatusCode: string | null
   statusDescription: string | null
   author?: string | null
@@ -125,6 +126,7 @@ export type ProvincialPermitDetail = {
   applicationNumber: number | null
   packageNumber: string | null
   exemptionNumber: string | null
+  exemptionStatusCode?: string | null
   permitStatusCode: string | null
   permitStatusDescription: string | null
   author?: string | null

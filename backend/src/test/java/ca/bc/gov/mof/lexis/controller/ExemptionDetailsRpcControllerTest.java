@@ -293,7 +293,8 @@ class ExemptionDetailsRpcControllerTest {
                         "EXPORT PERSON",
                         "SAMPLE OWNER LTD",
                         "SAMPLE AGENT LTD",
-                        true)),
+                        true,
+                        "")),
                 false,
                 "00077881"));
 

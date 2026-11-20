@@ -373,11 +373,13 @@ class PermitRpcRepositoryTest {
     var plain = new PermitRpcRepository.PermitCorePackageContextRow(
         new PermitRpcRepository.PermitCorePackageRow(
             "PKG-100", 1000456L, 10d, 1d, 1d, "ACT", null, "N", "S", "H"),
-        null, "P", "B", null, null, null, null, null, false);
+        null, "P", "B", null, null, null, null, null, false,
+        null);
     var padded = new PermitRpcRepository.PermitCorePackageContextRow(
         new PermitRpcRepository.PermitCorePackageRow(
             "PKG-100  ", 1000456L, 20d, 1d, 1d, "ACT", null, "N", "S", "H"),
-        null, "P", "B", null, null, null, null, null, true);
+        null, "P", "B", null, null, null, null, null, true,
+        null);
     when(jdbcTemplate.query(anyString(), any(RowMapper.class),
         eq(7000123L), eq(7000123L), eq(7000123L)))
         .thenReturn(List.of(padded, plain, padded));

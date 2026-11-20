@@ -7705,6 +7705,7 @@ const ProvincialPermitDetailsPage = () => {
                               ? `/provincial/exemption/${encodeURIComponent(detail.exemptionNumber)}`
                               : undefined,
                             state: relatedRecordReturnState,
+                            status: detail.exemptionStatusCode,
                           },
                         ]
                       : [],
@@ -7718,6 +7719,7 @@ const ProvincialPermitDetailsPage = () => {
                         ? `/provincial/application/${encodeURIComponent(applicationNumber)}`
                         : undefined,
                       state: relatedRecordReturnState,
+                      status: tabsData?.applicationStatuses[applicationNumber],
                     })),
                   },
                 ]}

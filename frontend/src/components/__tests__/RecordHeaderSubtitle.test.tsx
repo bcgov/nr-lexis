@@ -56,6 +56,25 @@ describe('RecordHeaderSubtitle', () => {
     expect(screen.queryByRole('link', { name: '9021135' })).not.toBeInTheDocument()
   })
 
+  it('shows each status in brackets after its number', () => {
+    const { container } = renderSubtitle(
+      [{ recordNumber: '47200', to: '/provincial/application/47200', status: 'Permitted' }],
+      [
+        { recordNumber: '9021135', to: '/provincial/permit/9021135', status: 'Complete' },
+        { recordNumber: '9021136', status: ' ' },
+      ],
+    )
+
+    expect(subtitleItems(container)).toEqual([
+      'Author: IDIR\\SAMPLE',
+      'Application number: 47200 (Permitted)',
+      'Permit numbers: 9021135 (Complete), 9021136',
+    ])
+    expect(screen.getByRole('link', { name: '9021135' }).parentElement).toHaveTextContent(
+      /^9021135 \(Complete\)$/,
+    )
+  })
+
   it('shows five records of a long list until all are asked for', async () => {
     const { container } = renderSubtitle(applicationRecords(23))
     const applicationItem = container.querySelectorAll<HTMLElement>(

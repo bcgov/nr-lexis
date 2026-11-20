@@ -1182,6 +1182,19 @@ class LexisApplicationRepositoryTest {
         .isEqualTo(expectedDisplayStatus);
   }
 
+  @Test
+  void detailShouldReturnTheExemptionStatusForAnyApplicationOnAnExemption() {
+    LexisApplicationRepository repository =
+        new ExemptedDetailLexisApplicationRepository("ACT", "PER", "Permitted");
+
+    assertThat(repository.findByApplicationNumber(108826L))
+        .get()
+        .extracting(
+            LexisApplicationDetailDto::statusDescription,
+            LexisApplicationDetailDto::exemptionStatusCode)
+        .containsExactly("Permitted", "ACT");
+  }
+
   private static LexisApplicationSearchCriteria emptyCriteria(
       String sortField, int page, int size) {
     return new LexisApplicationSearchCriteria(
@@ -1403,10 +1416,21 @@ class LexisApplicationRepositoryTest {
   private static final class ExemptedDetailLexisApplicationRepository
       extends LexisApplicationRepository {
     private final String exemptionStatusCode;
+    private final String applicationStatusCode;
+    private final String applicationStatusDescription;
 
     ExemptedDetailLexisApplicationRepository(String exemptionStatusCode) {
+      this(exemptionStatusCode, "EXE", "Exempted");
+    }
+
+    ExemptedDetailLexisApplicationRepository(
+        String exemptionStatusCode,
+        String applicationStatusCode,
+        String applicationStatusDescription) {
       super(mock(JdbcTemplate.class));
       this.exemptionStatusCode = exemptionStatusCode;
+      this.applicationStatusCode = applicationStatusCode;
+      this.applicationStatusDescription = applicationStatusDescription;
     }
 
     @Override
@@ -1419,7 +1443,10 @@ class LexisApplicationRepositoryTest {
         return List.of();
       }
       try {
-        return List.of(rowMapper.map(exemptedApplicationDetailResultSet()));
+        return List.of(
+            rowMapper.map(
+                exemptedApplicationDetailResultSet(
+                    applicationStatusCode, applicationStatusDescription)));
       } catch (SQLException ex) {
         throw new AssertionError(ex);
       }
@@ -1645,12 +1672,13 @@ class LexisApplicationRepositoryTest {
     return resultSet;
   }
 
-  private static ResultSet exemptedApplicationDetailResultSet() throws SQLException {
+  private static ResultSet exemptedApplicationDetailResultSet(
+      String applicationStatusCode, String applicationStatusDescription) throws SQLException {
     ResultSet resultSet = applicationDetailResultSet();
     when(resultSet.getLong("APPLICATION_NUMBER")).thenReturn(108826L);
     when(resultSet.getString("EXEMPTION_NUMBER")).thenReturn("20-8562");
-    when(resultSet.getString("EXPORT_APPLICATION_STATUS_CODE")).thenReturn("EXE");
-    when(resultSet.getString("STATUS_DESCRIPTION")).thenReturn("Exempted");
+    when(resultSet.getString("EXPORT_APPLICATION_STATUS_CODE")).thenReturn(applicationStatusCode);
+    when(resultSet.getString("STATUS_DESCRIPTION")).thenReturn(applicationStatusDescription);
     return resultSet;
   }
 

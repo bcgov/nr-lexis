@@ -351,10 +351,7 @@ public class LexisApplicationRepository extends OracleRepositorySupport {
     }
 
     ApplicationSnapshot app = snapshot.get();
-    String exemptionStatusCode =
-        APPLICATION_STATUS_EXEMPTED.equalsIgnoreCase(app.applicationStatusCode())
-            ? loadExemptionStatusCode(app.exemptionNumber()).orElse(null)
-            : null;
+    String exemptionStatusCode = loadExemptionStatusCode(app.exemptionNumber()).orElse(null);
     Optional<ScheduleSnapshot> schedule = loadScheduleByApplication(applicationNumber);
     List<LexisApplicationDetailDto.LexisPackageDto> packages =
         loadPackagesByApplication(applicationNumber);
@@ -398,7 +395,11 @@ public class LexisApplicationRepository extends OracleRepositorySupport {
             remarks,
             offers,
             app.jurisdictionCode(),
-            app.author()));
+            app.author(),
+            false,
+            false,
+            false,
+            exemptionStatusCode));
   }
 
   /** Loads only the fields used by the provincial application summary for the supplied page. */
@@ -570,7 +571,8 @@ public class LexisApplicationRepository extends OracleRepositorySupport {
             : "");
   }
 
-  private String displayStatus(
+  /** An Exempted application on a New exemption reads "Exempted - New". */
+  public static String displayStatus(
       String applicationStatusCode,
       String applicationStatusDescription,
       String exemptionStatusCode) {

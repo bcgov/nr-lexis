@@ -41,7 +41,8 @@ public record LexisApplicationDetailDto(
     String author,
     boolean canDeletePackages,
     boolean canDeleteScales,
-    boolean canChangeAgent) {
+    boolean canChangeAgent,
+    String exemptionStatusCode) {
 
   public LexisApplicationDetailDto(
       long applicationNumber,
@@ -115,7 +116,8 @@ public record LexisApplicationDetailDto(
         author,
         canAddPackages,
         canAddScales,
-        false);
+        false,
+        null);
   }
 
   public LexisApplicationDetailDto(

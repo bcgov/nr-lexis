@@ -12,6 +12,7 @@ import ca.bc.gov.mof.lexis.service.mail.EmailNotificationService;
 import ca.bc.gov.mof.lexis.service.mail.MailRecipientValidator;
 import ca.bc.gov.mof.lexis.service.mail.RegionalMailRoute;
 import ca.bc.gov.mof.lexis.service.mail.WorkflowEmailEvent;
+import ca.bc.gov.mof.lexis.repository.application.LexisApplicationRepository;
 import ca.bc.gov.mof.lexis.repository.exemption.ExemptionDetailsRpcRepository;
 import ca.bc.gov.mof.lexis.util.LexisBusinessTime;
 import java.math.BigDecimal;
@@ -160,7 +161,9 @@ public class OracleExemptionDetailsRpcService implements ExemptionDetailsRpcServ
               row.agentContactName(),
               row.ownerCompanyName(),
               row.agentCompanyName(),
-              isRemovableFromExemption(exemptionStatus, row)));
+              isRemovableFromExemption(exemptionStatus, row),
+              LexisApplicationRepository.displayStatus(
+                  row.applicationStatusCode(), row.statusDescription(), exemptionStatus)));
     }
 
     String ownerNumber = blanketOic ? "Blanket OIC" : Optional.ofNullable(previousOwnerClientNumber).orElse("");

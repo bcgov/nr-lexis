@@ -8,6 +8,8 @@ export type RelatedRecordLink = {
   /** Omitted when the user can't open the record; the number then shows as plain text. */
   to?: string
   state?: unknown
+  /** Shown in brackets after the number, as legacy did. */
+  status?: string | null
 }
 
 export type RelatedRecordGroup = {
@@ -38,13 +40,16 @@ const RelatedRecordGroupLinks = ({
   const renderRecord = (record: RelatedRecordLink, index: number) => (
     <Fragment key={record.recordNumber}>
       {index > 0 ? ', ' : null}
-      {record.to ? (
-        <Link to={record.to} state={record.state}>
-          {record.recordNumber}
-        </Link>
-      ) : (
-        record.recordNumber
-      )}
+      <span className="record-header-subtitle__record">
+        {record.to ? (
+          <Link to={record.to} state={record.state}>
+            {record.recordNumber}
+          </Link>
+        ) : (
+          record.recordNumber
+        )}
+        {record.status?.trim() ? ` (${record.status.trim()})` : null}
+      </span>
     </Fragment>
   )
 

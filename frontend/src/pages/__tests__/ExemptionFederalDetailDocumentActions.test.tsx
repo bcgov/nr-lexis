@@ -492,6 +492,7 @@ describe('Exemption and Federal Detail Document Actions', () => {
           ownerCompanyName: '',
           agentCompanyName: '',
           removable: true,
+          statusDescription: '',
         },
       ],
       containsUnmanu: false,
@@ -659,6 +660,7 @@ describe('Exemption and Federal Detail Document Actions', () => {
       ownerCompanyName: '',
       agentCompanyName: '',
       removable: true,
+      statusDescription: '',
     }
     mockedFetchProvincialExemptionDetail.mockResolvedValue({
       ...exemptionDetail,
@@ -1185,6 +1187,7 @@ describe('Exemption and Federal Detail Document Actions', () => {
       ownerCompanyName: '',
       agentCompanyName: '',
       removable: false,
+      statusDescription: '',
     })
     mockedUseAuth.mockReturnValue(
       createTestAuthContext({
@@ -1192,7 +1195,10 @@ describe('Exemption and Federal Detail Document Actions', () => {
       }),
     )
     mockedFetchExemptionApplications.mockResolvedValue({
-      applications: [exemptionApplication('654', 'P'), exemptionApplication('655', 'F')],
+      applications: [
+        { ...exemptionApplication('654', 'P'), statusDescription: 'Permitted' },
+        exemptionApplication('655', 'F'),
+      ],
       containsUnmanu: false,
       ownerNumber: '00055566',
     })
@@ -1233,7 +1239,11 @@ describe('Exemption and Federal Detail Document Actions', () => {
           exemptionHeader.querySelectorAll('.record-header-subtitle__item'),
           (item) => item.textContent,
         ),
-      ).toEqual(['Author: —', 'Application numbers: 654, 655', 'Permit number: 900101']),
+      ).toEqual([
+        'Author: —',
+        'Application numbers: 654 (Permitted), 655',
+        'Permit number: 900101 (Complete)',
+      ]),
     )
     expect(within(exemptionHeader).getByRole('link', { name: '654' })).toHaveAttribute(
       'href',
@@ -1268,6 +1278,7 @@ describe('Exemption and Federal Detail Document Actions', () => {
         ownerCompanyName: '',
         agentCompanyName: '',
         removable: false,
+        statusDescription: '',
       })),
       containsUnmanu: false,
       ownerNumber: '00055566',
@@ -1341,6 +1352,7 @@ describe('Exemption and Federal Detail Document Actions', () => {
           ownerCompanyName: '',
           agentCompanyName: '',
           removable: false,
+          statusDescription: '',
         },
       ],
       containsUnmanu: false,

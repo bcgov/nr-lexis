@@ -87,6 +87,7 @@ vi.mock('@/service/provincial-permit-detail-tabs-service', () => ({
   EMPTY_PROVINCIAL_PERMIT_DETAIL_TABS: {
     applications: [],
     applicationTotals: [],
+    applicationStatuses: {},
     packages: [],
     items: [],
     fees: [],
@@ -315,6 +316,7 @@ const permitDetail: ProvincialPermitDetail = {
 const tabsResult: ProvincialPermitDetailTabsData = {
   applications: [],
   applicationTotals: [],
+  applicationStatuses: {},
   packages: [],
   items: [],
   fees: [],
@@ -5542,9 +5544,14 @@ describe('Provincial Permit Detail Action Smoke', () => {
   })
 
   it('links the exemption and associated applications in the header after the author', async () => {
+    mockedFetchProvincialPermitDetail.mockResolvedValue({
+      ...permitDetail,
+      exemptionStatusCode: 'ACT',
+    })
     mockedFetchProvincialPermitDetailTabs.mockResolvedValue({
       ...tabsResult,
       applications: ['101103', '101104'],
+      applicationStatuses: { '101103': 'Permitted', '101104': 'Exempted' },
     })
     renderPermitDetails()
 
@@ -5560,8 +5567,8 @@ describe('Provincial Permit Detail Action Smoke', () => {
         ),
       ).toEqual([
         'Author: idir\\permit-author',
-        'Exemption number: EX-9',
-        'Application numbers: 101103, 101104',
+        'Exemption number: EX-9 (ACT)',
+        'Application numbers: 101103 (Permitted), 101104 (Exempted)',
       ]),
     )
     expect(within(subtitle).getByRole('link', { name: 'EX-9' })).toHaveAttribute(

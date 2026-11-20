@@ -83,7 +83,8 @@ public class PermitRpcRepository extends OracleRepositorySupport {
         PPTC.DESCRIPTION AS PACKAGE_PRODUCT_TYPE_DESCRIPTION,
         AGTC.DESCRIPTION AS APPLICATION_GROWTH_TYPE_DESCRIPTION,
         PGTC.DESCRIPTION AS PACKAGE_GROWTH_TYPE_DESCRIPTION,
-        EPSC.DESCRIPTION AS PACKAGE_STATUS_DESCRIPTION
+        EPSC.DESCRIPTION AS PACKAGE_STATUS_DESCRIPTION,
+        EASC.DESCRIPTION AS APPLICATION_STATUS_DESCRIPTION
       FROM EXPORT_PACKAGE P
       LEFT JOIN EXPORT_EXEMPTION_APPLICATION EEA
         ON EEA.APPLICATION_NUMBER = P.APPLICATION_NUMBER
@@ -101,6 +102,8 @@ public class PermitRpcRepository extends OracleRepositorySupport {
         ON PGTC.EXPORT_GROWTH_TYPE_CODE = P.EXPORT_GROWTH_TYPE_CODE
       LEFT JOIN EXPORT_PACKAGE_STATUS_CODE EPSC
         ON EPSC.EXPORT_PACKAGE_STATUS_CODE = P.EXPORT_PACKAGE_STATUS_CODE
+      LEFT JOIN EXPORT_APPLICATION_STATUS_CODE EASC
+        ON EASC.EXPORT_APPLICATION_STATUS_CODE = EEA.EXPORT_APPLICATION_STATUS_CODE
       """;
   private static final String FIND_CORE_PACKAGES_BY_PERMIT =
       CORE_PACKAGE_SELECT
@@ -2089,7 +2092,8 @@ public class PermitRpcRepository extends OracleRepositorySupport {
         getString(rs, "APPLICATION_GROWTH_TYPE_DESCRIPTION"),
         getString(rs, "PACKAGE_GROWTH_TYPE_DESCRIPTION"),
         getString(rs, "PACKAGE_STATUS_DESCRIPTION"),
-        coalesce(getLong(rs, "ASSIGNED_TO_PERMIT"), 0L) > 0);
+        coalesce(getLong(rs, "ASSIGNED_TO_PERMIT"), 0L) > 0,
+        getString(rs, "APPLICATION_STATUS_DESCRIPTION"));
   }
 
   private static String placeholders(int count) {
@@ -2297,7 +2301,8 @@ public class PermitRpcRepository extends OracleRepositorySupport {
       String applicationGrowthTypeDescription,
       String packageGrowthTypeDescription,
       String packageStatusDescription,
-      boolean assignedToPermit) {}
+      boolean assignedToPermit,
+      String applicationStatusDescription) {}
 
   public record PermitCoreScaleRow(
       PermitScaleDetailRow scaleRow, String speciesDescription, String gradeDescription) {}
