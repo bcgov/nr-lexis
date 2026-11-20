@@ -368,6 +368,51 @@ describe('AuthProvider logout', () => {
     expect(authMocks.endOidcSession).toHaveBeenCalledTimes(1)
   })
 
+  it("counts another tab's activity even when its event arrives after this tab's timers", async () => {
+    renderProbe()
+
+    await waitFor(() => {
+      expect(screen.getByTestId('loading')).toHaveTextContent('false')
+    })
+
+    vi.useFakeTimers()
+    window.dispatchEvent(new Event('keydown'))
+    // Another tab records activity, but this tab hasn't received the storage event yet.
+    const otherTabActivityWithoutEvent = () =>
+      window.localStorage.setItem('lexis.session-activity', String(Date.now()))
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(10 * 60 * 1000)
+    })
+    otherTabActivityWithoutEvent()
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(
+        SESSION_IDLE_TIMEOUT_MS - SESSION_IDLE_WARNING_MS - 10 * 60 * 1000,
+      )
+    })
+    expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument()
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(10 * 60 * 1000)
+    })
+    expect(
+      screen.getByRole('alertdialog', { name: 'You’re about to be logged out' }),
+    ).toBeInTheDocument()
+
+    otherTabActivityWithoutEvent()
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(SESSION_IDLE_WARNING_MS)
+    })
+    expect(authMocks.endOidcSession).not.toHaveBeenCalled()
+    expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument()
+    expect(screen.getByTestId('is-logged-in')).toHaveTextContent('true')
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(SESSION_IDLE_TIMEOUT_MS)
+    })
+    expect(authMocks.endOidcSession).toHaveBeenCalledTimes(1)
+  })
+
   it('closes the logout warning when the user is active in another tab', async () => {
     renderProbe()
 

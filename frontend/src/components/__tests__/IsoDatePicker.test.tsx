@@ -166,23 +166,31 @@ describe('IsoDatePicker', () => {
     expect(document.querySelector('.flatpickr-calendar.open')).toBeNull()
   })
 
-  it('moves from the date into its calendar on the Down arrow', async () => {
-    render(
-      <IsoDatePicker
-        id="shippingDate"
-        labelText="Shipping date"
-        value="2026-06-12"
-        onChange={vi.fn()}
-      />,
-    )
-    const input = screen.getByLabelText('Shipping date')
+  it.each([{ escapeFirst: false }, { escapeFirst: true }])(
+    'moves from the date into its calendar on the Down arrow (after Escape: $escapeFirst)',
+    async ({ escapeFirst }) => {
+      render(
+        <IsoDatePicker
+          id="shippingDate"
+          labelText="Shipping date"
+          value="2026-06-12"
+          onChange={vi.fn()}
+        />,
+      )
+      const input = screen.getByLabelText('Shipping date')
 
-    await userEvent.click(input)
-    await userEvent.keyboard('{ArrowDown}')
+      await userEvent.click(input)
+      if (escapeFirst) {
+        await userEvent.keyboard('{Escape}')
+        expect(document.querySelector('.flatpickr-calendar.open')).toBeNull()
+      }
+      await userEvent.keyboard('{ArrowDown}')
 
-    expect(document.activeElement).toHaveClass('flatpickr-day')
-    expect(document.activeElement).toHaveClass('selected')
-  })
+      expect(document.querySelector('.flatpickr-calendar.open')).not.toBeNull()
+      expect(document.activeElement).toHaveClass('flatpickr-day')
+      expect(document.activeElement).toHaveClass('selected')
+    },
+  )
 
   it('preserves impossible typed dates for parent validation', () => {
     const StatefulDatePicker = () => {

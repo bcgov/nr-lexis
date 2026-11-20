@@ -208,17 +208,26 @@ describe('IsoDateRangePicker', () => {
   })
 
   it.each([
-    { field: 'List date from', day: '10' },
-    { field: 'List date to', day: '20' },
-  ])('moves from $field into the calendar on the Down arrow', async ({ field, day }) => {
-    render(<Range initial={['2026-01-10', '2026-01-20']} />)
+    { field: 'List date from', day: '10', escapeFirst: false },
+    { field: 'List date to', day: '20', escapeFirst: false },
+    { field: 'List date to', day: '20', escapeFirst: true },
+  ])(
+    'moves from $field into the calendar on the Down arrow (after Escape: $escapeFirst)',
+    async ({ field, day, escapeFirst }) => {
+      render(<Range initial={['2026-01-10', '2026-01-20']} />)
 
-    await userEvent.click(screen.getByLabelText(field))
-    await userEvent.keyboard('{ArrowDown}')
+      await userEvent.click(screen.getByLabelText(field))
+      if (escapeFirst) {
+        await userEvent.keyboard('{Escape}')
+        expect(document.querySelector('.flatpickr-calendar.open')).toBeNull()
+      }
+      await userEvent.keyboard('{ArrowDown}')
 
-    expect(document.activeElement).toHaveClass('flatpickr-day')
-    expect(document.activeElement).toHaveTextContent(day)
-  })
+      expect(document.querySelector('.flatpickr-calendar.open')).not.toBeNull()
+      expect(document.activeElement).toHaveClass('flatpickr-day')
+      expect(document.activeElement).toHaveTextContent(day)
+    },
+  )
 
   it('updates both search bounds from a single range calendar', async () => {
     render(<Range initial={['2026-01-10', '2026-01-20']} />)

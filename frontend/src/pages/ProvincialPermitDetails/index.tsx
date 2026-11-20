@@ -4709,10 +4709,13 @@ const ProvincialPermitDetailsPage = () => {
           setActionResult(sectionSaveError(resultSubject, resultSource, message))
           return false
         }
+        // A ticked application with no unassigned scale rows isn't added, so it doesn't count.
         const hasApplication = detail.blanketOic
           ? detail.oicApplicationNumber != null
           : ministerialApplicationSelectionDirty
-            ? ministerialApplicationRows.some((row) => row.checked)
+            ? ministerialApplicationRows.some(
+                (row) => row.checked && (row.included || row.pieces != null || row.volume != null),
+              )
             : tabsData.applications.length > 0
         // Changing the applications also changes their packages and scales on the server.
         // Removing the last application leaves neither, regardless of the previously loaded rows.

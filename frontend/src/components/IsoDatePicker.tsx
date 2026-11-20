@@ -2,13 +2,9 @@ import { DatePicker, DatePickerInput } from '@carbon/react'
 import { type ComponentProps, type ReactNode, useEffect, useRef } from 'react'
 import { isValidIsoDate } from '@/pages/shared/create-form-utils'
 import { fieldErrorText } from '@/utils/field-error'
-import { closeDateCalendar } from '@/utils/focus'
+import { closeDateCalendar, focusDateCalendarDay, type DateInput } from '@/utils/focus'
 
 const ISO_DATE_INPUT_PATTERN = String.raw`\d{4}-\d{2}-\d{2}`
-
-type CalendarInput = HTMLInputElement & {
-  _flatpickr?: { isOpen: boolean; open: () => void; calendarContainer: HTMLElement }
-}
 
 export const parseIsoDate = (value: string): Date | false => {
   if (!value.trim() || !isValidIsoDate(value)) return false
@@ -84,7 +80,7 @@ export default function IsoDatePicker({
     // Tab leaves the date for the next field and closes its calendar; the Down arrow moves into
     // the calendar. Carbon would move Tab into the calendar instead.
     const onKeyDown = (event: KeyboardEvent) => {
-      const input = event.target as CalendarInput
+      const input = event.target as DateInput
       if (!(input instanceof HTMLInputElement)) return
       if (event.key === 'Tab' && !event.shiftKey) {
         event.stopPropagation()
@@ -93,15 +89,7 @@ export default function IsoDatePicker({
       }
       const calendar = input._flatpickr
       if (event.key !== 'ArrowDown' || !calendar) return
-      if (!calendar.isOpen) calendar.open()
-      const days = calendar.calendarContainer
-      const day =
-        days.querySelector<HTMLElement>('.flatpickr-day.selected') ??
-        days.querySelector<HTMLElement>('.flatpickr-day.today') ??
-        days.querySelector<HTMLElement>('.flatpickr-day[tabindex]')
-      if (!day) return
-      event.preventDefault()
-      day.focus()
+      if (focusDateCalendarDay(calendar)) event.preventDefault()
     }
     picker.addEventListener('keydown', onKeyDown, true)
     return () => picker.removeEventListener('keydown', onKeyDown, true)

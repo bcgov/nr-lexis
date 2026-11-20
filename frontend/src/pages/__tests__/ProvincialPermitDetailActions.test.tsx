@@ -10324,6 +10324,56 @@ describe('Provincial Permit Detail Action Smoke', () => {
     expect(mockedUpdatePermitDetail).not.toHaveBeenCalled()
   })
 
+  it.each([
+    { description: 'has no unassigned scale rows', unassigned: {}, blocked: true },
+    {
+      description: 'has unassigned scale rows',
+      unassigned: { unassignedPieces: 5, unassignedVolume: 10 },
+      blocked: false,
+    },
+  ])(
+    'checks completion against a replacement application that $description',
+    async ({ unassigned, blocked }) => {
+      configureMinisterialActivePermit({ receiptNumber: 'R-9' })
+      mockedFetchProvincialPermitDetailTabs.mockResolvedValue(completablePermitTabs)
+      mockedFetchAvailablePermitApplications.mockResolvedValue(
+        availableApplications({ applicationNumber: '1000457', ...unassigned }),
+      )
+      renderPermitDetails()
+      await userEvent.click(await screen.findByRole('button', { name: 'Edit permit details' }))
+      await userEvent.click(
+        await screen.findByRole('checkbox', { name: 'Include application 1000456 in permit' }),
+      )
+      await userEvent.click(
+        await screen.findByRole('checkbox', { name: 'Include application 1000457 in permit' }),
+      )
+      await userEvent.selectOptions(screen.getByLabelText('Status'), 'COM')
+      await userEvent.click(getActiveSectionSaveButton())
+
+      if (blocked) {
+        await screen.findByText(
+          'At least one application is required before a permit can be completed.',
+        )
+        expect(mockedUpdatePermitApplications).not.toHaveBeenCalled()
+        expect(mockedUpdatePermitDetail).not.toHaveBeenCalled()
+      } else {
+        await waitFor(() =>
+          expect(mockedUpdatePermitApplications).toHaveBeenCalledWith(
+            expect.objectContaining({
+              addedApplications: ['1000457'],
+              removedApplications: ['1000456'],
+            }),
+          ),
+        )
+        expect(
+          screen.queryByText(
+            'At least one application is required before a permit can be completed.',
+          ),
+        ).toBeNull()
+      }
+    },
+  )
+
   it('reports a failed table load instead of reporting missing scales on completion', async () => {
     configureActivePermit()
     mockedFetchProvincialPermitDetailTabs.mockRejectedValue(new Error('tables unavailable'))
