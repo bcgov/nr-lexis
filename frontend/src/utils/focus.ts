@@ -59,7 +59,28 @@ export const focusFirstEditableFieldAfterPanelChange = (
   })
 }
 
-type DateInput = HTMLInputElement & { _flatpickr?: { isOpen: boolean; close: () => void } }
+type DateCalendar = {
+  isOpen: boolean
+  open: () => void
+  close: () => void
+  calendarContainer: HTMLElement
+}
+export type DateInput = HTMLInputElement & { _flatpickr?: DateCalendar }
+
+/** Moves focus from a date field into its calendar, on the preferred day when there is one. */
+export const focusDateCalendarDay = (calendar: DateCalendar, preferredDay?: string): boolean => {
+  // Carbon's Escape hides the calendar without closing it, so it is closed before opening again.
+  if (calendar.isOpen && !calendar.calendarContainer.classList.contains('open')) calendar.close()
+  if (!calendar.isOpen) calendar.open()
+  const days = calendar.calendarContainer
+  const day =
+    (preferredDay ? days.querySelector<HTMLElement>(preferredDay) : null) ??
+    days.querySelector<HTMLElement>('.flatpickr-day.selected') ??
+    days.querySelector<HTMLElement>('.flatpickr-day.today') ??
+    days.querySelector<HTMLElement>('.flatpickr-day[tabindex]')
+  day?.focus()
+  return !!day
+}
 
 // Focusing a date field opens its calendar, which would cover what is under the field.
 export const closeDateCalendar = (control: HTMLElement): void => {

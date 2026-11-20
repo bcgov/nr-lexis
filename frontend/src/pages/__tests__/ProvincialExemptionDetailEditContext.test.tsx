@@ -1313,7 +1313,7 @@ describe('Provincial exemption edit context', () => {
     )
   })
 
-  it('rejects approved volume with three decimals when updating an exemption', async () => {
+  it('rejects approval volume with three decimals when updating an exemption', async () => {
     vi.mocked(fetchProvincialExemptionDetail).mockResolvedValue({
       ...exemptionDetail,
       exemptionStatusCode: 'NEW',

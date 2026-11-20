@@ -1043,7 +1043,7 @@ class OracleExemptionDetailsRpcServiceTest {
             "idir\\jsmith");
 
     assertThat(response.success()).isFalse();
-    assertThat(response.errors()).contains("The approved volume must be greater than 0");
+    assertThat(response.errors()).contains("The approval volume must be greater than 0");
     assertThat(response.errors()).doesNotContain("A valid exemption number is required.");
     verifyNoInteractions(repository);
   }
@@ -1069,7 +1069,7 @@ class OracleExemptionDetailsRpcServiceTest {
 
     assertThat(response.success()).isFalse();
     assertThat(response.errors())
-        .contains("The approved volume must be less than or equal to 9999999.99.");
+        .contains("The approval volume must be less than or equal to 9999999.99.");
     verify(repository, never()).insertExemption(any());
   }
 
@@ -1094,7 +1094,7 @@ class OracleExemptionDetailsRpcServiceTest {
 
     assertThat(response.success()).isFalse();
     assertThat(response.errors())
-        .contains("The approved volume must have no more than two decimal places.");
+        .contains("The approval volume must have no more than two decimal places.");
     verify(repository, never()).insertExemption(any());
   }
 
@@ -1257,7 +1257,7 @@ class OracleExemptionDetailsRpcServiceTest {
             "idir\\jsmith");
 
     assertThat(response.success()).isFalse();
-    assertThat(response.errors()).contains("The approved volume must be greater than 0");
+    assertThat(response.errors()).contains("The approval volume must be greater than 0");
     verify(repository, never()).insertExemption(any());
   }
 
@@ -2131,7 +2131,7 @@ class OracleExemptionDetailsRpcServiceTest {
     assertThat(response.success()).isFalse();
     assertThat(response.errors())
         .containsExactly(
-            "Application 1000456 can't be added. The exemption's requested volume would be 2.5 m³, more than its approved volume of 2.0 m³.");
+            "Application 1000456 can't be added. The exemption's requested volume would be 2.5 m³, more than its approval volume of 2.0 m³.");
     verify(repository, never()).updateApplicationExemption(any());
   }
 
@@ -2158,7 +2158,7 @@ class OracleExemptionDetailsRpcServiceTest {
     assertThat(response.success()).isFalse();
     assertThat(response.errors())
         .containsExactly(
-            "Application 1000456 can't be added. The exemption's requested volume would be 2.1 m³, more than its approved volume of 2.0 m³.");
+            "Application 1000456 can't be added. The exemption's requested volume would be 2.1 m³, more than its approval volume of 2.0 m³.");
     verify(repository, never()).updateApplicationExemption(any());
   }
 

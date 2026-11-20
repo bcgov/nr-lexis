@@ -946,6 +946,12 @@ const ProvincialExemptionPage = () => {
             >
               <div className="legacy-search-grid provincial-exemption-search-grid">
                 <TextInput
+                  id="exemptionNumber"
+                  labelText="Exemption number"
+                  value={filters.exemptionNumber}
+                  onChange={(event) => updateFilter('exemptionNumber', event.target.value)}
+                />
+                <TextInput
                   id="applicationNumber"
                   labelText="Application number"
                   value={filters.applicationNumber}
@@ -956,12 +962,6 @@ const ProvincialExemptionPage = () => {
                   labelText="Package number"
                   value={filters.packageNumber}
                   onChange={(event) => updateFilter('packageNumber', event.target.value)}
-                />
-                <TextInput
-                  id="exemptionNumber"
-                  labelText="Exemption number"
-                  value={filters.exemptionNumber}
-                  onChange={(event) => updateFilter('exemptionNumber', event.target.value)}
                 />
                 <RegionMultiSelect
                   id="region"

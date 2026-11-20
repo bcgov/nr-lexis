@@ -385,13 +385,14 @@ const gbmsHistoryRow = {
 // The Fee column is the last cell of a fee row.
 const feeAmountCell = (row: HTMLElement) => within(row).getAllByRole('cell').at(-1) as HTMLElement
 
-// A section's result shows inside that section's card, after the card title.
-const expectResultInCard = (message: string, cardTitle: string) => {
+// A section's result shows in the tab panel directly above that section's card.
+const expectResultAboveCard = (message: string, cardTitle: string) => {
   const notice = screen.getByText(message).closest('.app-notification-container') as HTMLElement
-  const card = notice.closest<HTMLElement>('.cds--tile')
-  expect(card).not.toBeNull()
-  const title = within(card as HTMLElement).getByRole('heading', { name: cardTitle })
-  expect(title.compareDocumentPosition(notice) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+  expect(notice.closest('.cds--tile')).toBeNull()
+  const card = notice.nextElementSibling as HTMLElement
+  expect(card).toHaveClass('cds--tile')
+  expect(within(card).getByRole('heading', { name: cardTitle })).toBeInTheDocument()
+  expect(notice.closest('[role="tabpanel"]')).toBe(card.closest('[role="tabpanel"]'))
 }
 
 const selectPermitDetailTab = async (name: string) => {
@@ -449,6 +450,35 @@ const editableBlanketOicPackage = {
   status: 'APP - Approved',
   reprocessed: 'N',
   comments: 'Current OIC package',
+}
+
+// Tabs for a permit that can be completed: an application, a package and a scale on the permit.
+const completablePermitTabs: ProvincialPermitDetailTabsData = {
+  ...tabsWithApplication,
+  packages: [{ ...editableBlanketOicPackage, packageNumber: 'PKG-9' }],
+  items: [
+    {
+      id: 'SCALE-9',
+      packageNumber: 'PKG-9',
+      timberMark: 'TEST',
+      scaleType: 'C',
+      species: 'HE',
+      grade: 'U',
+      pieces: 1,
+      volume: 1,
+      permitNumber: '777',
+      includedInPermit: true,
+    },
+  ],
+}
+
+const completableBlanketOicTabs: ProvincialPermitDetailTabsData = {
+  ...tabsResult,
+  packages: [editableBlanketOicPackage],
+  items: completablePermitTabs.items.map((row) => ({
+    ...row,
+    packageNumber: editableBlanketOicPackage.packageNumber,
+  })),
 }
 
 const configureEditableBlanketOicPackage = () => {
@@ -678,7 +708,7 @@ describe('Provincial Permit Detail Action Smoke', () => {
     ) as HTMLElement
     expect(notice).toHaveClass('cds--inline-notification--success')
     expect(notice.closest('[role="tabpanel"]')).toBe(screen.getByRole('tabpanel', { name: 'Fees' }))
-    expectResultInCard('Receipt number saved.', 'Permit fees')
+    expectResultAboveCard('Receipt number saved.', 'Permit fees')
     expect(screen.queryByText('Permit details saved.')).not.toBeInTheDocument()
     await waitFor(() =>
       expect(screen.getByRole('button', { name: 'Edit receipt number' })).toHaveFocus(),
@@ -773,13 +803,13 @@ describe('Provincial Permit Detail Action Smoke', () => {
       )
 
       const notice = (await screen.findByText(`${section} not saved.`)).closest(
-        '.cds--inline-notification',
+        '.app-inline-notification',
       ) as HTMLElement
-      expect(notice).toHaveClass('cds--inline-notification--error')
+      expect(notice.className).toMatch(/notification--error/)
       expect(notice).toHaveTextContent('The test-2026-10-14 change was rejected.')
       expect(notice).toHaveTextContent('Check the saved details before trying again.')
       expect(notice.closest('[role="tabpanel"]')).toBe(screen.getByRole('tabpanel', { name: tab }))
-      expectResultInCard(`${section} not saved.`, card)
+      expectResultAboveCard(`${section} not saved.`, card)
       expect(screen.queryByText('Action failed')).not.toBeInTheDocument()
       expect(
         screen.getByRole('button', { name: /^Save (?:changes|permit|shipping|fee override)$/ }),
@@ -904,7 +934,7 @@ describe('Provincial Permit Detail Action Smoke', () => {
       exemptionTypeDescription: permitDetail.exemptionTypeDescription,
       blanketOic: permitDetail.blanketOic,
     })
-    mockedFetchProvincialPermitDetailTabs.mockResolvedValue(tabsResult)
+    mockedFetchProvincialPermitDetailTabs.mockResolvedValue(completablePermitTabs)
     mockedFetchProvincialPermitGbmsEvents.mockResolvedValue([])
     mockedFetchProvincialPermitFees.mockResolvedValue({
       fees: [],
@@ -1698,7 +1728,7 @@ describe('Provincial Permit Detail Action Smoke', () => {
       )
     })
     expect(await screen.findByText('Applicant details saved.')).toBeInTheDocument()
-    expectResultInCard('Applicant details saved.', 'Applicant details')
+    expectResultAboveCard('Applicant details saved.', 'Applicant details')
   })
 
   it.each([
@@ -1882,7 +1912,7 @@ describe('Provincial Permit Detail Action Smoke', () => {
       '.cds--inline-notification',
     )
     expect(notice).toHaveClass('cds--inline-notification--success')
-    expectResultInCard('Permit details saved.', 'Permit details')
+    expectResultAboveCard('Permit details saved.', 'Permit details')
     expect(mockedUpdatePermitApplications).toHaveBeenCalledTimes(1)
     expect(mockedUpdatePermitApplications).toHaveBeenCalledWith({
       permitNumber: '777',
@@ -1983,7 +2013,7 @@ describe('Provincial Permit Detail Action Smoke', () => {
       'The added scales total 847.7 m³, but the exemption has 30.0 m³ remaining.',
     )
     await waitFor(() => expect(notice).toHaveFocus())
-    expectResultInCard('Permit details not saved.', 'Permit details')
+    expectResultAboveCard('Permit details not saved.', 'Permit details')
     expect(includeApplication('101103')).toBeChecked()
     expect(permitFieldValue('Current permit pieces')).toHaveTextContent('2515')
     expect(permitFieldValue('Current permit volume (m³)')).toHaveTextContent('847.7')
@@ -2317,6 +2347,7 @@ describe('Provincial Permit Detail Action Smoke', () => {
   })
 
   it('explains the empty scale and fees of an ordinary OIC permit with no applications', async () => {
+    mockedFetchProvincialPermitDetailTabs.mockResolvedValue(tabsResult)
     mockedUseAuth.mockReturnValue(
       createTestAuthContext({ canPerform: (action: string) => action !== '/permitsReview' }),
     )
@@ -2991,6 +3022,56 @@ describe('Provincial Permit Detail Action Smoke', () => {
     ).toHaveTextContent('Not provided')
     expect(screen.queryByText('$')).not.toBeInTheDocument()
   })
+
+  it.each([
+    { description: 'leaves them blank under a fee override', overrideEnabled: true },
+    { description: 'shows them without a fee override', overrideEnabled: false },
+  ])(
+    'titles the Fee in lieu % and Multiplication factor columns and $description on a Blanket OIC permit',
+    async ({ overrideEnabled }) => {
+      configureEditableBlanketOicPackage()
+      mockedFetchPermitFeeOverrideContext.mockResolvedValue({
+        overrideEnabled,
+        overrideFee: overrideEnabled ? '50.00' : '',
+        overrideComment: overrideEnabled ? 'test-2026-11-19' : '',
+        locked: false,
+        lockMessage: '',
+        interior: false,
+      })
+      mockedFetchProvincialPermitFees.mockResolvedValue({
+        totalFeeVolume: 1,
+        packageFeeSummaries: [
+          { packageNumber: 'BOIC-9', growthType: 'Old growth', totalFeeForPackage: null },
+        ],
+        fees: [
+          {
+            ...calculatedPermitFees.fees[0],
+            id: 'FEE-9',
+            packageNumber: 'BOIC-9',
+            amount: overrideEnabled ? 0 : 37.5,
+            amountDisplay: overrideEnabled ? '' : '$37.50',
+          },
+        ],
+      })
+      renderPermitDetails()
+
+      await selectPermitDetailTab('Fees')
+
+      const feeRows = await screen.findByRole('region', { name: 'Permit fee rows' })
+      const headers = within(feeRows)
+        .getAllByRole('columnheader')
+        .map((header) => header.textContent)
+      expect(headers).toEqual(expect.arrayContaining(['Fee in lieu %', 'Multiplication factor']))
+      const cells = within(within(feeRows).getByRole('row', { name: /TEST-FEE/ })).getAllByRole(
+        'cell',
+      )
+      const rate = (header: string) => cells[headers.indexOf(header)]
+      expect(rate('Fee in lieu %')).toHaveTextContent(overrideEnabled ? 'Not provided' : '20')
+      expect(rate('Multiplication factor')).toHaveTextContent(
+        overrideEnabled ? 'Not provided' : '1.5',
+      )
+    },
+  )
 
   it.each([true, false])(
     'shows Override rate on the Blanket OIC Fees tab only when the exemption has one (%s)',
@@ -3770,7 +3851,7 @@ describe('Provincial Permit Detail Action Smoke', () => {
     expect(savedNotice.closest('[role="tabpanel"]')).toBe(
       screen.getByRole('tabpanel', { name: 'Permit' }),
     )
-    expectResultInCard('Permit details saved.', 'Permit summary')
+    expectResultAboveCard('Permit details saved.', 'Permit summary')
     expect(screen.queryByText('The permit was updated successfully.')).not.toBeInTheDocument()
     expect(mockedUpdatePermitDetail).toHaveBeenCalledWith(
       expect.objectContaining({ permitSubmitDate: '2026-04-11', permitStatus: 'ACT' }),
@@ -3868,7 +3949,7 @@ describe('Provincial Permit Detail Action Smoke', () => {
     expect(savedNotice.closest('[role="tabpanel"]')).toBe(
       screen.getByRole('tabpanel', { name: 'Shipping' }),
     )
-    expectResultInCard('Shipping details saved.', 'Shipping')
+    expectResultAboveCard('Shipping details saved.', 'Shipping')
     expect(screen.queryByText('The permit was saved successfully.')).not.toBeInTheDocument()
     expect(mockedFetchProvincialPermitFees).toHaveBeenCalledTimes(2)
     await selectPermitDetailTab('Fees')
@@ -3930,7 +4011,7 @@ describe('Provincial Permit Detail Action Smoke', () => {
     expect(savedNotice.closest('[role="tabpanel"]')).toBe(
       screen.getByRole('tabpanel', { name: 'Fees' }),
     )
-    expectResultInCard('Fee override saved.', 'Fee calculation details')
+    expectResultAboveCard('Fee override saved.', 'Fee calculation details')
     expect(screen.getByLabelText('Total fees (CAD)')).toHaveValue('$45.25')
     await userEvent.click(await screen.findByRole('button', { name: 'Edit fee override' }))
     await userEvent.click(screen.getByRole('radio', { name: 'No' }))
@@ -5473,7 +5554,7 @@ describe('Provincial Permit Detail Action Smoke', () => {
       await userEvent.click(addButton)
     }
 
-    it('focuses the added notice inside the Associated applications card', async () => {
+    it('focuses the added notice above the Associated applications card', async () => {
       const visibleRects = vi
         .spyOn(HTMLElement.prototype, 'getClientRects')
         .mockReturnValue([new DOMRect(0, 0, 400, 100)] as unknown as DOMRectList)
@@ -5488,10 +5569,10 @@ describe('Provincial Permit Detail Action Smoke', () => {
       )
       await waitFor(() => expect(notice).toHaveFocus())
       expect(within(notice as HTMLElement).getByText('Application added.')).toBeVisible()
-      expectResultInCard('Application was added to the permit.', 'Associated applications')
+      expectResultAboveCard('Application was added to the permit.', 'Associated applications')
     })
 
-    it('shows a refused application add inside the Associated applications card', async () => {
+    it('shows a refused application add above the Associated applications card', async () => {
       configureEditablePermitWithApplication()
       mockedAddApplicationsToPermit.mockResolvedValueOnce({
         success: false,
@@ -5508,11 +5589,11 @@ describe('Provincial Permit Detail Action Smoke', () => {
       )
       expect(notice).toHaveClass('cds--inline-notification--error')
       expect(notice).toHaveTextContent('test-2026-10-20 application refused.')
-      expectResultInCard('Application not added.', 'Associated applications')
+      expectResultAboveCard('Application not added.', 'Associated applications')
       expect(screen.queryByText('Action failed')).not.toBeInTheDocument()
     })
 
-    it('focuses the removed notice inside the Associated applications card', async () => {
+    it('focuses the removed notice above the Associated applications card', async () => {
       const visibleRects = vi
         .spyOn(HTMLElement.prototype, 'getClientRects')
         .mockReturnValue([new DOMRect(0, 0, 400, 100)] as unknown as DOMRectList)
@@ -5532,7 +5613,7 @@ describe('Provincial Permit Detail Action Smoke', () => {
       )
       await waitFor(() => expect(notice).toHaveFocus())
       expect(within(notice as HTMLElement).getByText('Application removed.')).toBeVisible()
-      expectResultInCard('Application was removed from the permit.', 'Associated applications')
+      expectResultAboveCard('Application was removed from the permit.', 'Associated applications')
     })
   })
 
@@ -5643,6 +5724,7 @@ describe('Provincial Permit Detail Action Smoke', () => {
   })
 
   it('renders semantic empty states for empty permit detail collections', async () => {
+    mockedFetchProvincialPermitDetailTabs.mockResolvedValue(tabsResult)
     render(
       <MemoryRouter initialEntries={['/provincial/permit/777']}>
         <Routes>
@@ -5835,7 +5917,7 @@ describe('Provincial Permit Detail Action Smoke', () => {
     expect(
       await within(packageCard).findByRole('button', { name: 'Edit package' }),
     ).toBeInTheDocument()
-    expect(within(packageCard).queryByText('Comments')).not.toBeInTheDocument()
+    expect(within(packageCard).getByText('Comments')).toBeInTheDocument()
     expect(within(packageCard).getByText('Current package pieces')).toBeInTheDocument()
     expect(within(packageCard).getByText('Current package volume (m³)')).toBeInTheDocument()
     for (const [label, value] of [
@@ -5860,7 +5942,7 @@ describe('Provincial Permit Detail Action Smoke', () => {
   it.each([
     { viewer: 'anyone on a Completed permit', status: 'COM', readOnly: false, comments: 'Note' },
     { viewer: 'a Read Only user', status: 'ACT', readOnly: true, comments: 'Note' },
-    { viewer: 'nobody when the package has none', status: 'COM', readOnly: false, comments: ' ' },
+    { viewer: 'anyone, as a dash when it has none', status: 'COM', readOnly: false, comments: ' ' },
   ])(
     'shows Blanket OIC package comments read-only on the card to $viewer',
     async ({ status, readOnly, comments }) => {
@@ -5890,14 +5972,10 @@ describe('Provincial Permit Detail Action Smoke', () => {
       expect(
         within(packageCard).queryByRole('button', { name: 'Edit package' }),
       ).not.toBeInTheDocument()
-      if (comments.trim()) {
-        const field = within(packageCard)
-          .getByText('Comments')
-          .closest('.record-field') as HTMLElement
-        expect(within(field).getByText(comments)).toBeInTheDocument()
-      } else {
-        expect(within(packageCard).queryByText('Comments')).not.toBeInTheDocument()
-      }
+      const field = within(packageCard)
+        .getByText('Comments')
+        .closest('.record-field') as HTMLElement
+      expect(within(field).getByText(comments.trim() || 'Not provided')).toBeInTheDocument()
     },
   )
 
@@ -6697,6 +6775,7 @@ describe('Provincial Permit Detail Action Smoke', () => {
   })
 
   it('ignores stale available-application responses across permit routes', async () => {
+    mockedFetchProvincialPermitDetailTabs.mockResolvedValue(tabsResult)
     const resolveOldLookups: Array<
       (value: Awaited<ReturnType<typeof fetchAvailablePermitApplications>>) => void
     > = []
@@ -6977,6 +7056,7 @@ describe('Provincial Permit Detail Action Smoke', () => {
   it.each([null, '00067890', '00012345'])(
     'lets staff or submitter %s create the first Blanket OIC package and hidden application',
     async (clientNumber) => {
+      mockedFetchProvincialPermitDetailTabs.mockResolvedValue(tabsResult)
       if (clientNumber) configureBlanketOicSubmitter(clientNumber)
       mockedFetchProvincialPermitDetail.mockResolvedValue({
         ...permitDetail,
@@ -7749,7 +7829,7 @@ describe('Provincial Permit Detail Action Smoke', () => {
     await userEvent.click(await screen.findByRole('button', { name: 'Add scale' }))
     await userEvent.type(await screen.findByLabelText('Timber mark'), 'TM-NEW')
     await chooseDropdownOption(await screen.findByRole('combobox', { name: 'Species' }), 'Alder')
-    await chooseDropdownOption(screen.getByRole('combobox', { name: 'Grade' }), 'Utility')
+    await chooseDropdownOption(screen.getByRole('combobox', { name: 'Grade' }), 'W')
     await userEvent.type(screen.getByLabelText('Pieces'), '12')
     await userEvent.clear(screen.getByLabelText('Volume (m³)'))
     await userEvent.type(screen.getByLabelText('Volume (m³)'), '1.5')
@@ -7877,7 +7957,7 @@ describe('Provincial Permit Detail Action Smoke', () => {
     const panel = await screen.findByRole('complementary', { name: 'Add scale' })
     await userEvent.type(within(panel).getByLabelText('Timber mark'), 'TM-RETRY')
     await chooseDropdownOption(within(panel).getByRole('combobox', { name: 'Species' }), 'Hemlock')
-    await chooseDropdownOption(within(panel).getByRole('combobox', { name: 'Grade' }), 'Sawlog')
+    await chooseDropdownOption(within(panel).getByRole('combobox', { name: 'Grade' }), 'A')
     await userEvent.type(within(panel).getByLabelText('Pieces'), '4')
     await userEvent.clear(within(panel).getByLabelText('Volume (m³)'))
     await userEvent.type(within(panel).getByLabelText('Volume (m³)'), '1.5')
@@ -7932,7 +8012,7 @@ describe('Provincial Permit Detail Action Smoke', () => {
     await userEvent.type(within(panel).getByLabelText('Timber mark'), 'TM-BAD')
     await userEvent.type(within(panel).getByLabelText('Pieces'), '4')
     await chooseDropdownOption(within(panel).getByRole('combobox', { name: 'Species' }), 'Hemlock')
-    await chooseDropdownOption(within(panel).getByRole('combobox', { name: 'Grade' }), 'Sawlog')
+    await chooseDropdownOption(within(panel).getByRole('combobox', { name: 'Grade' }), 'A')
     const volume = within(panel).getByLabelText('Volume (m³)')
     await userEvent.clear(volume)
     await userEvent.type(volume, '2.5')
@@ -7995,7 +8075,7 @@ describe('Provincial Permit Detail Action Smoke', () => {
     await userEvent.type(within(panel).getByLabelText('Timber mark'), 'TM-EXACT')
     await userEvent.type(within(panel).getByLabelText('Pieces'), '1')
     await chooseDropdownOption(within(panel).getByRole('combobox', { name: 'Species' }), 'Hemlock')
-    await chooseDropdownOption(within(panel).getByRole('combobox', { name: 'Grade' }), 'Sawlog')
+    await chooseDropdownOption(within(panel).getByRole('combobox', { name: 'Grade' }), 'A')
     const volume = within(panel).getByLabelText('Volume (m³)')
 
     await userEvent.clear(volume)
@@ -8028,7 +8108,7 @@ describe('Provincial Permit Detail Action Smoke', () => {
     await userEvent.type(timberMark, 'ek123a')
     expect(timberMark).toHaveValue('EK123A')
     await chooseDropdownOption(within(panel).getByRole('combobox', { name: 'Species' }), 'Hemlock')
-    await chooseDropdownOption(within(panel).getByRole('combobox', { name: 'Grade' }), 'Sawlog')
+    await chooseDropdownOption(within(panel).getByRole('combobox', { name: 'Grade' }), 'A')
     await userEvent.clear(within(panel).getByLabelText('Volume (m³)'))
     await userEvent.type(within(panel).getByLabelText('Volume (m³)'), '1.5')
 
@@ -8168,7 +8248,7 @@ describe('Provincial Permit Detail Action Smoke', () => {
     expect(screen.getByLabelText('Timber mark')).toHaveValue('')
     await chooseDropdownOption(await screen.findByRole('combobox', { name: 'Species' }), 'Hemlock')
     await userEvent.type(screen.getByLabelText('Timber mark'), 'TM-NEW')
-    await chooseDropdownOption(screen.getByRole('combobox', { name: 'Grade' }), 'Sawlog')
+    await chooseDropdownOption(screen.getByRole('combobox', { name: 'Grade' }), 'A')
     await userEvent.type(screen.getByLabelText('Pieces'), '4')
     await userEvent.clear(screen.getByLabelText('Volume (m³)'))
     await userEvent.type(screen.getByLabelText('Volume (m³)'), '1.5')
@@ -8267,7 +8347,7 @@ describe('Provincial Permit Detail Action Smoke', () => {
     await userEvent.click(await screen.findByRole('button', { name: 'Add scale' }))
     await userEvent.type(screen.getByLabelText('Timber mark'), 'TM-PAD')
     await chooseDropdownOption(screen.getByRole('combobox', { name: 'Species' }), 'Hemlock')
-    await chooseDropdownOption(screen.getByRole('combobox', { name: 'Grade' }), 'Sawlog')
+    await chooseDropdownOption(screen.getByRole('combobox', { name: 'Grade' }), 'A')
     await userEvent.type(screen.getByLabelText('Pieces'), '4')
     await userEvent.clear(screen.getByLabelText('Volume (m³)'))
     await userEvent.type(screen.getByLabelText('Volume (m³)'), '1.5')
@@ -8414,7 +8494,7 @@ describe('Provincial Permit Detail Action Smoke', () => {
     await userEvent.click(await screen.findByRole('button', { name: 'Add scale' }))
     await userEvent.type(await screen.findByLabelText('Timber mark'), 'TM-NEW')
     await chooseDropdownOption(await screen.findByRole('combobox', { name: 'Species' }), 'Alder')
-    await chooseDropdownOption(screen.getByRole('combobox', { name: 'Grade' }), 'Utility')
+    await chooseDropdownOption(screen.getByRole('combobox', { name: 'Grade' }), 'W')
     await userEvent.type(screen.getByLabelText('Pieces'), '12')
     await userEvent.clear(screen.getByLabelText('Volume (m³)'))
     await userEvent.type(screen.getByLabelText('Volume (m³)'), '1.5')
@@ -8476,6 +8556,7 @@ describe('Provincial Permit Detail Action Smoke', () => {
   })
 
   it('saves permit summary changes through the permit update endpoint', async () => {
+    mockedFetchProvincialPermitDetailTabs.mockResolvedValue(tabsResult)
     render(
       <MemoryRouter initialEntries={['/provincial/permit/777']}>
         <Routes>
@@ -8670,9 +8751,11 @@ describe('Provincial Permit Detail Action Smoke', () => {
           permitStatusCode: currentStatus,
           permitStatusDescription: currentStatus === 'ACT' ? 'Active' : 'Payment pending',
           blanketOic: true,
+          oicApplicationNumber: 1000999,
           oicRequestPieces: 200,
           oicRequestVolume: 120.5,
         }
+        mockedFetchProvincialPermitDetailTabs.mockResolvedValue(completableBlanketOicTabs)
         // The permit is read on load and again when its editor opens.
         mockedFetchProvincialPermitDetail
           .mockResolvedValueOnce(currentPermit)
@@ -8690,9 +8773,11 @@ describe('Provincial Permit Detail Action Smoke', () => {
         await userEvent.selectOptions(screen.getByLabelText('Status'), targetStatus)
         await userEvent.click(getActiveSectionSaveButton())
 
-        const notice = (await screen.findByText('Permit details saved.')).closest(
-          '.app-inline-notification',
-        )
+        // A save that completes the permit reports at page level.
+        const notice =
+          targetStatus === 'COM'
+            ? (await screen.findByText('Permit 777 completed.')).closest('.permit-page-result')
+            : (await screen.findByText('Permit details saved.')).closest('.app-inline-notification')
         await waitFor(() => expect(notice).toHaveFocus())
         expect(
           screen.queryByRole('button', { name: /Edit permit(?: details)?/ }),
@@ -10083,6 +10168,11 @@ describe('Provincial Permit Detail Action Smoke', () => {
   })
 
   it("checks a new Ministerial permit's untouched Shipping fields before saving", async () => {
+    // jsdom lays nothing out, so the notice counts as visible only with a client rect.
+    const visibleRects = vi
+      .spyOn(HTMLElement.prototype, 'getClientRects')
+      .mockReturnValue([new DOMRect(0, 0, 400, 100)] as unknown as DOMRectList)
+    onTestFinished(() => visibleRects.mockRestore())
     configureMinisterialActivePermit({
       destinationCompanyName: '',
       destinationCountryCode: '',
@@ -10107,11 +10197,192 @@ describe('Provincial Permit Detail Action Smoke', () => {
     await userEvent.type(await screen.findByLabelText('Remarks'), ' updated')
     await userEvent.click(getActiveSectionSaveButton())
 
-    await waitFor(() => expect(screen.getByLabelText('Purchaser')).toHaveFocus())
+    const notice = (await screen.findByText('Cannot save yet.')).closest(
+      '.app-inline-notification',
+    ) as HTMLElement
+    expect(notice).toHaveTextContent('Complete the required fields in the Shipping tab.')
+    await waitFor(() => expect(notice).toHaveFocus())
+    expect(notice.closest('[role="tabpanel"]')).toBeNull()
     expect(screen.getByRole('tab', { name: 'Shipping' })).toHaveAttribute('aria-selected', 'true')
     expect(screen.getByLabelText('Purchaser')).toHaveAttribute('aria-invalid', 'true')
     expect(mockedUpdatePermitDetail).not.toHaveBeenCalled()
     expect(mockedUpdatePermitShipping).not.toHaveBeenCalled()
+  })
+
+  it('names the Shipping tab when a Permit tab save needs Shipping fields, before the Payment pending warning', async () => {
+    // jsdom lays nothing out, so the notice counts as visible only with a client rect.
+    const visibleRects = vi
+      .spyOn(HTMLElement.prototype, 'getClientRects')
+      .mockReturnValue([new DOMRect(0, 0, 400, 100)] as unknown as DOMRectList)
+    onTestFinished(() => visibleRects.mockRestore())
+    mockedFetchProvincialPermitDetail.mockResolvedValue({
+      ...permitDetail,
+      permitStatusCode: 'ACT',
+      permitStatusDescription: 'Active',
+      receiptNumber: null,
+      transportName: '',
+    })
+    renderPermitDetails()
+
+    await userEvent.click(await screen.findByRole('button', { name: /Edit permit(?: details)?/ }))
+    await userEvent.selectOptions(screen.getByLabelText('Status'), 'COM')
+    await userEvent.click(getActiveSectionSaveButton())
+
+    const notice = (await screen.findByText('Cannot save yet.')).closest(
+      '.app-inline-notification',
+    ) as HTMLElement
+    expect(notice).toHaveTextContent('Complete the required fields in the Shipping tab.')
+    await waitFor(() => expect(notice).toHaveFocus())
+    expect(screen.getByRole('tab', { name: 'Permit' })).toHaveAttribute('aria-selected', 'true')
+    expect(screen.queryByRole('dialog', { name: 'Save as Payment pending?' })).toBeNull()
+    expect(mockedUpdatePermitDetail).not.toHaveBeenCalled()
+  })
+
+  it('lists what a permit still needs before it can be completed, before the Payment pending warning', async () => {
+    mockedFetchProvincialPermitDetail.mockResolvedValue({
+      ...permitDetail,
+      permitStatusCode: 'ACT',
+      permitStatusDescription: 'Active',
+      receiptNumber: null,
+    })
+    mockedFetchProvincialPermitDetailTabs.mockResolvedValue(tabsWithApplication)
+    renderPermitDetails()
+
+    await userEvent.click(await screen.findByRole('button', { name: /Edit permit(?: details)?/ }))
+    await userEvent.selectOptions(screen.getByLabelText('Status'), 'COM')
+    await userEvent.click(getActiveSectionSaveButton())
+
+    const notice = (await screen.findByText('Permit details not saved.')).closest(
+      '.app-inline-notification',
+    ) as HTMLElement
+    expect(
+      within(notice)
+        .getAllByRole('listitem')
+        .map((item) => item.textContent),
+    ).toEqual([
+      'At least one package is required before a permit can be completed.',
+      'At least one scale detail is required before a permit can be completed.',
+    ])
+    expect(screen.queryByRole('dialog', { name: 'Save as Payment pending?' })).toBeNull()
+    expect(mockedUpdatePermitDetail).not.toHaveBeenCalled()
+  })
+
+  it('keeps the last application attached when its removal would prevent completion', async () => {
+    configureMinisterialActivePermit({ receiptNumber: null })
+    mockedFetchProvincialPermitDetailTabs.mockResolvedValue(completablePermitTabs)
+    renderPermitDetails()
+    await userEvent.click(await screen.findByRole('button', { name: 'Edit permit details' }))
+    await userEvent.click(
+      await screen.findByRole('checkbox', { name: 'Include application 1000456 in permit' }),
+    )
+    await userEvent.selectOptions(screen.getByLabelText('Status'), 'COM')
+    await userEvent.click(getActiveSectionSaveButton())
+
+    await screen.findByText(
+      'At least one application is required before a permit can be completed.',
+    )
+    expect(screen.queryByRole('dialog', { name: 'Save as Payment pending?' })).toBeNull()
+    expect(mockedUpdatePermitApplications).not.toHaveBeenCalled()
+    expect(mockedUpdatePermitDetail).not.toHaveBeenCalled()
+  })
+
+  it.each([
+    { description: 'has no unassigned scale rows', unassigned: {}, blocked: true },
+    {
+      description: 'has unassigned scale rows',
+      unassigned: { unassignedPieces: 5, unassignedVolume: 10 },
+      blocked: false,
+    },
+  ])(
+    'checks completion against a replacement application that $description',
+    async ({ unassigned, blocked }) => {
+      configureMinisterialActivePermit({ receiptNumber: 'R-9' })
+      mockedFetchProvincialPermitDetailTabs.mockResolvedValue(completablePermitTabs)
+      mockedFetchAvailablePermitApplications.mockResolvedValue(
+        availableApplications({ applicationNumber: '1000457', ...unassigned }),
+      )
+      renderPermitDetails()
+      await userEvent.click(await screen.findByRole('button', { name: 'Edit permit details' }))
+      await userEvent.click(
+        await screen.findByRole('checkbox', { name: 'Include application 1000456 in permit' }),
+      )
+      await userEvent.click(
+        await screen.findByRole('checkbox', { name: 'Include application 1000457 in permit' }),
+      )
+      await userEvent.selectOptions(screen.getByLabelText('Status'), 'COM')
+      await userEvent.click(getActiveSectionSaveButton())
+
+      if (blocked) {
+        await screen.findByText(
+          'At least one application is required before a permit can be completed.',
+        )
+        expect(mockedUpdatePermitApplications).not.toHaveBeenCalled()
+        expect(mockedUpdatePermitDetail).not.toHaveBeenCalled()
+      } else {
+        await waitFor(() =>
+          expect(mockedUpdatePermitApplications).toHaveBeenCalledWith(
+            expect.objectContaining({
+              addedApplications: ['1000457'],
+              removedApplications: ['1000456'],
+            }),
+          ),
+        )
+        expect(
+          screen.queryByText(
+            'At least one application is required before a permit can be completed.',
+          ),
+        ).toBeNull()
+      }
+    },
+  )
+
+  it('reports a failed table load instead of reporting missing scales on completion', async () => {
+    configureActivePermit()
+    mockedFetchProvincialPermitDetailTabs.mockRejectedValue(new Error('tables unavailable'))
+    renderPermitDetails()
+    await userEvent.click(await screen.findByRole('button', { name: /Edit permit(?: details)?/ }))
+    await userEvent.selectOptions(screen.getByLabelText('Status'), 'COM')
+    await userEvent.click(getActiveSectionSaveButton())
+
+    await screen.findByText(
+      'Unable to retrieve permit table details. Reload the permit before completing it.',
+    )
+    expect(
+      screen.queryByText('At least one package is required before a permit can be completed.'),
+    ).toBeNull()
+    expect(mockedUpdatePermitDetail).not.toHaveBeenCalled()
+  })
+
+  it('lists each error of a refused permit save on its own line', async () => {
+    configureActivePermit()
+    mockedUpdatePermitDetail.mockResolvedValue({
+      success: false,
+      message: '',
+      errors: [
+        'A valid permit issue date is required to complete a permit.',
+        'A valid expiry date is required to complete a permit.',
+      ],
+      warnings: [],
+      source: 'api',
+    })
+    renderPermitDetails()
+
+    await userEvent.click(await screen.findByRole('button', { name: /Edit permit(?: details)?/ }))
+    await userEvent.type(screen.getByLabelText('Remarks'), ' updated')
+    await userEvent.click(getActiveSectionSaveButton())
+
+    const notice = (await screen.findByText('Permit details not saved.')).closest(
+      '.app-inline-notification',
+    ) as HTMLElement
+    expect(
+      within(notice)
+        .getAllByRole('listitem')
+        .map((item) => item.textContent),
+    ).toEqual([
+      'A valid permit issue date is required to complete a permit.',
+      'A valid expiry date is required to complete a permit.',
+    ])
+    expect(notice).not.toHaveTextContent('were saved')
   })
 
   it.each([
@@ -10411,6 +10682,7 @@ describe('Provincial Permit Detail Action Smoke', () => {
 
   it('saves policy fields before completing a permit', async () => {
     configureEditableBlanketOicPackage()
+    mockedFetchProvincialPermitDetailTabs.mockResolvedValue(completableBlanketOicTabs)
     renderPermitDetails()
 
     await userEvent.click(await screen.findByRole('button', { name: /Edit permit(?: details)?/ }))
@@ -10984,9 +11256,11 @@ describe('Provincial Permit Detail Action Smoke', () => {
         permitStatusCode,
         permitStatusDescription,
         blanketOic: true,
+        oicApplicationNumber: 1000999,
         oicRequestPieces: 200,
         oicRequestVolume: 120.5,
       })
+      mockedFetchProvincialPermitDetailTabs.mockResolvedValue(completableBlanketOicTabs)
       renderPermitDetails()
 
       await userEvent.click(await screen.findByRole('button', { name: /Edit permit(?: details)?/ }))
@@ -11101,6 +11375,7 @@ describe('Provincial Permit Detail Action Smoke', () => {
   })
 
   it('says why a cancelled Blanket OIC permit without packages offers no Create package', async () => {
+    mockedFetchProvincialPermitDetailTabs.mockResolvedValue(tabsResult)
     mockedFetchProvincialPermitDetail.mockResolvedValue({
       ...permitDetail,
       permitStatusCode: 'CAN',
@@ -11123,6 +11398,7 @@ describe('Provincial Permit Detail Action Smoke', () => {
   })
 
   it('does not ask a viewer who cannot create packages to create the first Blanket OIC package', async () => {
+    mockedFetchProvincialPermitDetailTabs.mockResolvedValue(tabsResult)
     mockedUseAuth.mockReturnValue(
       createTestAuthContext({ canPerform: (action: string) => action === '/permitDetails' }),
     )
@@ -11219,7 +11495,7 @@ describe('Provincial Permit Detail Action Smoke', () => {
     await userEvent.click(
       within(await screen.findByRole('dialog', { name: 'Save as Payment pending?' })).getByRole(
         'button',
-        { name: 'Save' },
+        { name: 'Save as Payment pending' },
       ),
     )
 
@@ -11272,7 +11548,7 @@ describe('Provincial Permit Detail Action Smoke', () => {
     await userEvent.click(
       within(await screen.findByRole('dialog', { name: 'Save as Payment pending?' })).getByRole(
         'button',
-        { name: 'Save' },
+        { name: 'Save as Payment pending' },
       ),
     )
 
@@ -11288,34 +11564,66 @@ describe('Provincial Permit Detail Action Smoke', () => {
     expect(mockedFetchPermitApprovalEmailDefault).not.toHaveBeenCalled()
   })
 
-  it('asks before saving a completed Interior permit without a receipt and sends nothing on Discard', async () => {
-    configureActivePermit()
-    renderPermitDetails()
-
+  const openPaymentPendingWarning = async () => {
     await userEvent.click(await screen.findByRole('button', { name: /Edit permit(?: details)?/ }))
     await userEvent.selectOptions(screen.getByLabelText('Status'), 'COM')
     await selectPermitDetailTab('Fees')
     await userEvent.clear(screen.getByLabelText('Receipt number'))
     await selectPermitDetailTab('Permit')
     await userEvent.click(screen.getByRole('button', { name: 'Save permit' }))
+    return screen.findByRole('dialog', { name: 'Save as Payment pending?' })
+  }
 
-    const warning = await screen.findByRole('dialog', { name: 'Save as Payment pending?' })
+  it('asks before saving a completed Interior permit without a receipt and sends nothing on Cancel', async () => {
+    configureActivePermit()
+    renderPermitDetails()
+
+    const warning = await openPaymentPendingWarning()
     expect(
       within(warning).getByText(
-        'Receipt number should not be empty for a complete permit so it will be saved as Payment pending.',
+        'To complete the permit, add the Receipt number on the Fees tab. Without a Receipt number, the permit is saved as Payment pending.',
       ),
     ).toBeVisible()
     expect(mockedUpdatePermitDetail).not.toHaveBeenCalled()
 
-    await userEvent.click(within(warning).getByRole('button', { name: 'Discard' }))
+    await userEvent.click(within(warning).getByRole('button', { name: 'Cancel' }))
     await waitFor(() =>
       expect(screen.queryByRole('dialog', { name: 'Save as Payment pending?' })).toBeNull(),
     )
     expect(mockedUpdatePermitDetail).not.toHaveBeenCalled()
     expect(mockedUpdatePermitShipping).not.toHaveBeenCalled()
-    expect(screen.getByLabelText('Status')).toHaveValue('COM')
+    expect(screen.getByLabelText('Status')).toHaveValue('ACT')
     expect(screen.getByRole('button', { name: 'Save permit' })).toBeEnabled()
   })
+
+  it.each([
+    { description: 'Cancel', close: { name: 'Cancel' } },
+    { description: 'the close button', close: { name: 'Close' } },
+  ])(
+    'does not complete the permit from a later Fees save after $description on the Payment pending warning',
+    async ({ close }) => {
+      configureActivePermit()
+      renderPermitDetails()
+
+      const warning = await openPaymentPendingWarning()
+      await userEvent.click(within(warning).getByRole('button', close))
+      await waitFor(() =>
+        expect(screen.queryByRole('dialog', { name: 'Save as Payment pending?' })).toBeNull(),
+      )
+
+      await selectPermitDetailTab('Fees')
+      await userEvent.type(screen.getByLabelText('Receipt number'), 'R-9')
+      await userEvent.click(getActiveSectionSaveButton())
+
+      await waitFor(() =>
+        expect(mockedUpdatePermitDetail).toHaveBeenCalledWith(
+          expect.objectContaining({ permitStatus: 'ACT', permitReceiptNo: 'R-9' }),
+        ),
+      )
+      expect(mockedUpdatePermitDetail).toHaveBeenCalledTimes(1)
+      expect(screen.queryByRole('dialog', { name: 'Save as Payment pending?' })).toBeNull()
+    },
+  )
 
   it('sends the request once the warning for a completed Interior permit without a receipt is accepted', async () => {
     configureActivePermit()
@@ -11328,7 +11636,7 @@ describe('Provincial Permit Detail Action Smoke', () => {
     await selectPermitDetailTab('Permit')
     await userEvent.click(screen.getByRole('button', { name: 'Save permit' }))
     const warning = await screen.findByRole('dialog', { name: 'Save as Payment pending?' })
-    await userEvent.click(within(warning).getByRole('button', { name: 'Save' }))
+    await userEvent.click(within(warning).getByRole('button', { name: 'Save as Payment pending' }))
 
     await waitFor(() =>
       expect(mockedUpdatePermitDetail).toHaveBeenCalledWith(
@@ -11338,6 +11646,31 @@ describe('Provincial Permit Detail Action Smoke', () => {
     expect(mockedUpdatePermitDetail).toHaveBeenCalledTimes(1)
     await waitFor(() =>
       expect(screen.queryByRole('dialog', { name: 'Save as Payment pending?' })).toBeNull(),
+    )
+  })
+
+  it('keeps the saved status on a later receipt save after the Payment pending save is refused', async () => {
+    configureActivePermit()
+    mockedUpdatePermitDetail.mockResolvedValueOnce({
+      success: false,
+      message: 'The permit could not be updated.',
+      errors: [],
+      warnings: [],
+      source: 'api',
+    })
+    renderPermitDetails()
+    const warning = await openPaymentPendingWarning()
+    await userEvent.click(within(warning).getByRole('button', { name: 'Save as Payment pending' }))
+    await screen.findByText('The permit could not be updated.')
+    expect(screen.getByLabelText('Status')).toHaveValue('ACT')
+
+    await selectPermitDetailTab('Fees')
+    await userEvent.type(screen.getByLabelText('Receipt number'), 'R-9')
+    await userEvent.click(getActiveSectionSaveButton())
+    await waitFor(() =>
+      expect(mockedUpdatePermitDetail).toHaveBeenLastCalledWith(
+        expect.objectContaining({ permitStatus: 'ACT', permitReceiptNo: 'R-9' }),
+      ),
     )
   })
 
@@ -11355,7 +11688,7 @@ describe('Provincial Permit Detail Action Smoke', () => {
     await userEvent.type(screen.getByLabelText('Purchaser'), 'test-2026-10-19')
   }
 
-  it('asks before saving the shipping of a completed Interior permit without a receipt and sends nothing on Discard', async () => {
+  it('asks before saving the shipping of a completed Interior permit without a receipt and sends nothing on Cancel', async () => {
     mockedFetchProvincialPermitDetail.mockResolvedValue(completedPermitWithoutReceipt)
     renderPermitDetails()
 
@@ -11366,7 +11699,7 @@ describe('Provincial Permit Detail Action Smoke', () => {
     expect(mockedUpdatePermitShipping).not.toHaveBeenCalled()
     expect(mockedUpdatePermitDetail).not.toHaveBeenCalled()
 
-    await userEvent.click(within(warning).getByRole('button', { name: 'Discard' }))
+    await userEvent.click(within(warning).getByRole('button', { name: 'Cancel' }))
     await waitFor(() =>
       expect(screen.queryByRole('dialog', { name: 'Save as Payment pending?' })).toBeNull(),
     )
@@ -11403,7 +11736,7 @@ describe('Provincial Permit Detail Action Smoke', () => {
     await editCompletedPermitShipping()
     await userEvent.click(screen.getByRole('button', { name: 'Save shipping' }))
     const warning = await screen.findByRole('dialog', { name: 'Save as Payment pending?' })
-    await userEvent.click(within(warning).getByRole('button', { name: 'Save' }))
+    await userEvent.click(within(warning).getByRole('button', { name: 'Save as Payment pending' }))
 
     await waitFor(() =>
       expect(mockedUpdatePermitDetail).toHaveBeenCalledWith(
@@ -11443,7 +11776,7 @@ describe('Provincial Permit Detail Action Smoke', () => {
     await userEvent.click(
       within(await screen.findByRole('dialog', { name: 'Save as Payment pending?' })).getByRole(
         'button',
-        { name: 'Save' },
+        { name: 'Save as Payment pending' },
       ),
     )
 
@@ -11597,7 +11930,7 @@ describe('Provincial Permit Detail Action Smoke', () => {
       permitStatusDescription: 'Payment pending',
       receiptNumber: null,
     })
-    mockedFetchProvincialPermitDetailTabs.mockResolvedValue(tabsWithApplication)
+    mockedFetchProvincialPermitDetailTabs.mockResolvedValue(completablePermitTabs)
     renderPermitDetails()
 
     await selectPermitDetailTab('Owner')
@@ -11620,14 +11953,15 @@ describe('Provincial Permit Detail Action Smoke', () => {
     expect(within(financialTile).queryByLabelText('Receipt number')).not.toBeInTheDocument()
     expect(screen.getByLabelText('Status')).toBeEnabled()
     expect(screen.getByLabelText('Issued date')).toBeDisabled()
+    const permitPanel = within(screen.getByRole('tabpanel', { name: 'Permit' }))
     for (const label of [
       'Exemption number',
       'Region',
       'Current permit volume (m³)',
       'Current permit pieces',
     ]) {
-      expect(screen.queryByLabelText(label)).not.toBeInTheDocument()
-      expect(screen.getByText(label).tagName).toBe('DT')
+      expect(permitPanel.queryByLabelText(label)).not.toBeInTheDocument()
+      expect(permitPanel.getByText(label).tagName).toBe('DT')
     }
     expect(screen.queryByLabelText('Agent client number')).not.toBeInTheDocument()
 
@@ -11660,7 +11994,7 @@ describe('Provincial Permit Detail Action Smoke', () => {
       permitStatusDescription: 'Payment pending',
       receiptNumber: null,
     })
-    mockedFetchProvincialPermitDetailTabs.mockResolvedValue(tabsWithApplication)
+    mockedFetchProvincialPermitDetailTabs.mockResolvedValue(completablePermitTabs)
     renderPermitDetails()
 
     await selectPermitDetailTab('Fees')
@@ -11694,7 +12028,7 @@ describe('Provincial Permit Detail Action Smoke', () => {
       permitStatusDescription: 'Payment pending',
       receiptNumber: null,
     })
-    mockedFetchProvincialPermitDetailTabs.mockResolvedValue(tabsWithApplication)
+    mockedFetchProvincialPermitDetailTabs.mockResolvedValue(completablePermitTabs)
     renderPermitDetails()
 
     await selectPermitDetailTab('Fees')
@@ -11771,7 +12105,7 @@ describe('Provincial Permit Detail Action Smoke', () => {
       permitStatusDescription: 'Payment pending',
       receiptNumber: null,
     })
-    mockedFetchProvincialPermitDetailTabs.mockResolvedValue(tabsWithApplication)
+    mockedFetchProvincialPermitDetailTabs.mockResolvedValue(completablePermitTabs)
     renderPermitDetails()
 
     await selectPermitDetailTab('Fees')
@@ -11836,7 +12170,7 @@ describe('Provincial Permit Detail Action Smoke', () => {
         .mockResolvedValueOnce(paymentPendingPermit)
         .mockResolvedValueOnce(paymentPendingPermit)
         .mockResolvedValue({ ...paymentPendingPermit, permitStatusCode: targetStatus })
-      mockedFetchProvincialPermitDetailTabs.mockResolvedValue(tabsWithApplication)
+      mockedFetchProvincialPermitDetailTabs.mockResolvedValue(completablePermitTabs)
       mockedUpdatePermitDetail.mockResolvedValue({
         success: true,
         message: 'The permit was updated successfully.',
@@ -11863,7 +12197,7 @@ describe('Provincial Permit Detail Action Smoke', () => {
         await userEvent.click(
           within(await screen.findByRole('dialog', { name: 'Save as Payment pending?' })).getByRole(
             'button',
-            { name: 'Save' },
+            { name: 'Save as Payment pending' },
           ),
         )
       }
@@ -11878,7 +12212,11 @@ describe('Provincial Permit Detail Action Smoke', () => {
           }),
         )
       })
-      expect(await screen.findByText('Permit details saved.')).toBeInTheDocument()
+      expect(
+        await screen.findByText(
+          targetStatus === 'COM' ? 'Permit 777 completed.' : 'Permit details saved.',
+        ),
+      ).toBeInTheDocument()
       expect(screen.queryByRole('dialog', { name: 'Email permit 777 approval?' })).toBeNull()
       expect(mockedFetchPermitApprovalEmailDefault).not.toHaveBeenCalled()
     },
@@ -12355,6 +12693,55 @@ describe('Provincial Permit Detail Action Smoke', () => {
     expect(mockedUpdatePermitDetail).toHaveBeenCalledTimes(1)
     expect(mockedSendPermitApprovalEmail).toHaveBeenCalledTimes(1)
   })
+
+  it.each([
+    {
+      description: 'was sent once the approval email is sent',
+      button: 'Send approval',
+      outcome: 'The confirmation email was sent to the client (owner@example.test).',
+    },
+    {
+      description: 'was not sent when the approval email is cancelled',
+      button: 'Cancel',
+      outcome: 'The confirmation email was not sent to the client.',
+    },
+  ])(
+    'reports a completed permit at page level and says the confirmation email $description',
+    async ({ button, outcome }) => {
+      const activePermit = {
+        ...permitDetail,
+        permitStatusCode: 'ACT',
+        permitStatusDescription: 'Active',
+      }
+      mockedFetchProvincialPermitDetail
+        .mockResolvedValueOnce(activePermit)
+        .mockResolvedValueOnce(activePermit)
+        .mockResolvedValue(permitDetail)
+      renderPermitDetails()
+
+      await userEvent.click(await screen.findByRole('button', { name: /Edit permit(?: details)?/ }))
+      await userEvent.selectOptions(screen.getByLabelText('Status'), 'COM')
+      await userEvent.click(getActiveSectionSaveButton())
+
+      const dialog = await screen.findByRole('dialog', { name: 'Email permit 777 approval?' })
+      const notice = screen.getByText('Permit 777 completed.').closest('.permit-page-result')
+      expect(notice).toHaveTextContent('The confirmation email was not sent to the client.')
+      expect(notice?.closest('[role="tabpanel"]')).toBeNull()
+      expect(screen.queryByText('Permit details saved.')).not.toBeInTheDocument()
+
+      await userEvent.click(within(dialog).getByRole('button', { name: button }))
+
+      await waitFor(() =>
+        expect(screen.queryByRole('dialog', { name: 'Email permit 777 approval?' })).toBeNull(),
+      )
+      await waitFor(() =>
+        expect(
+          screen.getByText('Permit 777 completed.').closest('.permit-page-result'),
+        ).toHaveTextContent(outcome),
+      )
+      expect(mockedSendPermitApprovalEmail).toHaveBeenCalledTimes(button === 'Cancel' ? 0 : 1)
+    },
+  )
 
   it('offers the approval email again when a reviewer saves an unchanged completed permit', async () => {
     renderPermitDetails()

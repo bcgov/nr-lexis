@@ -33,7 +33,7 @@ exemption is **Active** you request permits against it.
 ### Find an exemption
 
 1. **Provincial › Exemption search**.
-2. Filter by **Application number**, **Package number**, **Exemption
+2. Filter by **Exemption number**, **Application number**, **Package
    number**, **Region**, the list date range, **Exemption type** or
    **Exemption status**, and select **Search**.
 3. Select the number in the **Exemption** column.

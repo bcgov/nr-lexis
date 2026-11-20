@@ -513,7 +513,7 @@ describe('Provincial Permit Search Actions', () => {
     expect(screen.queryByRole('list', { name: 'Selected regions' })).not.toBeInTheDocument()
   })
 
-  it('shows the permit filters in order without an invoice number filter', async () => {
+  it('shows the permit number as the first filter, without an invoice number filter', async () => {
     mockedUseAuth.mockReturnValue(createTestAuthContext({ canPerform: () => true }))
 
     renderPage()
@@ -526,9 +526,9 @@ describe('Provincial Permit Search Actions', () => {
       label.textContent?.replace(/Total items selected:.*$/, '').trim(),
     )
     expect(filterLabels).toEqual([
+      'Permit number',
       'Application number',
       'Package number',
-      'Permit number',
       'Region',
       'Issued date from',
       'Issued date to',

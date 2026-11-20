@@ -1,6 +1,7 @@
 import { DatePicker, DatePickerInput } from '@carbon/react'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { isValidIsoDate, isoDateRangeEndError } from '@/pages/shared/create-form-utils'
+import { closeDateCalendar, focusDateCalendarDay, type DateInput } from '@/utils/focus'
 import { parseIsoDate } from './IsoDatePicker'
 
 type IsoDateRangePickerProps = {
@@ -71,11 +72,26 @@ export default function IsoDateRangePicker({
     // Typed bounds belong to the caller. Flatpickr's blur/Enter parser can rewrite the other
     // bound or fail on an incomplete range; calendar selections are handled separately below.
     const preserveDraft = (event: Event) => {
-      if (event.type === 'keydown' && (event as KeyboardEvent).key === 'Tab') {
-        keyboardFocusRef.current = true
-      }
-      if (event.type === 'keydown' && (event as KeyboardEvent).key !== 'Enter') return
       const input = event.target
+      const key = event.type === 'keydown' ? (event as KeyboardEvent).key : ''
+      if (key === 'Tab') {
+        keyboardFocusRef.current = true
+        // Tab moves on: From to To, then to the next field, closing the calendar. Carbon would
+        // move it into the calendar, which the Down arrow reaches instead.
+        if (!(event as KeyboardEvent).shiftKey && input instanceof HTMLInputElement) {
+          event.stopPropagation()
+          if (input.id === toId) closeDateCalendar(input)
+        }
+      }
+      if (key === 'ArrowDown' && input instanceof HTMLInputElement) {
+        const calendar = range.querySelector<DateInput>(`#${CSS.escape(fromId)}`)?._flatpickr
+        if (!calendar) return
+        const preferredDay =
+          input.id === toId ? '.flatpickr-day.endRange' : '.flatpickr-day.startRange'
+        if (focusDateCalendarDay(calendar, preferredDay)) event.preventDefault()
+        return
+      }
+      if (event.type === 'keydown' && key !== 'Enter') return
       if (!(input instanceof HTMLInputElement)) return
       event.stopPropagation()
     }
@@ -104,7 +120,7 @@ export default function IsoDateRangePicker({
       range.removeEventListener('blur', preserveDraft, true)
       range.removeEventListener('keydown', preserveDraft, true)
     }
-  }, [fromId])
+  }, [fromId, toId])
 
   useEffect(() => () => removeCalendarListenersRef.current?.(), [])
 

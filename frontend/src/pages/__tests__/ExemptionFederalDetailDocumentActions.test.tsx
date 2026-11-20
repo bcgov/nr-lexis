@@ -41,6 +41,7 @@ import { fetchProvincialExemptionOptions } from '@/service/search-options-servic
 import { updateFederalApplicationStatus } from '@/service/federal-application-mutation-service'
 import { submitAdminUpload, validateAdminUpload } from '@/service/admin-upload-service'
 import { createTestAuthContext, createTestCapabilities } from '@/test-utils/auth'
+import { expectResultAboveCard } from '@/test-utils/exemptionSectionResult'
 
 const openDocumentUploadModal = async (): Promise<void> => {
   await userEvent.click(await screen.findByRole('button', { name: 'Add documents' }))
@@ -721,9 +722,9 @@ describe('Exemption and Federal Detail Document Actions', () => {
       await userEvent.click(within(applications).getByRole('button', { name: 'Add application' }))
       await userEvent.type(await screen.findByLabelText('Application number'), '655')
       await userEvent.click(screen.getByRole('button', { name: 'Save application' }))
-      const added = (await within(applications).findByText('Application added')).closest(
-        '.app-inline-notification',
-      )
+      const addedText = await screen.findByText('Application added')
+      const added = addedText.closest('.app-inline-notification')
+      expectResultAboveCard(addedText, within(applications).getByRole('heading', { level: 2 }))
       // The panel and its launcher leave the page while the list reloads, so the notice takes focus.
       await waitFor(() => expect(added).toHaveFocus())
 
@@ -734,7 +735,7 @@ describe('Exemption and Federal Detail Document Actions', () => {
         name: 'Are you sure you want to remove this application?',
       })
       await userEvent.click(within(confirmation).getByRole('button', { name: 'Remove' }))
-      const removed = (await within(applications).findByText('Application removed')).closest(
+      const removed = (await screen.findByText('Application removed')).closest(
         '.app-inline-notification',
       )
       // The removed row's button is gone, so the notice takes focus.
@@ -922,8 +923,8 @@ describe('Exemption and Federal Detail Document Actions', () => {
       "Application 654 can't be added. Insufficient privileges to add this application.",
     ],
     [
-      "Application 654 can't be added. The exemption's requested volume would be 102.0 m³, more than its approved volume of 2.0 m³.",
-      "Application 654 can't be added. The exemption's requested volume would be 102.0 m³, more than its approved volume of 2.0 m³.",
+      "Application 654 can't be added. The exemption's requested volume would be 102.0 m³, more than its approval volume of 2.0 m³.",
+      "Application 654 can't be added. The exemption's requested volume would be 102.0 m³, more than its approval volume of 2.0 m³.",
     ],
     [
       '',

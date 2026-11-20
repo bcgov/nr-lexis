@@ -194,6 +194,41 @@ describe('IsoDateRangePicker', () => {
     )
   })
 
+  it('moves from From to To and on to the next field on Tab, closing the calendar', async () => {
+    render(<Range />)
+
+    await userEvent.click(screen.getByLabelText('List date from'))
+    expect(document.querySelector('.flatpickr-calendar.open')).not.toBeNull()
+    await userEvent.tab()
+    expect(screen.getByLabelText('List date to')).toHaveFocus()
+    await userEvent.tab()
+
+    expect(screen.getByRole('button', { name: 'Clear range' })).toHaveFocus()
+    expect(document.querySelector('.flatpickr-calendar.open')).toBeNull()
+  })
+
+  it.each([
+    { field: 'List date from', day: '10', escapeFirst: false },
+    { field: 'List date to', day: '20', escapeFirst: false },
+    { field: 'List date to', day: '20', escapeFirst: true },
+  ])(
+    'moves from $field into the calendar on the Down arrow (after Escape: $escapeFirst)',
+    async ({ field, day, escapeFirst }) => {
+      render(<Range initial={['2026-01-10', '2026-01-20']} />)
+
+      await userEvent.click(screen.getByLabelText(field))
+      if (escapeFirst) {
+        await userEvent.keyboard('{Escape}')
+        expect(document.querySelector('.flatpickr-calendar.open')).toBeNull()
+      }
+      await userEvent.keyboard('{ArrowDown}')
+
+      expect(document.querySelector('.flatpickr-calendar.open')).not.toBeNull()
+      expect(document.activeElement).toHaveClass('flatpickr-day')
+      expect(document.activeElement).toHaveTextContent(day)
+    },
+  )
+
   it('updates both search bounds from a single range calendar', async () => {
     render(<Range initial={['2026-01-10', '2026-01-20']} />)
     await userEvent.click(screen.getByLabelText('List date from'))
@@ -326,7 +361,7 @@ describe('IsoDateRangePicker', () => {
   it('keeps keyboard calendar selection on the To endpoint', async () => {
     render(<Range initial={['2026-01-10', '2026-01-20']} />)
     await userEvent.click(screen.getByLabelText('List date to'))
-    await userEvent.tab()
+    await userEvent.keyboard('{ArrowDown}')
     // Flatpickr uses native keyCode for calendar navigation; userEvent.keyboard emits zero.
     fireEvent.keyDown(document.activeElement!, {
       key: 'ArrowRight',

@@ -160,7 +160,7 @@ export default function BlanketOicScaleCodeFields({
         titleText={requiredLabel('Grade')}
         label=""
         items={gradeOptions}
-        itemToString={optionName}
+        itemToString={(option) => option?.code ?? ''}
         selectedItem={findOption(gradeOptions, normalizeCode(value.gradeCode))}
         disabled={disabled || gradeAwaitsSpecies || gradeAvailability !== 'available'}
         invalid={!!fieldErrors?.gradeCode}

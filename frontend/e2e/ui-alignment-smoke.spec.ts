@@ -1692,9 +1692,9 @@ test.describe('FSPTS-aligned LEXIS shell', () => {
         ready: page.locator('.provincial-permit-search-grid'),
       })
       const permitLayout = await readFieldLayout('.provincial-permit-search-grid', [
+        'permitNumber',
         'applicationNumber',
         'packageNumber',
-        'permitNumber',
         'region',
         'issuedFromDate',
         'issuedToDate',
@@ -1710,14 +1710,14 @@ test.describe('FSPTS-aligned LEXIS shell', () => {
         expect(permitLayout[clientField].top).toBeGreaterThan(permitLayout.permitStatus.bottom)
       }
       expect(
-        Math.abs(permitLayout.ownerClientNumber.left - permitLayout.applicationNumber.left),
+        Math.abs(permitLayout.ownerClientNumber.left - permitLayout.permitNumber.left),
       ).toBeLessThanOrEqual(1)
 
       if (viewport.columns === 4) {
         expectSameRow(permitLayout, [
+          'permitNumber',
           'applicationNumber',
           'packageNumber',
-          'permitNumber',
           'region',
         ])
         expect(
@@ -1726,8 +1726,8 @@ test.describe('FSPTS-aligned LEXIS shell', () => {
         expectSameRow(permitLayout, ['issuedFromDate', 'issuedToDate', 'permitStatus'])
         expectSameRow(permitLayout, ['ownerClientNumber', 'agentClientNumber'])
       } else {
-        expectSameRow(permitLayout, ['applicationNumber', 'packageNumber'])
-        expectSameRow(permitLayout, ['permitNumber', 'region'])
+        expectSameRow(permitLayout, ['permitNumber', 'applicationNumber'])
+        expectSameRow(permitLayout, ['packageNumber', 'region'])
         expectSameRow(permitLayout, ['issuedFromDate', 'issuedToDate'])
         expect(permitLayout.agentClientNumber.top).toBeGreaterThan(
           permitLayout.ownerClientNumber.bottom,

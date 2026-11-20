@@ -83,8 +83,8 @@ describe('exemptionApprovalResults', () => {
   })
 
   it.each([
-    'The approved volume must be greater than or equal to the total requested volume (25.0).',
-    'The approved volume must have no more than two decimal places.',
+    'The approval volume must be greater than or equal to the total requested volume (25.0).',
+    'The approval volume must have no more than two decimal places.',
   ])('identifies the approval-volume form while preserving %s', (problem) => {
     expect(exemptionApprovalFailureMessage(problem)).toBe(
       `${problem} Review the approval volume in Exemption details.`,

@@ -112,6 +112,86 @@ describe('IsoDatePicker', () => {
     expect(input).toHaveValue('2026-06-12')
   })
 
+  it.each([
+    { description: 'after typing a date', typed: '2026-06-12' },
+    { description: 'without typing', typed: '' },
+  ])('moves to the next field on Tab $description and closes the calendar', async ({ typed }) => {
+    const DateThenButton = () => {
+      const [value, setValue] = useState('')
+      return (
+        <>
+          <IsoDatePicker
+            id="shippingDate"
+            labelText="Shipping date"
+            value={value}
+            onChange={setValue}
+          />
+          <button>Next field</button>
+          <output aria-label="Date value">{value}</output>
+        </>
+      )
+    }
+    render(<DateThenButton />)
+    const input = screen.getByLabelText('Shipping date')
+
+    await userEvent.click(input)
+    expect(document.querySelector('.flatpickr-calendar.open')).not.toBeNull()
+    if (typed) await userEvent.type(input, typed)
+    await userEvent.tab()
+
+    expect(screen.getByRole('button', { name: 'Next field' })).toHaveFocus()
+    expect(document.querySelector('.flatpickr-calendar.open')).toBeNull()
+    expect(input).toHaveValue(typed)
+    expect(screen.getByLabelText('Date value')).toHaveTextContent(typed)
+  })
+
+  it.each([
+    { description: 'Escape', leave: () => userEvent.keyboard('{Escape}') },
+    {
+      description: 'a click outside',
+      leave: () => userEvent.click(screen.getByRole('button', { name: 'Outside' })),
+    },
+  ])('closes the calendar on $description', async ({ leave }) => {
+    render(
+      <>
+        <IsoDatePicker id="shippingDate" labelText="Shipping date" value="" onChange={vi.fn()} />
+        <button>Outside</button>
+      </>,
+    )
+
+    await userEvent.click(screen.getByLabelText('Shipping date'))
+    expect(document.querySelector('.flatpickr-calendar.open')).not.toBeNull()
+    await leave()
+
+    expect(document.querySelector('.flatpickr-calendar.open')).toBeNull()
+  })
+
+  it.each([{ escapeFirst: false }, { escapeFirst: true }])(
+    'moves from the date into its calendar on the Down arrow (after Escape: $escapeFirst)',
+    async ({ escapeFirst }) => {
+      render(
+        <IsoDatePicker
+          id="shippingDate"
+          labelText="Shipping date"
+          value="2026-06-12"
+          onChange={vi.fn()}
+        />,
+      )
+      const input = screen.getByLabelText('Shipping date')
+
+      await userEvent.click(input)
+      if (escapeFirst) {
+        await userEvent.keyboard('{Escape}')
+        expect(document.querySelector('.flatpickr-calendar.open')).toBeNull()
+      }
+      await userEvent.keyboard('{ArrowDown}')
+
+      expect(document.querySelector('.flatpickr-calendar.open')).not.toBeNull()
+      expect(document.activeElement).toHaveClass('flatpickr-day')
+      expect(document.activeElement).toHaveClass('selected')
+    },
+  )
+
   it('preserves impossible typed dates for parent validation', () => {
     const StatefulDatePicker = () => {
       const [value, setValue] = useState('2026-08-17')

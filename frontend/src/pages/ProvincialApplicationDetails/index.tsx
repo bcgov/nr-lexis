@@ -82,7 +82,11 @@ import {
 import type { ProvincialApplicationDetail } from '@/interfaces/LexisDetails'
 import { useLatestRequestGuard } from '@/pages/shared/useLatestRequestGuard'
 import { displayValue } from '@/pages/shared/detail-page-utils'
-import { landingPageReturnTo, readDetailReturnTo } from '@/pages/shared/detail-navigation'
+import {
+  applicationSearchReturnTo,
+  landingPageReturnTo,
+  readDetailReturnTo,
+} from '@/pages/shared/detail-navigation'
 import {
   fetchProvincialApplicationDetail,
   releaseApplicationEditLock,
@@ -256,6 +260,8 @@ type ApplicationCreationNavigationState = Record<string, unknown> & {
   applicationCreationNotice?: {
     applicationNumber: string
   }
+  /** Survives the notice being stripped, so the search link stays hidden. */
+  openedFromApplicationCreate?: true
 }
 // Carbon indexes the conditional JSX children as well as the visible tabs.
 // Keep these slots aligned with the TabList and TabPanels declarations below.
@@ -791,12 +797,15 @@ const ProvincialApplicationDetailsPage = () => {
   const { applicationNumber } = useParams()
   const [searchParams] = useSearchParams()
   const navigationState = location.state as ApplicationCreationNavigationState | null
-  const fallbackReturnTo = canPerform('/applicationSearch')
-    ? { label: 'Application search', to: '/provincial/application' }
-    : landingPageReturnTo(defaultRoute)
-  const detailReturnTo = readDetailReturnTo(navigationState) ?? fallbackReturnTo
+  const detailReturnTo =
+    readDetailReturnTo(navigationState) ??
+    (canPerform('/applicationSearch')
+      ? applicationSearchReturnTo(searchParams)
+      : landingPageReturnTo(defaultRoute))
   const createdApplicationNumber =
     navigationState?.applicationCreationNotice?.applicationNumber.trim()
+  const openedFromApplicationCreate =
+    !!createdApplicationNumber || navigationState?.openedFromApplicationCreate === true
   // The create page's Save button is gone, so focus starts at the new application's title.
   const [focusCreatedApplicationTitle] = useState(() => !!createdApplicationNumber)
   // Set once the new application first shows, so later refreshes don't pull focus back to the
@@ -994,6 +1003,7 @@ const ProvincialApplicationDetailsPage = () => {
 
     const nextNavigationState = { ...(navigationState ?? {}) }
     delete nextNavigationState.applicationCreationNotice
+    nextNavigationState.openedFromApplicationCreate = true
     navigate(
       {
         pathname: location.pathname,
@@ -3208,7 +3218,13 @@ const ProvincialApplicationDetailsPage = () => {
         }
         setSummarySaveErrors(null)
         setSummaryVolumeWarningAccepted(false)
-        setActionResult({ kind: 'success', title: APPLICATION_SAVED_TITLE, message: '' })
+        setActionResult({
+          kind: 'success',
+          title: APPLICATION_SAVED_TITLE,
+          message: '',
+          // The review card keeps its save notice at page level.
+          ...(editingSection && editingSection !== 'review' && { source: editingSection }),
+        })
         return true
       } catch {
         setActionResult({ kind: 'error', message: 'Unable to save application summary.' })
@@ -3751,10 +3767,7 @@ const ProvincialApplicationDetailsPage = () => {
             id="applicationSummaryAverageLogVolume"
             labelText={requiredLabel('Average log volume (m³)', summaryLogDetailsRequired)}
             aria-required={summaryLogDetailsRequired}
-            type="number"
-            min={0}
-            max={99.9}
-            step="0.1"
+            inputMode="decimal"
             value={summaryForm.averageLogVolume}
             invalid={Boolean(visibleSummaryFieldError('averageLogVolume'))}
             invalidText={visibleSummaryFieldError('averageLogVolume')}
@@ -3767,9 +3780,7 @@ const ProvincialApplicationDetailsPage = () => {
             labelText={requiredLabel('Application volume (m³)')}
             aria-required="true"
             helperText="Must be greater than 0"
-            type="number"
-            min={0}
-            step="0.01"
+            inputMode="decimal"
             value={summaryForm.applicationVolume}
             invalid={Boolean(visibleSummaryFieldError('applicationVolume'))}
             invalidText={visibleSummaryFieldError('applicationVolume')}
@@ -4141,13 +4152,15 @@ const ProvincialApplicationDetailsPage = () => {
         loading={isRefreshingDetail}
         loadingDescription="Refreshing provincial application detail…"
       />
-      <Column sm={4} md={8} lg={16}>
-        <DetailBreadcrumb
-          label={fallbackReturnTo.label}
-          to={fallbackReturnTo.to}
-          returnTo={detailReturnTo}
-        />
-      </Column>
+      {!openedFromApplicationCreate && detailReturnTo && (
+        <Column sm={4} md={8} lg={16}>
+          <DetailBreadcrumb
+            label={detailReturnTo.label}
+            to={detailReturnTo.to}
+            returnTo={detailReturnTo}
+          />
+        </Column>
+      )}
       <Column sm={4} md={8} lg={16} className="detail-page-header">
         <PageHeader
           title={`Application ${
@@ -4289,6 +4302,12 @@ const ProvincialApplicationDetailsPage = () => {
                 <TabPanel className="application-detail-tab-panel">
                   <Grid fullWidth className="application-detail-tab-grid">
                     <Column sm={4} md={8} lg={16}>
+                      {ownerActionResult && (
+                        <ActionResultNotification
+                          result={ownerActionResult}
+                          onClose={() => setActionResult(null)}
+                        />
+                      )}
                       <Tile
                         id="application-owner-details"
                         ref={sections.sectionRef('owner')}
@@ -4316,12 +4335,6 @@ const ProvincialApplicationDetailsPage = () => {
                               </Button>
                             )}
                         </div>
-                        {ownerActionResult && (
-                          <ActionResultNotification
-                            result={ownerActionResult}
-                            onClose={() => setActionResult(null)}
-                          />
-                        )}
                         {isEditingOwnerDetails && summaryForm ? (
                           <>
                             <RequiredFieldsLegend className="application-detail-required" />
@@ -4599,6 +4612,12 @@ const ProvincialApplicationDetailsPage = () => {
                 <TabPanel className="application-detail-tab-panel">
                   <Grid fullWidth className="application-detail-tab-grid">
                     <Column sm={4} md={8} lg={16}>
+                      {summaryActionResult && (
+                        <ActionResultNotification
+                          result={summaryActionResult}
+                          onClose={() => setActionResult(null)}
+                        />
+                      )}
                       <Tile
                         id="application-summary"
                         ref={sections.sectionRef('summary')}
@@ -4626,12 +4645,6 @@ const ProvincialApplicationDetailsPage = () => {
                               </Button>
                             )}
                         </div>
-                        {summaryActionResult && (
-                          <ActionResultNotification
-                            result={summaryActionResult}
-                            onClose={() => setActionResult(null)}
-                          />
-                        )}
                         {isEditingSummary && canEditSummary && summaryForm ? (
                           <>
                             <RequiredFieldsLegend className="application-detail-required" />
@@ -4724,6 +4737,8 @@ const ProvincialApplicationDetailsPage = () => {
                                     }
                                   />
                                 </RecordFieldCell>
+                              </RecordFieldRow>
+                              <RecordFieldRow>
                                 <RecordFieldCell>
                                   <div className="application-list-date-field">
                                     <RadioButtonGroup
@@ -4829,10 +4844,8 @@ const ProvincialApplicationDetailsPage = () => {
                                   displayValue(summaryExemptionReasonDescription),
                                 ],
                               ],
-                              [
-                                ['Application date', displayValue(detail.applicationDate)],
-                                ['List date', displayValue(detail.listingDate)],
-                              ],
+                              [['Application date', displayValue(detail.applicationDate)]],
+                              [['List date', displayValue(detail.listingDate)]],
                               [['Exemption term (days)', displayValue(detail.termDays)]],
                             ].map((row) => (
                               <RecordFieldRow key={String(row[0][0])}>
@@ -4855,6 +4868,12 @@ const ProvincialApplicationDetailsPage = () => {
                 <TabPanel className="application-detail-tab-panel">
                   <Grid fullWidth className="application-detail-tab-grid">
                     <Column sm={4} md={8} lg={16}>
+                      {scaleActionResult && (
+                        <ActionResultNotification
+                          result={scaleActionResult}
+                          onClose={() => setActionResult(null)}
+                        />
+                      )}
                       <Tile
                         id="application-item-details"
                         ref={sections.sectionRef('scale')}
@@ -4883,12 +4902,6 @@ const ProvincialApplicationDetailsPage = () => {
                               </Button>
                             )}
                         </div>
-                        {scaleActionResult && (
-                          <ActionResultNotification
-                            result={scaleActionResult}
-                            onClose={() => setActionResult(null)}
-                          />
-                        )}
                         {isEditingApplicationItems && canEditSummary && summaryForm ? (
                           <>
                             <RequiredFieldsLegend className="application-detail-required" />

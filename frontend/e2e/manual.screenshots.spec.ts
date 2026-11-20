@@ -40,6 +40,8 @@ type Frame = {
   file: string
   /** Screenshot one viewport scrolled to this element instead of the top of the page. */
   focus?: (page: Page) => Locator
+  /** Capture just this part of the page, for a figure about a single card. */
+  area?: (page: Page) => Locator
   /** Tallest capture from the top of the page, in CSS pixels. */
   maxHeight?: number
 }
@@ -355,6 +357,10 @@ const snap = async (page: Page, frame: Frame, issues: CaptureIssues) => {
   await page.mouse.move(VIEWPORT.width / 2, 2)
   await page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur())
   const output = path.join(OUT_DIR, frame.edition, 'images', `${frame.file}.png`)
+  if (frame.area) {
+    await frame.area(page).screenshot({ path: output, animations: 'disabled' })
+    return
+  }
   if (frame.focus) {
     await frame.focus(page).evaluate((element, offset) => {
       window.scrollTo(0, element.getBoundingClientRect().top + window.scrollY - offset)
@@ -442,7 +448,7 @@ test.describe('signed in: ministry edition', () => {
   let page: Page
   let issues: CaptureIssues = []
 
-  const capture = (file: string, framing: Pick<Frame, 'focus' | 'maxHeight'> = {}) =>
+  const capture = (file: string, framing: Pick<Frame, 'focus' | 'area' | 'maxHeight'> = {}) =>
     snap(page, { edition: 'ministry', file, ...framing }, issues)
 
   const notCaptured = (file: string, reason: string) => {
@@ -624,10 +630,18 @@ test.describe('signed in: ministry edition', () => {
       async () => {
         await expect(tab(page, 'GBMS')).toBeVisible()
         await selectTab(page, 'Fees')
+        await expect(
+          page.getByRole('region', { name: 'Permit fee rows' }).getByRole('row').nth(1),
+        ).toBeVisible()
       },
     )
     if (!feesOpen) return
-    await capture('05-permit-fees', { focus: pageTitle })
+    await capture('05-permit-fees', {
+      area: (target) =>
+        target
+          .locator('.cds--tile')
+          .filter({ has: target.getByRole('heading', { name: 'Package fees', exact: true }) }),
+    })
     await selectTab(page, 'GBMS')
     await capture('05-permit-invoices', { focus: pageTitle })
   })
