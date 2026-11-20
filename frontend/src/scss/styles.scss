@@ -6117,13 +6117,6 @@ $notification-types: 'error', 'info', 'success', 'warning';
   .application-detail-remarks .legacy-search-actions {
     grid-template-columns: 1fr;
   }
-
-  // Two columns, each as wide as the calendar.
-  @container search-filters (min-width: 37rem) {
-    .legacy-search-grid > .search-date-range {
-      grid-column-end: span 1;
-    }
-  }
 }
 
 @media (max-width: 671px) {
