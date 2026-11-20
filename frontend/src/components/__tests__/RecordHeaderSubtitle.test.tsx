@@ -35,10 +35,10 @@ const subtitleItems = (container: HTMLElement): (string | null)[] =>
   )
 
 describe('RecordHeaderSubtitle', () => {
-  it('names each related record group and leaves out empty groups', () => {
+  it('shows the author first, then each related record group, leaving out empty groups', () => {
     const { container } = renderSubtitle(applicationRecords(1))
 
-    expect(subtitleItems(container)).toEqual(['Application number: 47200', 'Author: IDIR\\SAMPLE'])
+    expect(subtitleItems(container)).toEqual(['Author: IDIR\\SAMPLE', 'Application number: 47200'])
     expect(screen.getByRole('link', { name: '47200' })).toHaveAttribute(
       'href',
       '/provincial/application/47200',
@@ -49,16 +49,18 @@ describe('RecordHeaderSubtitle', () => {
     const { container } = renderSubtitle(applicationRecords(2), [{ recordNumber: '9021135' }])
 
     expect(subtitleItems(container)).toEqual([
+      'Author: IDIR\\SAMPLE',
       'Application numbers: 47200, 47201',
       'Permit number: 9021135',
-      'Author: IDIR\\SAMPLE',
     ])
     expect(screen.queryByRole('link', { name: '9021135' })).not.toBeInTheDocument()
   })
 
   it('shows five records of a long list until all are asked for', async () => {
     const { container } = renderSubtitle(applicationRecords(23))
-    const applicationItem = container.querySelector('.record-header-subtitle__item') as HTMLElement
+    const applicationItem = container.querySelectorAll<HTMLElement>(
+      '.record-header-subtitle__item',
+    )[1]
 
     expect(within(applicationItem).getAllByRole('link')).toHaveLength(5)
     const showAll = within(applicationItem).getByRole('button', { name: '+18 more' })

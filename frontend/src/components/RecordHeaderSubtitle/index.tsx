@@ -63,15 +63,15 @@ type RecordHeaderSubtitleProps = {
   author: string
 }
 
-/** A detail page's subtitle: links to its related records, then its author. */
+/** A detail page's subtitle: its author, then links to its related records, one per line. */
 const RecordHeaderSubtitle = ({ relatedRecordGroups, author }: RecordHeaderSubtitleProps) => (
   <span className="record-header-subtitle">
+    <span className="record-header-subtitle__item">Author: {author}</span>
     {relatedRecordGroups
       .filter((group) => group.records.length > 0)
       .map((group) => (
         <RelatedRecordGroupLinks key={group.label} {...group} />
       ))}
-    <span className="record-header-subtitle__item">Author: {author}</span>
   </span>
 )
 

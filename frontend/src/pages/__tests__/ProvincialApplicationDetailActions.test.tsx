@@ -126,7 +126,7 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
       (item) => item.textContent,
     )
 
-  it('links the exemption and permit numbers in the header before the author', async () => {
+  it('links the exemption and permit numbers in the header after the author', async () => {
     mockedFetchApplicationPermits.mockResolvedValue([
       { permitNumber: '900101', permitStatusDescription: 'Cancelled' },
       { permitNumber: '900102', permitStatusDescription: 'Complete' },
@@ -163,9 +163,9 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
       '/provincial/exemption/EX-555',
     )
     expect(subtitleItems(subtitle)).toEqual([
+      'Author: idir\\application-author',
       'Exemption number: EX-555',
       'Permit numbers: 900101, 900102',
-      'Author: idir\\application-author',
     ])
 
     await userEvent.click(permitLink)

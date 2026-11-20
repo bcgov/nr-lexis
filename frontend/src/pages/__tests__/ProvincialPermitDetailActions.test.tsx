@@ -5538,7 +5538,7 @@ describe('Provincial Permit Detail Action Smoke', () => {
     })
   })
 
-  it('links the exemption and associated applications in the header before the author', async () => {
+  it('links the exemption and associated applications in the header after the author', async () => {
     mockedFetchProvincialPermitDetailTabs.mockResolvedValue({
       ...tabsResult,
       applications: ['101103', '101104'],
@@ -5556,9 +5556,9 @@ describe('Provincial Permit Detail Action Smoke', () => {
           (item) => item.textContent,
         ),
       ).toEqual([
+        'Author: idir\\permit-author',
         'Exemption number: EX-9',
         'Application numbers: 101103, 101104',
-        'Author: idir\\permit-author',
       ]),
     )
     expect(within(subtitle).getByRole('link', { name: 'EX-9' })).toHaveAttribute(

@@ -1168,7 +1168,7 @@ describe('Exemption and Federal Detail Document Actions', () => {
     expect(screen.queryByText('10-Jul-2026')).not.toBeInTheDocument()
   })
 
-  it('links the applications and visible permits in the header before the author', async () => {
+  it('links the applications and visible permits in the header after the author', async () => {
     const exemptionApplication = (applicationNumber: string, jurisdiction: string) => ({
       applicationNumber,
       requestedVolume: '12.5',
@@ -1233,7 +1233,7 @@ describe('Exemption and Federal Detail Document Actions', () => {
           exemptionHeader.querySelectorAll('.record-header-subtitle__item'),
           (item) => item.textContent,
         ),
-      ).toEqual(['Application numbers: 654, 655', 'Permit number: 900101', 'Author: —']),
+      ).toEqual(['Author: —', 'Application numbers: 654, 655', 'Permit number: 900101']),
     )
     expect(within(exemptionHeader).getByRole('link', { name: '654' })).toHaveAttribute(
       'href',

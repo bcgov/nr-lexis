@@ -1,7 +1,6 @@
 .record-header-subtitle {
-  display: inline-flex;
-  flex-wrap: wrap;
-  gap: 0.25rem 2rem;
+  display: flex;
+  flex-direction: column;
 }
 
 .record-header-subtitle__toggle {
