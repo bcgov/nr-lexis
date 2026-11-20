@@ -535,6 +535,9 @@ const configureBlanketOicDocument = () => {
   })
 }
 
+const getPageSubtitle = (): HTMLElement =>
+  document.querySelector<HTMLElement>('.lexis-page-header__subtitle') as HTMLElement
+
 const renderPermitDetails = (initialEntry = '/provincial/permit/777') =>
   render(
     <MemoryRouter initialEntries={[initialEntry]}>
@@ -2578,7 +2581,7 @@ describe('Provincial Permit Detail Action Smoke', () => {
     const unload = new Event('beforeunload', { cancelable: true })
     window.dispatchEvent(unload)
     expect(unload.defaultPrevented).toBe(false)
-    await userEvent.click(screen.getByRole('link', { name: 'EX-9' }))
+    await userEvent.click(within(getPageSubtitle()).getByRole('link', { name: 'EX-9' }))
     expect(screen.queryByRole('dialog', { name: 'Discard changes?' })).not.toBeInTheDocument()
     expect(router.state.location.pathname).toBe('/provincial/exemption/EX-9')
     consoleError.mockRestore()
@@ -2871,7 +2874,7 @@ describe('Provincial Permit Detail Action Smoke', () => {
       expect(
         screen.queryByRole('region', { name: 'Permit package fee summaries' }),
       ).not.toBeInTheDocument()
-      expect(screen.getByRole('link', { name: 'EX-9' })).toHaveAttribute(
+      expect(within(feesPanel).getByRole('link', { name: 'EX-9' })).toHaveAttribute(
         'href',
         '/provincial/exemption/EX-9',
       )
@@ -5533,6 +5536,39 @@ describe('Provincial Permit Detail Action Smoke', () => {
       })
       expect(mockedFetchProvincialPermitDetailTabs).toHaveBeenCalledTimes(3)
     })
+  })
+
+  it('links the exemption and associated applications in the header before the author', async () => {
+    mockedFetchProvincialPermitDetailTabs.mockResolvedValue({
+      ...tabsResult,
+      applications: ['101103', '101104'],
+    })
+    renderPermitDetails()
+
+    const pageHeading = await screen.findByRole('heading', { level: 1, name: /^Permit 777/ })
+    const subtitle = pageHeading
+      .closest('header')
+      ?.querySelector<HTMLElement>('.lexis-page-header__subtitle') as HTMLElement
+    await waitFor(() =>
+      expect(
+        Array.from(
+          subtitle.querySelectorAll('.record-header-subtitle__item'),
+          (item) => item.textContent,
+        ),
+      ).toEqual([
+        'Exemption number: EX-9',
+        'Application numbers: 101103, 101104',
+        'Author: idir\\permit-author',
+      ]),
+    )
+    expect(within(subtitle).getByRole('link', { name: 'EX-9' })).toHaveAttribute(
+      'href',
+      '/provincial/exemption/EX-9',
+    )
+    expect(within(subtitle).getByRole('link', { name: '101104' })).toHaveAttribute(
+      'href',
+      '/provincial/application/101104',
+    )
   })
 
   describe('application results on an editable permit', () => {

@@ -221,9 +221,6 @@ client** and **Product type**. Federal applications are under **Federal ›
 Application search**.
 <!-- /roles -->
 
-An application in an exemption shows its **Exemption number** under its
-title. Select the number to open the exemption.
-
 <!-- roles: administrator, application-approver -->
 To start a Ministerial exemption, tick approved applications in the results
 and select **Create exemption**. See [Exemptions](04-exemptions.md).

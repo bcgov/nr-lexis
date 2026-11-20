@@ -52,12 +52,13 @@ import {
   Stamp,
 } from '@carbon/icons-react'
 import { AddDocument } from '@carbon/pictograms-react'
-import { Link, useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom'
+import { useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import EmptyState from '@/components/EmptyState'
 import DetailBreadcrumb from '@/components/DetailBreadcrumb'
 import DetailCardTitle from '@/components/DetailCardTitle'
 import DetailLoadError from '@/components/DetailLoadError'
 import PageHeader from '@/components/PageHeader'
+import RecordHeaderSubtitle from '@/components/RecordHeaderSubtitle'
 import PendingIcon from '@/components/PendingIcon'
 import AuthoritativeOptionsUnavailableNotification from '@/components/AuthoritativeOptionsUnavailableNotification'
 import StatusTag from '@/components/StatusTag'
@@ -4152,6 +4153,11 @@ const ProvincialApplicationDetailsPage = () => {
   if (detailMatchesRoute && !isRefreshingDetail && focusCreatedApplicationTitle) {
     createdTitleFocusLatchedRef.current = true
   }
+  const relatedRecordReturnState = withDetailReturnTo(
+    location.state,
+    { label: `Application ${applicationNumber ?? ''}`.trim(), to: locationPath(location) },
+    detailReturnTo,
+  )
 
   return (
     <Grid
@@ -4183,27 +4189,33 @@ const ProvincialApplicationDetailsPage = () => {
           focusTitle={createdTitleFocusLatchedRef.current || 'whenFocusLost'}
           subtitle={
             detail && detailMatchesRoute ? (
-              <span className="application-header-facts">
-                <span>Author: {displayValueText(detail.author)}</span>
-                {detail.exemptionNumber ? (
-                  <span>
-                    Exemption number:{' '}
-                    <Link
-                      to={`/provincial/exemption/${encodeURIComponent(detail.exemptionNumber)}`}
-                      state={withDetailReturnTo(
-                        location.state,
-                        {
-                          label: `Application ${detail.applicationNumber}`,
-                          to: locationPath(location),
-                        },
-                        detailReturnTo,
-                      )}
-                    >
-                      {detail.exemptionNumber}
-                    </Link>
-                  </span>
-                ) : null}
-              </span>
+              <RecordHeaderSubtitle
+                relatedRecordGroups={[
+                  {
+                    label: 'Exemption number',
+                    pluralLabel: 'Exemption numbers',
+                    records: detail.exemptionNumber
+                      ? [
+                          {
+                            recordNumber: detail.exemptionNumber,
+                            to: `/provincial/exemption/${encodeURIComponent(detail.exemptionNumber)}`,
+                            state: relatedRecordReturnState,
+                          },
+                        ]
+                      : [],
+                  },
+                  {
+                    label: 'Permit number',
+                    pluralLabel: 'Permit numbers',
+                    records: permitRows.map((permit) => ({
+                      recordNumber: permit.permitNumber,
+                      to: `/provincial/permit/${encodeURIComponent(permit.permitNumber)}`,
+                      state: relatedRecordReturnState,
+                    })),
+                  },
+                ]}
+                author={displayValueText(detail.author)}
+              />
             ) : undefined
           }
           status={

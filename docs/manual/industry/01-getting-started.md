@@ -135,6 +135,14 @@ page or use the browser's Back button. It is not kept after you log out.
 An application, offer, exemption or permit opens as a record with sections
 or tabs.
 
+Under the title of an application, exemption or permit, LEXIS lists the
+related records you can open, then the author. An application shows its
+exemption and permit numbers, an exemption its application and permit
+numbers, and a permit its exemption and application numbers. Select a number
+to open that record. A list of more than five shows the first five: select
+the count after them, for example **+18 more**, to see the rest and **Show
+fewer** to hide them again.
+
 - A record opens for reading. Select the edit button on a card, for
   example **Edit application details** or **Edit offer**, to change it,
   then **Save changes** or **Cancel**. On applications, exemptions and

@@ -67,6 +67,7 @@ import ExemptionApprovalModal, {
 } from '@/components/ExemptionApprovalModal'
 import { exemptionApprovalResults } from '@/components/exemption-approval-results'
 import PageHeader from '@/components/PageHeader'
+import RecordHeaderSubtitle from '@/components/RecordHeaderSubtitle'
 import AuthoritativeOptionsUnavailableNotification from '@/components/AuthoritativeOptionsUnavailableNotification'
 import StatusTag from '@/components/StatusTag'
 import TableFrame from '@/components/TableFrame'
@@ -720,6 +721,28 @@ const ProvincialExemptionDetailsPage = () => {
     (path: string): string => appendSearchParamsToPath(path, searchParams),
     [searchParams],
   )
+  const relatedRecordReturnState = withDetailReturnTo(
+    location.state,
+    { label: exemptionPageTitle, to: locationPath(location) },
+    detailReturnTo,
+  )
+  // Undefined when the user can't open the application.
+  const applicationRecordPath = (application: ExemptionApplicationRow): string | undefined => {
+    const federal = application.jurisdiction.toUpperCase() === 'F'
+    const canOpen = federal
+      ? canPerform('/federalApplicationDetails') && canPerform('viewFederalApplication')
+      : canPerform('/applicationDetails')
+    if (!canOpen) return undefined
+    return withCurrentSearch(
+      federal
+        ? `/federal/application/${application.applicationNumber}`
+        : `/provincial/application/${application.applicationNumber}`,
+    )
+  }
+  const permitRecordPath = (permit: ExemptionPermitRow): string | undefined =>
+    canPerform('/permitSearch') && canPerform('/permitDetails')
+      ? withCurrentSearch(`/provincial/permit/${permit.permitNumber}`)
+      : undefined
 
   useEffect(() => {
     if (creatingPermit || !permitCreationDestination) return
@@ -2306,7 +2329,38 @@ const ProvincialExemptionDetailsPage = () => {
             </>
           }
           focusTitle={focusCreatedExemptionTitle ? !!currentDetail : 'whenFocusLost'}
-          subtitle={currentDetail ? `Author: ${displayValueText(currentDetail.author)}` : undefined}
+          subtitle={
+            currentDetail ? (
+              <RecordHeaderSubtitle
+                relatedRecordGroups={[
+                  {
+                    label: 'Application number',
+                    pluralLabel: 'Application numbers',
+                    // Same visibility as the Applications and Permits tabs.
+                    records: showApplications
+                      ? applications.map((application) => ({
+                          recordNumber: application.applicationNumber,
+                          to: applicationRecordPath(application),
+                          state: relatedRecordReturnState,
+                        }))
+                      : [],
+                  },
+                  {
+                    label: 'Permit number',
+                    pluralLabel: 'Permit numbers',
+                    records: canPerform('/permitDetails')
+                      ? visiblePermitRows.map((permit) => ({
+                          recordNumber: permit.permitNumber,
+                          to: permitRecordPath(permit),
+                          state: relatedRecordReturnState,
+                        }))
+                      : [],
+                  },
+                ]}
+                author={displayValueText(currentDetail.author)}
+              />
+            ) : undefined
+          }
           status={
             currentDetail ? (
               <StatusTag
@@ -2985,29 +3039,12 @@ const ProvincialExemptionDetailsPage = () => {
                                 </TableHead>
                                 <TableBody>
                                   {applications.map((application) => {
-                                    const federal = application.jurisdiction.toUpperCase() === 'F'
-                                    const canOpen = federal
-                                      ? canPerform('/federalApplicationDetails') &&
-                                        canPerform('viewFederalApplication')
-                                      : canPerform('/applicationDetails')
-                                    const path = federal
-                                      ? `/federal/application/${application.applicationNumber}`
-                                      : `/provincial/application/${application.applicationNumber}`
+                                    const path = applicationRecordPath(application)
                                     return (
                                       <TableRow key={application.applicationNumber}>
                                         <TableCell>
-                                          {canOpen ? (
-                                            <Link
-                                              to={withCurrentSearch(path)}
-                                              state={withDetailReturnTo(
-                                                location.state,
-                                                {
-                                                  label: exemptionPageTitle,
-                                                  to: locationPath(location),
-                                                },
-                                                detailReturnTo,
-                                              )}
-                                            >
+                                          {path ? (
+                                            <Link to={path} state={relatedRecordReturnState}>
                                               {application.applicationNumber}
                                             </Link>
                                           ) : (
@@ -3165,24 +3202,15 @@ const ProvincialExemptionDetailsPage = () => {
                                     row.permitStatus.trim().toUpperCase() === 'ACTIVE'
                                       ? `${row.permitNumber} (Pending)`
                                       : row.permitNumber
+                                  const path = permitRecordPath(row)
                                   return (
                                     <TableRow key={row.permitNumber}>
                                       <TableCell>
-                                        {canPerform('/permitSearch') &&
-                                        canPerform('/permitDetails') ? (
+                                        {path ? (
                                           <Link
                                             className="cds--link"
-                                            to={withCurrentSearch(
-                                              `/provincial/permit/${row.permitNumber}`,
-                                            )}
-                                            state={withDetailReturnTo(
-                                              location.state,
-                                              {
-                                                label: exemptionPageTitle,
-                                                to: locationPath(location),
-                                              },
-                                              detailReturnTo,
-                                            )}
+                                            to={path}
+                                            state={relatedRecordReturnState}
                                           >
                                             {label}
                                           </Link>
