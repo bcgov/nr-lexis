@@ -847,6 +847,12 @@ describe('Create Page Core Flows', () => {
     expect(
       within(firstDialog).queryByText('Confirm the application details are accurate to save'),
     ).toBeNull()
+    // Unticking again shows no error until the next save attempt.
+    await userEvent.click(firstAcknowledgement)
+    expect(
+      within(firstDialog).queryByText('Confirm the application details are accurate to save'),
+    ).toBeNull()
+    await userEvent.click(firstAcknowledgement)
     await userEvent.click(within(firstDialog).getByRole('button', { name: 'Cancel' }))
     await waitFor(() =>
       expect(

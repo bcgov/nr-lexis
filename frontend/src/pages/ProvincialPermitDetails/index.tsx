@@ -377,21 +377,18 @@ const reviewRequestSentResult = (permitNumber: string): PermitActionResult => ({
   kind: 'success',
   title: 'Review request sent',
   message: `Permit ${permitNumber} was sent to the regional office. You'll get an email when it's issued.`,
-  source: 'email',
 })
 const REVIEW_REQUEST_FAILED_RESULT: PermitActionResult = {
   kind: 'error',
   title: 'Review request not sent',
   message:
     "The email couldn't be sent. Save the permit again to retry, or contact your regional export office.",
-  source: 'email',
 }
 const REVIEW_REQUEST_CANCELLED_RESULT: PermitActionResult = {
   kind: 'warning',
   title: 'Review request not sent',
   message:
     "The regional office won't know this permit is ready. Send the request the next time you save, or contact the office.",
-  source: 'email',
 }
 
 /**
@@ -1458,8 +1455,17 @@ const ProvincialPermitDetailsPage = () => {
   }, [actionResult, permitApprovalEmailOpen])
   const [permitApprovalEmailErrorMessage, setPermitApprovalEmailErrorMessage] = useState('')
   const [showPermitApprovalEmailError, setShowPermitApprovalEmailError] = useState(false)
+  // The review request's outcome has its own slot, so the save result it follows stays visible.
+  const [reviewRequestOutcome, setReviewRequestOutcome] = useState<PermitActionResult | null>(null)
+  const reviewRequestOutcomeRef = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    if (!reviewRequestOutcome) return
+    const frame = requestAnimationFrame(() => reviewRequestOutcomeRef.current?.focus())
+    return () => cancelAnimationFrame(frame)
+  }, [reviewRequestOutcome])
   const clearActionNotifications = useCallback(() => {
     setActionResult(null)
+    setReviewRequestOutcome(null)
     setPermitApprovalEmailErrorMessage('')
   }, [])
   const [isRemovingDocumentId, setIsRemovingDocumentId] = useState<string | null>(null)
@@ -1673,6 +1679,7 @@ const ProvincialPermitDetailsPage = () => {
     setOwnerEditClientData(null)
     setAgentEditClientData(null)
     setPermitReviewCheckDue(false)
+    setReviewRequestOutcome(null)
     setPermitReviewRequestOpen(false)
     setPermitReviewRequestCopyTo('')
     permitReviewRequestResultRef.current = null
@@ -5864,6 +5871,7 @@ const ProvincialPermitDetailsPage = () => {
   const saveThenCheckReview = useCallback(
     async (save: () => Promise<boolean>): Promise<boolean> => {
       const onSamePermit = beginPermitRouteWork()
+      setReviewRequestOutcome(null)
       const saved = await save()
       if (saved && onSamePermit()) setPermitReviewCheckDue(true)
       return saved
@@ -7834,6 +7842,16 @@ const ProvincialPermitDetailsPage = () => {
               </div>
             </Column>
           )}
+          {!!reviewRequestOutcome && (
+            <Column sm={4} md={8} lg={16} className="detail-page-error">
+              <div ref={reviewRequestOutcomeRef} tabIndex={-1} className="permit-page-result">
+                <ActionResultNotification
+                  result={reviewRequestOutcome}
+                  onClose={() => setReviewRequestOutcome(null)}
+                />
+              </div>
+            </Column>
+          )}
 
           {!!boicPackageErrorMessage && !blanketOicPackageEditorOpen && (
             <Column sm={4} md={8} lg={16} className="detail-page-error">
@@ -9080,17 +9098,14 @@ const ProvincialPermitDetailsPage = () => {
           confirmLabel="Send request"
           pendingLabel="Sending…"
           restoreFocusAfterAction={false}
-          onError={() => undefined}
           onClose={() => {
             setPermitReviewRequestOpen(false)
-            setActionResult(permitReviewRequestResultRef.current ?? REVIEW_REQUEST_CANCELLED_RESULT)
+            setReviewRequestOutcome(
+              permitReviewRequestResultRef.current ?? REVIEW_REQUEST_CANCELLED_RESULT,
+            )
             permitReviewRequestResultRef.current = null
           }}
-          onConfirm={async () => {
-            if (!(await onSendPermitReviewRequest())) {
-              throw new Error('Review request was not sent.')
-            }
-          }}
+          onConfirm={onSendPermitReviewRequest}
         >
           <TextInput
             id="permit-review-request-send-to"

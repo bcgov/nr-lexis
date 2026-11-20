@@ -41,12 +41,12 @@ const ApplicationAccuracyConfirmation = ({
   const [showConfirmationError, setShowConfirmationError] = useState(false)
 
   // Save stays enabled; without the tick it shows the error on the checkbox and keeps the dialog.
-  const confirm = async () => {
-    if (busy) return
+  const confirm = async (): Promise<boolean | void> => {
+    if (busy) return false
     if (!confirmed) {
       setShowConfirmationError(true)
       document.getElementById(checkboxId)?.focus()
-      throw new Error(APPLICATION_ACCURACY_ERROR)
+      return false
     }
     await onConfirm()
   }
@@ -82,7 +82,10 @@ const ApplicationAccuracyConfirmation = ({
         disabled={busy}
         invalid={showConfirmationError && !confirmed}
         invalidText={fieldErrorText(APPLICATION_ACCURACY_ERROR)}
-        onChange={(_, { checked }) => onConfirmedChange(Boolean(checked))}
+        onChange={(_, { checked }) => {
+          setShowConfirmationError(false)
+          onConfirmedChange(Boolean(checked))
+        }}
       />
     </ConfirmationModal>
   )

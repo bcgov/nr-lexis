@@ -13098,6 +13098,31 @@ describe('Provincial Permit Detail Action Smoke', () => {
     expect(screen.queryByText('Permit review request email could not be sent.')).toBeNull()
   })
 
+  it("keeps a save's caveat in its tab beside the review request outcome", async () => {
+    configureReadyBlanketOicSubmitterPermit()
+    mockedUpdatePermitShipping.mockResolvedValueOnce({
+      success: true,
+      message: 'Saved.',
+      errors: [],
+      warnings: ['test-2026-11-19 caveat.'],
+      source: 'api',
+    })
+    renderPermitDetails()
+
+    await userEvent.click(await screen.findByRole('tab', { name: 'Shipping' }))
+    await userEvent.click(await screen.findByRole('button', { name: /^Edit shipping/ }))
+    await userEvent.clear(screen.getByLabelText('Purchaser'))
+    await userEvent.type(screen.getByLabelText('Purchaser'), 'test-2026-11-19')
+    await userEvent.click(screen.getByRole('button', { name: /^Save (changes|shipping)$/ }))
+    const dialog = await screen.findByRole('dialog', { name: 'Send permit 777 for review?' })
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Cancel' }))
+
+    expect(await screen.findByText('Review request not sent')).toBeVisible()
+    const caveat = screen.getByText('test-2026-11-19 caveat.')
+    expect(caveat).toBeVisible()
+    expect(caveat.closest('[role="tabpanel"]')).not.toBeNull()
+  })
+
   it('warns that the regional office was not told when the review request is cancelled', async () => {
     configureReadyBlanketOicSubmitterPermit()
 

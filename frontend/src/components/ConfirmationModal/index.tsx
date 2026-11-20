@@ -33,7 +33,8 @@ type ConfirmationModalProps = {
   restoreFocusAfterAction?: boolean
   errorTitle?: string
   errorMessage?: string
-  onConfirm: () => Promise<void> | void
+  /** Returning false keeps the dialog open without treating it as a failure, e.g. for a field error. */
+  onConfirm: () => Promise<boolean | void> | boolean | void
   onCancel?: () => void
   onClose: () => void
   onError?: (error: unknown) => void
@@ -136,7 +137,7 @@ const ConfirmationModal = ({
     if (document.activeElement === confirmButtonRef.current) findDialog()?.focus()
     setPending(true)
     try {
-      await onConfirm()
+      if ((await onConfirm()) === false) return
       setFailedAttempts(0)
       closeAndRestoreFocus(false, true)
     } catch (error) {
