@@ -1588,21 +1588,18 @@ public class ExemptionDetailsRpcController {
       throw new DataRetrievalFailureException(
           "Application permit relationships are unavailable for exemption mutation.");
     }
-    for (Long applicationNumber : applicationNumbers) {
-      List<Long> linkedPermits =
-          applicationDetailsService.getPermitNumbersForApplicationMutation(
-              applicationNumber);
-      if (linkedPermits == null) {
+    List<Long> linkedPermits =
+        applicationDetailsService.getPermitNumbersForApplicationsMutation(applicationNumbers);
+    if (linkedPermits == null) {
+      throw new DataRetrievalFailureException(
+          "Application permit relationships could not be loaded for exemption mutation.");
+    }
+    for (Long permitNumber : linkedPermits) {
+      if (permitNumber == null || permitNumber < 1) {
         throw new DataRetrievalFailureException(
-            "Application permit relationships could not be loaded for exemption mutation.");
+            "An application permit relationship returned an invalid permit number.");
       }
-      for (Long permitNumber : linkedPermits) {
-        if (permitNumber == null || permitNumber < 1) {
-          throw new DataRetrievalFailureException(
-              "An application permit relationship returned an invalid permit number.");
-        }
-        permitNumbers.add(permitNumber);
-      }
+      permitNumbers.add(permitNumber);
     }
     return List.copyOf(permitNumbers);
   }

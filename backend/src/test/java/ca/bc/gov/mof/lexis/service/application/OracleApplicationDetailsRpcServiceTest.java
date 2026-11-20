@@ -23,6 +23,7 @@ import java.time.Instant;
 import java.time.LocalDate;
 import java.util.List;
 import java.util.Optional;
+import java.util.TreeSet;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -2008,46 +2009,35 @@ class OracleApplicationDetailsRpcServiceTest {
   }
 
   @Test
-  void permitMutationKeysShouldUnionOrdinaryAndOicRelationships() {
-    when(repository.findPermitsByApplicationNumberRequired(1000456L))
-        .thenReturn(
-            List.of(
-                new ApplicationDetailsRpcRepository.ApplicationPermitRow(7000124L, "Active"),
-                new ApplicationDetailsRpcRepository.ApplicationPermitRow(7000123L, "Complete")));
-    when(repository.findPermitsByOicApplicationNumberRequired(1000456L))
-        .thenReturn(
-            List.of(
-                new ApplicationDetailsRpcRepository.ApplicationPermitRow(7000125L, "Active"),
-                new ApplicationDetailsRpcRepository.ApplicationPermitRow(7000123L, "Complete")));
+  void permitMutationKeysShouldComeFromOneLookupOfOrdinaryAndOicRelationships() {
+    when(repository.findPermitNumbersForApplications(List.of(1000456L)))
+        .thenReturn(new TreeSet<>(List.of(7000125L, 7000123L, 7000124L)));
 
     List<Long> permitNumbers =
         service.getPermitNumbersForApplicationMutation(1000456L);
 
     assertThat(permitNumbers).containsExactly(7000123L, 7000124L, 7000125L);
+    verify(repository, never()).findPermitsByApplicationNumberRequired(any());
   }
 
   @Test
   void permitMutationKeysShouldAllowAuthoritativeNoLinkResult() {
-    when(repository.findPermitsByApplicationNumberRequired(1000456L))
-        .thenReturn(List.of());
-    when(repository.findPermitsByOicApplicationNumberRequired(1000456L))
-        .thenReturn(List.of());
+    when(repository.findPermitNumbersForApplications(List.of(1000456L)))
+        .thenReturn(new TreeSet<>());
 
     assertThat(service.getPermitNumbersForApplicationMutation(1000456L)).isEmpty();
   }
 
   @Test
-  void permitMutationKeysShouldFailClosedForInvalidRelationship() {
-    when(repository.findPermitsByApplicationNumberRequired(1000456L))
-        .thenReturn(
-            List.of(
-                new ApplicationDetailsRpcRepository.ApplicationPermitRow(null, "Unknown")));
-    when(repository.findPermitsByOicApplicationNumberRequired(1000456L))
-        .thenReturn(List.of());
+  void permitMutationKeysForSeveralApplicationsShouldUseOneLookup() {
+    List<Long> applications = List.of(1000457L, 1000456L);
+    when(repository.findPermitNumbersForApplications(applications))
+        .thenReturn(new TreeSet<>(List.of(7000124L, 7000123L)));
 
-    assertThatThrownBy(() -> service.getPermitNumbersForApplicationMutation(1000456L))
-        .isInstanceOf(DataRetrievalFailureException.class)
-        .hasMessageContaining("invalid permit number");
+    assertThat(service.getPermitNumbersForApplicationsMutation(applications))
+        .containsExactly(7000123L, 7000124L);
+    assertThat(service.getPermitNumbersForApplicationsMutation(List.of())).isEmpty();
+    verify(repository).findPermitNumbersForApplications(applications);
   }
 
   @ParameterizedTest

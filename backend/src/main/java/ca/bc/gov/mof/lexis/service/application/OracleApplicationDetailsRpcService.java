@@ -21,6 +21,7 @@ import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.Comparator;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
@@ -939,29 +940,18 @@ public class OracleApplicationDetailsRpcService implements ApplicationDetailsRpc
     if (applicationNumber == null || applicationNumber < 1) {
       throw new IllegalArgumentException("Application number must be positive.");
     }
-
-    Set<Long> permitNumbers = new TreeSet<>();
-    List<ApplicationDetailsRpcRepository.ApplicationPermitRow> ordinaryPermits =
-        repository.findPermitsByApplicationNumberRequired(applicationNumber);
-    List<ApplicationDetailsRpcRepository.ApplicationPermitRow> oicPermits =
-        repository.findPermitsByOicApplicationNumberRequired(applicationNumber);
-    if (ordinaryPermits == null || oicPermits == null) {
-      throw new DataRetrievalFailureException(
-          "Permit relationships could not be loaded for application " + applicationNumber + ".");
-    }
-    ordinaryPermits.forEach(row -> addPermitNumberForMutation(row, permitNumbers));
-    oicPermits.forEach(row -> addPermitNumberForMutation(row, permitNumbers));
-    return List.copyOf(permitNumbers);
+    return getPermitNumbersForApplicationsMutation(List.of(applicationNumber));
   }
 
-  private void addPermitNumberForMutation(
-      ApplicationDetailsRpcRepository.ApplicationPermitRow row, Set<Long> permitNumbers) {
-    Long permitNumber = row == null ? null : row.permitNumber();
-    if (permitNumber == null || permitNumber < 1) {
-      throw new DataRetrievalFailureException(
-          "An application permit relationship returned an invalid permit number.");
+  @Override
+  public List<Long> getPermitNumbersForApplicationsMutation(Collection<Long> applicationNumbers) {
+    if (applicationNumbers == null) {
+      throw new IllegalArgumentException("Application numbers are required.");
     }
-    permitNumbers.add(permitNumber);
+    if (applicationNumbers.isEmpty()) {
+      return List.of();
+    }
+    return List.copyOf(repository.findPermitNumbersForApplications(applicationNumbers));
   }
 
   @Override
