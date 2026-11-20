@@ -32,6 +32,8 @@ export type ValidationResultNotice = {
   subtitle: string
 }
 
+const CORRECT_FAILED_FILES = 'Correct the issues listed below in your files, then add them again.'
+
 const countLabel = (count: number, singular: string, plural: string): string =>
   `${count} ${count === 1 ? singular : plural}`
 
@@ -61,17 +63,14 @@ export const validationResultNotice = (
   if (validCount === 0) {
     return {
       kind: 'error',
-      title: `${countLabel(failedCount, 'file', 'files')} failed validation`,
-      subtitle:
-        failedCount === 1
-          ? 'Correct the file and add it again.'
-          : 'Correct the files and add them again.',
+      title: `${countLabel(failedCount, 'file', 'files')} can't be created`,
+      subtitle: CORRECT_FAILED_FILES,
     }
   }
   return {
     kind: 'error',
     title: `${failedCount} of ${files.length} files can't be created`,
-    subtitle: `Correct the issues listed below in your files, then add them again. You can also review and create the valid ${validCount === 1 ? 'file' : 'files'} now.`,
+    subtitle: `${CORRECT_FAILED_FILES} You can also review and create the valid ${validCount === 1 ? 'file' : 'files'} now.`,
   }
 }
 

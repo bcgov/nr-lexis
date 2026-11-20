@@ -3428,8 +3428,10 @@ test.describe('FSPTS-aligned LEXIS shell', () => {
       buffer: Buffer.from('<InvalidLexisSubmission />', 'utf8'),
     })
 
-    await expect(page.getByText('1 file failed validation')).toBeVisible()
-    await expect(page.getByText('Correct the file and add it again.')).toBeVisible()
+    await expect(page.getByText("1 file can't be created")).toBeVisible()
+    await expect(
+      page.getByText('Correct the issues listed below in your files, then add them again.'),
+    ).toBeVisible()
     await expect(page.locator('.application-upload-file--failed')).toHaveCSS(
       'border-top-color',
       'rgb(179, 32, 1)',
