@@ -3761,6 +3761,20 @@ class PermitDetailsRpcControllerTest {
   }
 
   @Test
+  void removePermitDocumentShouldRejectStaffWithoutWriteAccessToThePermitRegion() {
+    TestingAuthenticationToken authentication = authorizedSavePermit();
+    when(serviceProvider.getIfAvailable()).thenReturn(service);
+    stubPermitDocument(33L, "permit");
+    doThrow(new org.springframework.security.access.AccessDeniedException("outside region"))
+        .when(provincialAuthorizationService)
+        .requirePermitAttachmentMutation(authentication, 7000123L);
+
+    assertThatThrownBy(() -> controller.removePermitDocument("33", 7000123L, authentication))
+        .isInstanceOf(org.springframework.security.access.AccessDeniedException.class);
+    verify(service, never()).removePermitDocument(any());
+  }
+
+  @Test
   void removePermitDocumentShouldRejectInvoiceSource() {
     TestingAuthenticationToken authentication = authorizedSavePermit();
     when(serviceProvider.getIfAvailable()).thenReturn(service);

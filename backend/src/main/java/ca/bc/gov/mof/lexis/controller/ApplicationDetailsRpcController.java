@@ -289,7 +289,7 @@ public class ApplicationDetailsRpcController {
     }
     Long parsedDocumentId = parsePositiveLong(documentId);
     Long parsedApplicationNumber = parsePositiveLong(applicationNumber);
-    requireApplicationAccess(parsedApplicationNumber, authentication);
+    requireApplicationDocumentWrite(parsedApplicationNumber, authentication);
     if (!applicationDocumentCanBeRemovedFromApplication(
         service, parsedDocumentId, parsedApplicationNumber)) {
       return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
@@ -306,7 +306,7 @@ public class ApplicationDetailsRpcController {
     return operationCoordinator.executeApplicationLocalMutation(
         parsedApplicationNumber,
         () -> {
-          requireApplicationAccess(parsedApplicationNumber, authentication);
+          requireApplicationDocumentWrite(parsedApplicationNumber, authentication);
           if (!applicationDocumentCanBeRemovedFromApplication(
               service, parsedDocumentId, parsedApplicationNumber)) {
             return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
@@ -1991,6 +1991,14 @@ public class ApplicationDetailsRpcController {
 
   private void requireApplicationAccess(Long applicationNumber, Authentication authentication) {
     provincialAuthorizationService.requireApplication(authentication, applicationNumber);
+  }
+
+  // Deleting a document needs the same write access as adding one: the application's region for
+  // staff, the scoped client for a Provincial Submitter.
+  private void requireApplicationDocumentWrite(Long applicationNumber, Authentication authentication) {
+    requireApplicationAccess(applicationNumber, authentication);
+    provincialAuthorizationService.requireApplicationAttachmentMutation(
+        authentication, applicationNumber);
   }
 
   private void requirePermitAccess(Long permitNumber, Authentication authentication) {

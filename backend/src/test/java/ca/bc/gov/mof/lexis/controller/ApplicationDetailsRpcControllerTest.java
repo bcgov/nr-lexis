@@ -397,6 +397,19 @@ class ApplicationDetailsRpcControllerTest {
   }
 
   @Test
+  void removeDocumentShouldRejectStaffWithoutWriteAccessToTheApplicationRegion() {
+    TestingAuthenticationToken authentication = authorized();
+    when(serviceProvider.getIfAvailable()).thenReturn(service);
+    doThrow(new org.springframework.security.access.AccessDeniedException("outside region"))
+        .when(provincialAuthorizationService)
+        .requireApplicationAttachmentMutation(authentication, 1000456L);
+
+    assertThatThrownBy(() -> controller.removeDocument("55", "1000456", authentication))
+        .isInstanceOf(org.springframework.security.access.AccessDeniedException.class);
+    verify(service, never()).removeDocument(any());
+  }
+
+  @Test
   void removeDocumentShouldFailClosedWhenRpcServiceIsUnavailable() {
     TestingAuthenticationToken authentication = authorized();
     when(serviceProvider.getIfAvailable()).thenReturn(null);
