@@ -39,6 +39,9 @@ import {
 import ProvincialApplicationDetailsPage from '@/pages/ProvincialApplicationDetails'
 import { formatBusinessIsoDate } from '@/utils/date'
 
+const PACKAGE_VOLUME_WARNING =
+  'The sum of the package volume is less than the total application volume.'
+
 const getOwnerClientDetailsTile = (): HTMLElement => {
   const title = screen.getByRole('heading', {
     name: 'Applicant details',
@@ -1030,7 +1033,7 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
       screen.getByText('The application was saved.').closest('.cds--inline-notification'),
     ).toHaveClass('cds--inline-notification--success')
     expectSavedNoticeAboveTile(getOwnerClientDetailsTile())
-    expect(screen.queryByText('Review package volumes')).not.toBeInTheDocument()
+    expect(screen.queryByText(PACKAGE_VOLUME_WARNING)).not.toBeInTheDocument()
   })
 
   it("keeps a saved Ministerial applicant type when I'm an agent is cleared again", async () => {
@@ -2112,7 +2115,7 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
     })
     expect(await screen.findByText('The application was saved.')).toBeInTheDocument()
     expectSavedNoticeAboveTile(getApplicationSummaryTile())
-    expect(screen.queryByText('Review package volumes')).not.toBeInTheDocument()
+    expect(screen.queryByText(PACKAGE_VOLUME_WARNING)).not.toBeInTheDocument()
   }, 30000)
 
   it.each(['owner', 'agent'] as const)(
@@ -2176,7 +2179,7 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
           }),
         ),
       )
-      expect(screen.queryByText('Review package volumes')).not.toBeInTheDocument()
+      expect(screen.queryByText(PACKAGE_VOLUME_WARNING)).not.toBeInTheDocument()
     },
   )
 
@@ -2209,7 +2212,7 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
         expect.objectContaining({ termDays: '31' }),
       )
     })
-    expect(screen.queryByText('Review package volumes')).not.toBeInTheDocument()
+    expect(screen.queryByText(PACKAGE_VOLUME_WARNING)).not.toBeInTheDocument()
   })
 
   it('enforces the single exemption term day input boundaries before saving', async () => {
@@ -2237,14 +2240,14 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
     expect(await screen.findAllByText('Exemption term must be 99999 or less')).toHaveLength(1)
     expect(termDays).toHaveAttribute('aria-invalid', 'true')
     await waitFor(() => expect(termDays).toHaveFocus())
-    expect(screen.queryByText('Review package volumes')).not.toBeInTheDocument()
+    expect(screen.queryByText(PACKAGE_VOLUME_WARNING)).not.toBeInTheDocument()
     expect(mockedUpdateApplicationSummary).not.toHaveBeenCalled()
 
     fireEvent.change(termDays, { target: { value: '0' } })
     await userEvent.click(screen.getByRole('button', { name: 'Save changes' }))
 
     expect(await screen.findAllByText('Exemption term must be greater than 0')).toHaveLength(1)
-    expect(screen.queryByText('Review package volumes')).not.toBeInTheDocument()
+    expect(screen.queryByText(PACKAGE_VOLUME_WARNING)).not.toBeInTheDocument()
     expect(mockedUpdateApplicationSummary).not.toHaveBeenCalled()
   })
 
@@ -2272,7 +2275,7 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
     await userEvent.click(itemDetails.getByRole('button', { name: 'Save changes' }))
 
     expect(itemDetails.getByText('Location of logs must be 250 characters or fewer')).toBeVisible()
-    expect(screen.queryByText('Review package volumes')).not.toBeInTheDocument()
+    expect(screen.queryByText(PACKAGE_VOLUME_WARNING)).not.toBeInTheDocument()
     expect(mockedUpdateApplicationSummary).not.toHaveBeenCalled()
   })
 
@@ -3692,14 +3695,13 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
     await chooseComboBoxOption(getSummaryComboBox(application, 'End use'), 'Lumber')
     await userEvent.click(application.getByRole('button', { name: 'Save changes' }))
 
-    expect(
-      await screen.findByText(
-        'The sum of package volumes is less than the total application volume. Review package volumes or save again to continue.',
-      ),
-    ).toBeInTheDocument()
+    const dialog = await screen.findByRole('dialog', { name: 'Confirm application details' })
+    expect(within(dialog).getByText('Warning')).toBeVisible()
+    expect(within(dialog).getByText(PACKAGE_VOLUME_WARNING)).toBeVisible()
+    expect(within(dialog).queryByRole('checkbox')).not.toBeInTheDocument()
     expect(mockedUpdateApplicationSummary).not.toHaveBeenCalled()
 
-    await userEvent.click(application.getByRole('button', { name: 'Save changes' }))
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Save changes' }))
     await waitFor(() => {
       expect(mockedUpdateApplicationSummary).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -3826,7 +3828,7 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
     )
   })
 
-  it('requires submitter accuracy confirmation while preserving the volume warning', async () => {
+  it('shows the volume warning with the submitter accuracy confirmation', async () => {
     const visibleRects = vi
       .spyOn(HTMLElement.prototype, 'getClientRects')
       .mockReturnValue([new DOMRect(0, 0, 100, 100)] as unknown as DOMRectList)
@@ -3867,10 +3869,11 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
     expect(firstAcknowledgement).not.toBeChecked()
     expect(firstConfirm).toBeEnabled()
     await userEvent.click(firstConfirm)
+    expect(within(firstDialog).getByText(PACKAGE_VOLUME_WARNING)).toBeVisible()
     expect(
       await within(firstDialog).findByText('Confirm the application details are accurate to save'),
     ).toBeVisible()
-    expect(screen.queryByText('Review package volumes')).not.toBeInTheDocument()
+    expect(firstAcknowledgement).toHaveFocus()
     expect(mockedUpdateApplicationSummary).not.toHaveBeenCalled()
 
     await userEvent.click(firstAcknowledgement)
@@ -3884,24 +3887,9 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
       name: 'I confirm the application details are accurate',
     })
     expect(reopenedAcknowledgement).not.toBeChecked()
+    expect(screen.getAllByText(PACKAGE_VOLUME_WARNING)).toHaveLength(1)
     await userEvent.click(reopenedAcknowledgement)
     await userEvent.click(within(reopenedDialog).getByRole('button', { name: 'Save changes' }))
-
-    const warning = await within(reopenedDialog).findByText(
-      'The sum of package volumes is less than the total application volume. Review package volumes or save again to continue.',
-    )
-    expect(warning).toBeInTheDocument()
-    // The warning takes focus from the Save button the check disabled.
-    await waitFor(() => expect(warning.closest('.app-inline-notification')).toHaveFocus())
-    expect(screen.getAllByText('Review package volumes')).toHaveLength(1)
-    expect(mockedUpdateApplicationSummary).not.toHaveBeenCalled()
-    expect(reopenedDialog).toBeVisible()
-    expect(reopenedAcknowledgement).toBeChecked()
-    await userEvent.click(
-      within(reopenedDialog).getByRole('button', {
-        name: 'Save changes',
-      }),
-    )
 
     await waitFor(() => expect(mockedUpdateApplicationSummary).toHaveBeenCalledTimes(1))
   })
@@ -4312,7 +4300,7 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
     })
   })
 
-  it('warns when the application volume is raised above the package total, then saves on the next save', async () => {
+  it('warns in the confirmation when the application volume is raised above the package total', async () => {
     renderApplicationDetailPage()
 
     const itemDetails = within(await selectApplicationItemDetailsTile())
@@ -4321,14 +4309,11 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
     })
     await userEvent.click(itemDetails.getByRole('button', { name: 'Save changes' }))
 
-    expect(
-      await screen.findByText(
-        'The sum of package volumes is less than the total application volume. Review package volumes or save again to continue.',
-      ),
-    ).toBeVisible()
+    const dialog = await screen.findByRole('dialog', { name: 'Confirm application details' })
+    expect(within(dialog).getByText(PACKAGE_VOLUME_WARNING)).toBeVisible()
     expect(mockedUpdateApplicationSummary).not.toHaveBeenCalled()
 
-    await userEvent.click(itemDetails.getByRole('button', { name: 'Save changes' }))
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Save changes' }))
     await waitFor(() =>
       expect(mockedUpdateApplicationSummary).toHaveBeenCalledWith(
         expect.objectContaining({ saveSource: 'items', applicationVolume: '100.1' }),
@@ -4350,7 +4335,7 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
         expect.objectContaining({ saveSource: 'items', applicationVolume: '99.9' }),
       ),
     )
-    expect(screen.queryByText('Review package volumes')).not.toBeInTheDocument()
+    expect(screen.queryByText(PACKAGE_VOLUME_WARNING)).not.toBeInTheDocument()
   })
 
   it('does not warn when the application volume is lowered to the package total', async () => {
@@ -4375,7 +4360,7 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
         expect.objectContaining({ saveSource: 'items', applicationVolume: '100.0' }),
       ),
     )
-    expect(screen.queryByText('Review package volumes')).not.toBeInTheDocument()
+    expect(screen.queryByText(PACKAGE_VOLUME_WARNING)).not.toBeInTheDocument()
   })
 
   it.each([
@@ -4393,11 +4378,11 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
       await userEvent.click(itemDetails.getByRole('button', { name: 'Save changes' }))
 
       if (warns) {
-        expect(await screen.findByText('Review package volumes')).toBeVisible()
+        expect(await screen.findByText(PACKAGE_VOLUME_WARNING)).toBeVisible()
         expect(mockedUpdateApplicationSummary).not.toHaveBeenCalled()
       } else {
         await waitFor(() => expect(mockedUpdateApplicationSummary).toHaveBeenCalledTimes(1))
-        expect(screen.queryByText('Review package volumes')).not.toBeInTheDocument()
+        expect(screen.queryByText(PACKAGE_VOLUME_WARNING)).not.toBeInTheDocument()
       }
     },
   )
@@ -4419,7 +4404,7 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
     await userEvent.click(itemDetails.getByRole('button', { name: 'Save changes' }))
 
     await waitFor(() => expect(mockedUpdateApplicationSummary).toHaveBeenCalledTimes(1))
-    expect(screen.queryByText('Review package volumes')).not.toBeInTheDocument()
+    expect(screen.queryByText(PACKAGE_VOLUME_WARNING)).not.toBeInTheDocument()
   })
 
   it.each([

@@ -3347,7 +3347,7 @@ describe.sequential('Provincial Application Detail Actions - items', () => {
     expect(mockedAddApplicationScaleToPackage).not.toHaveBeenCalled()
   })
 
-  it('warns once before saving summary when package volumes do not consume application volume', async () => {
+  it('warns in the confirmation when package volumes do not consume the application volume', async () => {
     mockedCheckApplicationVolumeUsage.mockResolvedValue({ volumeUsed: false })
     const visibleRects = vi
       .spyOn(HTMLElement.prototype, 'getClientRects')
@@ -3373,14 +3373,15 @@ describe.sequential('Provincial Application Detail Actions - items', () => {
     })
     await userEvent.click(itemDetails.getByRole('button', { name: 'Save changes' }))
 
-    const warning = await screen.findByText(
-      'The sum of package volumes is less than the total application volume. Review package volumes or save again to continue.',
-    )
-    // The warning takes focus from the Save button the check disabled.
-    await waitFor(() => expect(warning.closest('.app-inline-notification')).toHaveFocus())
+    const dialog = await screen.findByRole('dialog', { name: 'Confirm application details' })
+    expect(
+      within(dialog).getByText(
+        'The sum of the package volume is less than the total application volume.',
+      ),
+    ).toBeVisible()
     expect(mockedUpdateApplicationSummary).not.toHaveBeenCalled()
 
-    await userEvent.click(itemDetails.getByRole('button', { name: 'Save changes' }))
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Save changes' }))
 
     await waitFor(() => {
       expect(mockedUpdateApplicationSummary).toHaveBeenCalledTimes(1)
