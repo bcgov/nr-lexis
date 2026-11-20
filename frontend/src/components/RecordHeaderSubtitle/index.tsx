@@ -40,14 +40,16 @@ const RelatedRecordGroupLinks = ({
   const renderRecord = (record: RelatedRecordLink, index: number) => (
     <Fragment key={record.recordNumber}>
       {index > 0 ? ', ' : null}
-      {record.to ? (
-        <Link to={record.to} state={record.state}>
-          {record.recordNumber}
-        </Link>
-      ) : (
-        record.recordNumber
-      )}
-      {record.status?.trim() ? ` (${record.status.trim()})` : null}
+      <span className="record-header-subtitle__record">
+        {record.to ? (
+          <Link to={record.to} state={record.state}>
+            {record.recordNumber}
+          </Link>
+        ) : (
+          record.recordNumber
+        )}
+        {record.status?.trim() ? ` (${record.status.trim()})` : null}
+      </span>
     </Fragment>
   )
 

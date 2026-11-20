@@ -782,6 +782,43 @@ class OracleExemptionDetailsRpcServiceTest {
     }
   }
 
+  @ParameterizedTest
+  @CsvSource({"NEW,Exempted - New", "ACT,Exempted"})
+  void getApplicationsShouldShowExemptedApplicationsOnANewExemptionAsExemptedNew(
+      String exemptionStatus, String expectedStatusDescription) {
+    when(repository.findApplicationSummariesByExemptionNumber("EX-205"))
+        .thenReturn(
+            List.of(
+                new ExemptionDetailsRpcRepository.ApplicationSummaryRow(
+                    1000456L,
+                    95.0d,
+                    95.0d,
+                    "00077881",
+                    null,
+                    null,
+                    null,
+                    null,
+                    null,
+                    null,
+                    null,
+                    null,
+                    "P",
+                    "S",
+                    "EXE",
+                    "Exempted")));
+    when(repository.findExemptionRecord("EX-205"))
+        .thenReturn(Optional.of(exemption(exemptionStatus)));
+    when(repository.findPermitsByApplicationNumberRequired(1000456L)).thenReturn(List.of());
+
+    ExemptionDetailsRpcService.ExemptionApplicationsResponse response =
+        service.getApplications("EX-205", true, ignored -> true);
+
+    assertThat(response.applications())
+        .singleElement()
+        .extracting(ExemptionDetailsRpcService.ApplicationItem::statusDescription)
+        .isEqualTo(expectedStatusDescription);
+  }
+
   @Test
   void mutationApplicationDiscoveryShouldIncludeEveryJurisdictionAndDeduplicate() {
     when(repository.findApplicationSummariesByExemptionNumber("EX-205"))

@@ -3,6 +3,11 @@
   flex-direction: column;
 }
 
+/* A status stays on the line of its number. */
+.record-header-subtitle__record {
+  white-space: nowrap;
+}
+
 .record-header-subtitle__toggle {
   padding: 0;
   border: 0;

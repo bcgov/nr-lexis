@@ -70,7 +70,9 @@ describe('RecordHeaderSubtitle', () => {
       'Application number: 47200 (Permitted)',
       'Permit numbers: 9021135 (Complete), 9021136',
     ])
-    expect(screen.getByRole('link', { name: '9021135' })).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: '9021135' }).parentElement).toHaveTextContent(
+      /^9021135 \(Complete\)$/,
+    )
   })
 
   it('shows five records of a long list until all are asked for', async () => {

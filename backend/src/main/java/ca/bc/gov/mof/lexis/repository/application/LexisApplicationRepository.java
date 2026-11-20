@@ -571,7 +571,8 @@ public class LexisApplicationRepository extends OracleRepositorySupport {
             : "");
   }
 
-  private String displayStatus(
+  /** An Exempted application on a New exemption reads "Exempted - New". */
+  public static String displayStatus(
       String applicationStatusCode,
       String applicationStatusDescription,
       String exemptionStatusCode) {
