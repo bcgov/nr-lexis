@@ -2442,7 +2442,7 @@ test.describe('FSPTS-aligned LEXIS shell', () => {
     })
 
     expect(detailHeaderLayout.breadcrumbInset).toBe(44)
-    expect(detailHeaderLayout.breadcrumbGap).toBe(40)
+    expect(detailHeaderLayout.breadcrumbGap).toBe(24)
 
     await page.setViewportSize({ width: 390, height: 844 })
     await expect(page.getByRole('heading', { level: 1, name: 'Offer 81001' })).toBeVisible()
