@@ -1557,14 +1557,18 @@ const ProvincialExemptionDetailsPage = () => {
       setEditContextRefreshing(true)
       setEditContextLoaded(false)
       try {
-        const [nextDetail, nextApplications, nextContext] = await Promise.all([
-          fetchProvincialExemptionDetail(exemptionNumber),
-          fetchExemptionApplications(exemptionNumber),
-          fetchExemptionEditContext(exemptionNumber),
-        ])
+        const nextDetail = await fetchProvincialExemptionDetail(exemptionNumber)
         if (!nextDetail) {
           throw new Error('Exemption detail was not found after mutation.')
         }
+        // Read after the detail's record version, so none of them is older than it.
+        const [[nextApplications, nextContext]] = await Promise.all([
+          Promise.all([
+            fetchExemptionApplications(exemptionNumber),
+            fetchExemptionEditContext(exemptionNumber),
+          ]),
+          refreshPermitData(nextDetail.exemptionNumber),
+        ])
         setDetail(nextDetail)
         setApplications(nextApplications.applications)
         setExemptionHolder(nextApplications.ownerNumber)
@@ -1573,7 +1577,6 @@ const ProvincialExemptionDetailsPage = () => {
         setEditContext(nextContext)
         setEditContextLoaded(true)
         setEditForm(toEditForm(nextDetail, nextContext))
-        await refreshPermitData(nextDetail.exemptionNumber)
       } catch (error) {
         if (!preserveCurrentStateOnFailure) {
           setApplications([])
