@@ -1642,11 +1642,19 @@ test.describe('FSPTS-aligned LEXIS shell', () => {
           Math.abs(applicationLayout[clientField].width - (singleColumnWidth * 2 + columnGap)),
         ).toBeLessThanOrEqual(1)
       }
-      for (const dateField of ['listingFromDate', 'listingToDate']) {
-        expect(
-          Math.abs(applicationLayout[dateField].width - singleColumnWidth),
-        ).toBeLessThanOrEqual(1)
-      }
+      // From and To sit side by side, together no wider than 20rem, so the calendar spans both.
+      expect(
+        Math.abs(
+          applicationLayout.listingToDate.left -
+            (applicationLayout.listingFromDate.left + applicationLayout.listingFromDate.width),
+        ),
+      ).toBeLessThanOrEqual(1)
+      expect(
+        applicationLayout.listingFromDate.width + applicationLayout.listingToDate.width,
+      ).toBeLessThanOrEqual(321)
+      expect(
+        Math.abs(applicationLayout.listingFromDate.left - applicationLayout.applicationNumber.left),
+      ).toBeLessThanOrEqual(1)
       expectSameRow(applicationLayout, ['exemptionType', 'applicationStatus'])
       expect(applicationLayout.productTypeCode.top).toBeGreaterThan(
         Math.max(
@@ -1778,6 +1786,38 @@ test.describe('FSPTS-aligned LEXIS shell', () => {
         expectSameRow(offerLayout, ['withdrawalFromDate', 'withdrawalToDate'])
       }
     }
+
+    // Once a column fits the calendar, a range takes one column and its calendar spans both inputs.
+    await page.setViewportSize({ width: 1920, height: 900 })
+    await gotoSyntheticRoute(page, '/provincial/application', {
+      waitUntil: 'domcontentloaded',
+      ready: page.locator('.provincial-application-search-grid'),
+    })
+    const wideLayout = await readFieldLayout('.provincial-application-search-grid', [
+      'applicationNumber',
+      'packageNumber',
+      'listingFromDate',
+      'listingToDate',
+      'exemptionType',
+    ])
+    expect(
+      Math.abs(wideLayout.listingFromDate.left - wideLayout.applicationNumber.left),
+    ).toBeLessThanOrEqual(1)
+    expect(wideLayout.listingToDate.left + wideLayout.listingToDate.width).toBeLessThanOrEqual(
+      wideLayout.applicationNumber.left + wideLayout.applicationNumber.width + 1,
+    )
+    expect(
+      Math.abs(wideLayout.exemptionType.left - wideLayout.packageNumber.left),
+    ).toBeLessThanOrEqual(1)
+    expectSameRow(wideLayout, ['listingFromDate', 'listingToDate', 'exemptionType'])
+
+    await page.getByRole('textbox', { name: 'List date to', exact: true }).click()
+    const calendar = page.locator('.flatpickr-calendar.open')
+    await expect(calendar).toBeVisible()
+    const calendarBounds = await calendar.boundingBox()
+    expect(calendarBounds).not.toBeNull()
+    expect(Math.abs(calendarBounds!.x - wideLayout.listingFromDate.left)).toBeLessThanOrEqual(1)
+    expect(calendarBounds!.x + calendarBounds!.width).toBeGreaterThan(wideLayout.listingToDate.left)
   })
 
   test('uses accessible dark interactions and stable FSPTS table rows', async ({ page }) => {
