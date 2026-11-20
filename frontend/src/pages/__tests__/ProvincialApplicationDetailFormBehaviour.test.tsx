@@ -70,7 +70,7 @@ describe.sequential('Provincial Application Detail - form behaviour', () => {
   it.each([
     { tab: 'Applicant', edit: 'Edit applicant details' },
     { tab: 'Application', edit: 'Edit application details' },
-    { tab: 'Scale', edit: 'Edit scale details' },
+    { tab: 'Package and scale', edit: 'Edit advertising details' },
   ])(
     'closes unchanged $tab editing without a request or accuracy prompt',
     async ({ tab, edit }) => {
@@ -82,8 +82,8 @@ describe.sequential('Provincial Application Detail - form behaviour', () => {
         cardTile(
           tab === 'Applicant'
             ? 'Applicant details'
-            : tab === 'Scale'
-              ? 'Scale details'
+            : tab === 'Package and scale'
+              ? 'Advertising details'
               : 'Application details',
         ),
       )
@@ -142,10 +142,10 @@ describe.sequential('Provincial Application Detail - form behaviour', () => {
       firstField: () => getSummaryComboBox(within(cardTile('Application details')), 'Region'),
     },
     {
-      tab: 'Scale',
-      card: 'Scale details',
-      edit: 'Edit scale details',
-      firstField: () => within(cardTile('Scale details')).getByLabelText('Location of logs'),
+      tab: 'Package and scale',
+      card: 'Advertising details',
+      edit: 'Edit advertising details',
+      firstField: () => within(cardTile('Advertising details')).getByLabelText('Location of logs'),
     },
     {
       tab: 'Review',
@@ -476,7 +476,10 @@ describe.sequential('Provincial Application Detail - form behaviour', () => {
 
     await selectApplicationDetailTab('Application')
     await userEvent.click(await screen.findByRole('button', { name: 'Keep editing' }))
-    expect(screen.getByRole('tab', { name: 'Scale' })).toHaveAttribute('aria-selected', 'true')
+    expect(screen.getByRole('tab', { name: 'Package and scale' })).toHaveAttribute(
+      'aria-selected',
+      'true',
+    )
     expect(volume).toHaveValue('9')
 
     await selectApplicationDetailTab('Application')
@@ -524,7 +527,7 @@ describe.sequential('Provincial Application Detail - form behaviour', () => {
     await waitFor(() => expect(volume).toBeEnabled())
     await userEvent.clear(volume)
     await userEvent.type(volume, '9')
-    const editScale = screen.getByRole('button', { name: 'Edit scale details' })
+    const editScale = screen.getByRole('button', { name: 'Edit advertising details' })
     expect(editScale).toBeEnabled()
 
     await userEvent.click(editScale)
@@ -546,7 +549,7 @@ describe.sequential('Provincial Application Detail - form behaviour', () => {
   it('replaces an unchanged package panel with scale editing without a prompt', async () => {
     renderApplicationDetail('/provincial/application/321?tab=items')
     await userEvent.click(await screen.findByRole('button', { name: 'Create package' }))
-    await userEvent.click(screen.getByRole('button', { name: 'Edit scale details' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Edit advertising details' }))
 
     expect(packageDrawer()).toBeNull()
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
@@ -622,7 +625,7 @@ describe.sequential('Provincial Application Detail - form behaviour', () => {
     await userEvent.click(drawer.getByRole('button', { name: 'Save package' }))
 
     expect(await drawer.findByRole('button', { name: 'Saving package' })).toBeDisabled()
-    expect(screen.getByRole('button', { name: 'Edit scale details' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Edit advertising details' })).toBeDisabled()
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
     expect(mockedUpdateApplicationPackage).toHaveBeenCalledTimes(1)
   })

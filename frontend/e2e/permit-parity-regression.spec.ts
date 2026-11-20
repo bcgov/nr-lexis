@@ -724,7 +724,7 @@ test.describe('Provincial permit parity regressions', () => {
     await expect(
       page.getByRole('heading', { name: 'Volume and remarks', exact: true }),
     ).toHaveCount(0)
-    await selectTab(page, 'Scale')
+    await selectTab(page, 'Package and scale')
     await expect(
       page.getByRole('heading', { name: 'No packages for this permit', exact: true }),
     ).toBeVisible()
@@ -840,7 +840,7 @@ test.describe('Provincial permit parity regressions', () => {
     })
     await expect(page.getByRole('heading', { level: 1, name: /Permit 91001/ })).toBeVisible()
 
-    await selectTab(page, 'Scale')
+    await selectTab(page, 'Package and scale')
     const itemTable = page.getByRole('region', { name: 'Permit item rows' }).getByRole('table')
     await expect(itemTable).toBeVisible()
     await expect(
@@ -888,7 +888,7 @@ test.describe('Provincial permit parity regressions', () => {
     await expect(applications).toContainText('3.0')
     await expect(applications.getByRole('checkbox')).toHaveCount(0)
 
-    await selectTab(page, 'Scale')
+    await selectTab(page, 'Package and scale')
     const scaleRows = page.getByRole('region', { name: 'Scale rows', exact: true })
     const comments = page.getByRole('term').filter({ hasText: /^Comments$/ })
     await expect(comments.locator('..')).toContainText('First package notes')
@@ -931,7 +931,7 @@ test.describe('Provincial permit parity regressions', () => {
     await page
       .getByRole('combobox', { name: 'Package number', exact: true })
       .scrollIntoViewIfNeeded()
-    await selectTab(page, 'Scale')
+    await selectTab(page, 'Package and scale')
     await expect(scaleRows).toContainText('TM-A')
     await expect(scaleRows).not.toContainText('TM-B')
     expect(fixture.writes).toEqual([])
@@ -945,7 +945,7 @@ test.describe('Provincial permit parity regressions', () => {
     await gotoSyntheticRoute(page, '/provincial/permit/91002', {
       ready: page.getByRole('heading', { level: 1, name: 'Permit 91002 (Pending)', exact: true }),
     })
-    await selectTab(page, 'Scale')
+    await selectTab(page, 'Package and scale')
     await expect(page.getByRole('region', { name: 'Summary of scale' })).toBeVisible()
     await page.getByRole('button', { name: 'Add scale', exact: true }).click()
     const panel = page.locator('.permit-scale-panel')
@@ -1180,7 +1180,7 @@ test.describe('Provincial permit parity regressions', () => {
     await gotoSyntheticRoute(page, '/provincial/permit/91002', {
       ready: page.getByRole('heading', { level: 1, name: 'Permit 91002 (Pending)', exact: true }),
     })
-    await selectTab(page, 'Scale')
+    await selectTab(page, 'Package and scale')
     const content = page.locator('#permit-detail-content')
     const initialContentLayout = await content.evaluate((element) => ({
       right: element.getBoundingClientRect().right,
@@ -1269,7 +1269,7 @@ test.describe('Provincial permit parity regressions', () => {
     await gotoSyntheticRoute(page, '/provincial/permit/91002', {
       ready: page.getByRole('heading', { level: 1, name: 'Permit 91002 (Pending)', exact: true }),
     })
-    await selectTab(page, 'Scale')
+    await selectTab(page, 'Package and scale')
     const trigger = page.getByRole('button', { name: 'Create package', exact: true })
     await trigger.click()
     const panel = page.locator('.permit-package-panel')
@@ -1323,7 +1323,7 @@ test.describe('Provincial permit parity regressions', () => {
     await gotoSyntheticRoute(page, '/provincial/permit/91002', {
       ready: page.getByRole('heading', { level: 1, name: 'Permit 91002 (Pending)', exact: true }),
     })
-    await selectTab(page, 'Scale')
+    await selectTab(page, 'Package and scale')
     await page.getByRole('button', { name: 'Create package', exact: true }).click()
     const panel = page.locator('.permit-package-panel')
     await expect(panel).toBeVisible()
@@ -1384,7 +1384,7 @@ test.describe('Provincial permit parity regressions', () => {
           exact: true,
         }),
       })
-      await selectTab(page, 'Scale')
+      await selectTab(page, 'Package and scale')
       const trigger = page.getByRole('button', { name: 'Create package', exact: true })
       await trigger.click()
       const panel = page.locator('.permit-package-panel')

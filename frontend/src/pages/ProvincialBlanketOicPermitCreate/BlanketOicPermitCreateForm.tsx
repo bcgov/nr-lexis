@@ -175,7 +175,7 @@ const FORM_TABS = [
       'otherPortOfExport',
     ],
   },
-  { label: 'Scale', icon: Box, fields: [] },
+  { label: 'Package and scale', icon: Box, fields: [] },
   { label: 'Documents', icon: DocumentAttachment, fields: [] },
   { label: 'Fees', icon: Currency, fields: [] },
 ] as const

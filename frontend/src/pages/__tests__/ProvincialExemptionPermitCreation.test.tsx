@@ -946,7 +946,7 @@ describe('permit creation from an exemption', () => {
     expect(within(page).getByRole('tab', { name: 'Permit' })).toBeInTheDocument()
     expect(within(page).getByRole('tab', { name: 'Applicant' })).toBeInTheDocument()
     expect(within(page).getByRole('tab', { name: 'Shipping' })).toBeInTheDocument()
-    expect(within(page).getByRole('tab', { name: 'Scale' })).toBeInTheDocument()
+    expect(within(page).getByRole('tab', { name: 'Package and scale' })).toBeInTheDocument()
     expect(within(page).getByRole('tab', { name: 'Documents' })).toBeInTheDocument()
     expect(within(page).getByRole('tab', { name: 'Fees' })).toBeInTheDocument()
     await fillRequiredBlanketOicFields()

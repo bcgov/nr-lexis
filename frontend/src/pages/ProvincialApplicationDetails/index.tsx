@@ -43,13 +43,13 @@ import {
   Add,
   Box,
   Chat,
-  ContainerRegistry,
   DataDefinition,
   DocumentAttachment,
   Edit,
   Enterprise,
   Result,
   Stamp,
+  Tree,
 } from '@carbon/icons-react'
 import { AddDocument } from '@carbon/pictograms-react'
 import { useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom'
@@ -3615,7 +3615,7 @@ const ProvincialApplicationDetailsPage = () => {
     optionDescription(regionOptions, summaryForm?.orgUnitNumber) ||
     detail?.orgUnitName ||
     String(detail?.orgUnitNumber ?? '')
-  // Read-only Scale details show saved values while the Application editor holds a product change.
+  // Read-only Advertising details show saved values while the Application editor holds a product change.
   const savedScaleForm = summaryBaselineForm ?? summaryForm
   const savedGrowthTypeDescription = optionDescription(
     optionsWithCurrentValue(summaryGrowthTypeOptions, savedScaleForm?.growthTypeCode ?? ''),
@@ -4282,7 +4282,7 @@ const ProvincialApplicationDetailsPage = () => {
               >
                 <Tab renderIcon={Enterprise}>Applicant</Tab>
                 <Tab renderIcon={Result}>Application</Tab>
-                <Tab renderIcon={Box}>Scale</Tab>
+                <Tab renderIcon={Box}>Package and scale</Tab>
                 <Tab renderIcon={DocumentAttachment}>Documents</Tab>
                 {canViewRemarks && <Tab renderIcon={Chat}>Remarks</Tab>}
                 <Tab renderIcon={DataDefinition}>Offers</Tab>
@@ -4793,12 +4793,12 @@ const ProvincialApplicationDetailsPage = () => {
                             {summaryScaleFieldsChanged && (
                               <section
                                 className="application-product-scale-details"
-                                aria-label="Scale details for changed product type"
+                                aria-label="Advertising details for changed product type"
                               >
-                                <h3 className="detail-section-subtitle">Scale details</h3>
+                                <h3 className="detail-section-subtitle">Advertising details</h3>
                                 <p>
-                                  Review the scale details for the selected product type before
-                                  saving.
+                                  Review the advertising details for the selected product type
+                                  before saving.
                                 </p>
                                 {applicationScaleForm}
                               </section>
@@ -4870,7 +4870,7 @@ const ProvincialApplicationDetailsPage = () => {
                         className="application-detail-section application-detail-summary"
                       >
                         <div className="detail-section-card__header">
-                          <DetailCardTitle icon={ContainerRegistry}>Scale details</DetailCardTitle>
+                          <DetailCardTitle icon={Tree}>Advertising details</DetailCardTitle>
                           {canEditSummary &&
                             summaryForm &&
                             !isEditingSummary &&
@@ -4888,7 +4888,7 @@ const ProvincialApplicationDetailsPage = () => {
                                   )
                                 }
                               >
-                                Edit scale details
+                                Edit advertising details
                               </Button>
                             )}
                         </div>

@@ -31,7 +31,7 @@ make offers on it.
 ### Enter an application
 
 1. **Provincial › Create application**. Fill in the **Applicant**,
-   **Application** and **Scale** tabs. The other tabs open once the
+   **Application** and **Package and scale** tabs. The other tabs open once the
    application is saved.
 2. On the **Applicant** tab, **Client** is your organization. Choose the
    **Client location** and enter the **Contact name**. The location's
@@ -44,7 +44,7 @@ make offers on it.
    - **Exemption term (days)**, which starts at 180.
 
    **Application date** is today's date and can't be changed.
-4. On the **Scale** tab, enter:
+4. On the **Package and scale** tab, under **Advertising details**, enter:
    - **Location of logs** (up to 250 characters);
    - **Age class**;
    - **Average log volume (m³)**, to one decimal place (for example, `1.2`);
@@ -83,7 +83,7 @@ The owner and the agent must be different clients.
 ### Add packages and the summary of scale
 
 Packages (booms) and their summary of scale are added on the saved
-application's **Scale** tab.
+application's **Package and scale** tab.
 
 1. Select **Create package**.
 2. Enter the **Package number** (unique, up to 20 characters), **Volume
@@ -94,7 +94,7 @@ application's **Scale** tab.
    mark**, **Pieces**, **Species**, **Grade** and **Volume (m³)**. Select
    **Save scale**.
 
-![A package and its summary of scale, on an application's Scale tab](images/02-application-scale.png)
+![A package and its summary of scale, on an application's Package and scale tab](images/02-application-scale.png)
 
 LEXIS capitalizes the **Timber mark** as you type. Select the **Grade** by
 its code. **Total pieces** and **Total scale volume (m³)** add up as you go.
@@ -146,7 +146,7 @@ For the file format, ask your regional export office.
 
 Open the application and select the edit button on the card you want to
 change: **Edit applicant details**, **Edit application details** or **Edit
-scale details**. Each save asks you to tick **I confirm the application
+advertising details**. Each save asks you to tick **I confirm the application
 details are accurate**.
 
 - You can change a **New** application up to and including its list date.
@@ -170,9 +170,9 @@ Packages and scale lines follow their own rules:
   can be added or deleted.
 - A scale line on a completed permit can't be deleted.
 
-If you save scale details with an application volume larger than the
-package volumes together, LEXIS asks you to review the package volumes. Save
-again to continue.
+If the application volume is larger than the package volumes together, the
+confirmation also shows a warning: "The sum of the package volume is less
+than the total application volume." You can still save.
 
 ### Check whether an application is approved
 

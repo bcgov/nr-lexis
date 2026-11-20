@@ -2826,7 +2826,7 @@ test.describe('TEST IDIR admin regression', () => {
     await expect(listDate.getByRole('radio', { name: 'No list date' })).not.toBeChecked()
     await expect(page.getByRole('spinbutton', { name: 'Exemption term (days)' })).toHaveValue('180')
 
-    await page.getByRole('tab', { name: 'Scale' }).click()
+    await page.getByRole('tab', { name: 'Package and scale' }).click()
     const paragraphField = page.getByLabel('Location of logs')
     const normalField = page.getByLabel('Application volume (m³)')
     await expect(normalField).toHaveValue('0.0')
@@ -2856,7 +2856,14 @@ test.describe('TEST IDIR admin regression', () => {
 
     await expectAccessiblePage(page, '/provincial/application/create', /create new application/i)
 
-    for (const tabName of ['Applicant', 'Application', 'Scale', 'Documents', 'Remarks', 'Offers']) {
+    for (const tabName of [
+      'Applicant',
+      'Application',
+      'Package and scale',
+      'Documents',
+      'Remarks',
+      'Offers',
+    ]) {
       await expect(page.getByRole('tab', { name: tabName })).toBeVisible()
     }
     await expect(page.getByRole('tab', { name: 'Agent' })).toHaveCount(0)
@@ -2887,8 +2894,8 @@ test.describe('TEST IDIR admin regression', () => {
       await page.locator(`#${regionMenuId}`).getByRole('option').first().click()
     }
 
-    await page.getByRole('tab', { name: 'Scale' }).click()
-    const itemsPanel = page.getByRole('region', { name: 'Scale' })
+    await page.getByRole('tab', { name: 'Package and scale' }).click()
+    const itemsPanel = page.getByRole('region', { name: 'Package and scale' })
     await expect(itemsPanel).toBeVisible()
     await expect(itemsPanel).toHaveCSS('overflow', 'visible')
 
@@ -2980,7 +2987,7 @@ test.describe('TEST IDIR admin regression', () => {
       await expect(validation.locator('.cds--inline-notification__subtitle')).toHaveText(
         'Complete the required fields in Applicant, Application and Scale tabs.',
       )
-      for (const tabName of ['Applicant', 'Application', 'Scale']) {
+      for (const tabName of ['Applicant', 'Application', 'Package and scale']) {
         await expect(
           page.getByRole('tab', {
             name: new RegExp(`^${tabName}, \\d+ required fields? outstanding$`),
@@ -5008,8 +5015,8 @@ test.describe('TEST IDIR admin regression', () => {
           new RegExp(`permit ${permitNumber}`, 'i'),
         )
         await expect(page.getByRole('tab', { name: 'Items', exact: true })).toHaveCount(0)
-        await page.getByRole('tab', { name: 'Scale', exact: true }).click()
-        const scalePanel = page.getByRole('tabpanel', { name: 'Scale', exact: true })
+        await page.getByRole('tab', { name: 'Package and scale', exact: true }).click()
+        const scalePanel = page.getByRole('tabpanel', { name: 'Package and scale', exact: true })
         await expect(scalePanel.locator('.permit-package-selector dd')).toHaveText(packageNumber)
         await expect(
           scalePanel.getByRole('region', { name: 'Scale rows', exact: true }),

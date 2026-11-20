@@ -146,7 +146,9 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
     await userEvent.click(await screen.findByRole('button', { name: 'Discard changes' }))
 
     expect(itemDetails.queryByLabelText('Location of logs')).not.toBeInTheDocument()
-    expect(itemDetails.getByRole('button', { name: 'Edit scale details' })).toBeInTheDocument()
+    expect(
+      itemDetails.getByRole('button', { name: 'Edit advertising details' }),
+    ).toBeInTheDocument()
     expect(mockedUpdateApplicationSummary).not.toHaveBeenCalled()
   })
 
@@ -439,7 +441,7 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
     expect(tabs.map((tab) => tab.textContent)).toEqual([
       'Applicant',
       'Application',
-      'Scale',
+      'Package and scale',
       'Documents',
       'Remarks',
       'Offers',
@@ -693,7 +695,7 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
     })
     observer.observe(document.body, { childList: true, subtree: true, characterData: true })
 
-    await selectApplicationDetailTab('Scale')
+    await selectApplicationDetailTab('Package and scale')
     await userEvent.click(await screen.findByRole('button', { name: 'Edit package' }))
     const comments = await screen.findByLabelText('Comments')
     await userEvent.type(comments, ' updated')
@@ -882,7 +884,7 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
     ).toBeInTheDocument()
     expect(screen.queryByRole('heading', { name: 'No permits found' })).not.toBeInTheDocument()
 
-    await selectApplicationDetailTab('Scale')
+    await selectApplicationDetailTab('Package and scale')
     // The reviewed Figma places each first-record action inside its empty state.
     expect(
       (await screen.findByRole('button', { name: 'Create package' })).closest('.lexis-empty-state'),
@@ -1666,7 +1668,7 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
     })
     expect(
       within(itemDetailsTile).queryByRole('button', {
-        name: 'Edit scale details',
+        name: 'Edit advertising details',
       }),
     ).not.toBeInTheDocument()
 
@@ -1824,8 +1826,10 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
     expect(within(summaryTile).getByText('Jan 1, 2026')).toBeInTheDocument()
     expect(within(summaryTile).getByText('Jan 3, 2099')).toBeInTheDocument()
 
-    await selectApplicationDetailTab('Scale')
-    const scaleTile = screen.getByRole('heading', { name: 'Scale details' }).closest('.cds--tile')
+    await selectApplicationDetailTab('Package and scale')
+    const scaleTile = screen
+      .getByRole('heading', { name: 'Advertising details' })
+      .closest('.cds--tile')
     expect(scaleTile).toBeTruthy()
     expect(
       Array.from((scaleTile as HTMLElement).querySelectorAll('.record-field-grid__row'), (row) =>
@@ -1870,8 +1874,8 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
       }),
     ).toBeNull()
 
-    await selectApplicationDetailTab('Scale')
-    expect(await screen.findByRole('heading', { name: 'Scale details' })).toBeInTheDocument()
+    await selectApplicationDetailTab('Package and scale')
+    expect(await screen.findByRole('heading', { name: 'Advertising details' })).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Save Package' })).toBeNull()
     expect(screen.queryByRole('button', { name: 'Reset package drafts' })).toBeNull()
     expect(screen.queryByRole('button', { name: 'Delete Package' })).toBeNull()
@@ -1928,7 +1932,7 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
     const summaryTile = getApplicationSummaryTile()
     expect(within(summaryTile).queryByLabelText('Exemption reason')).not.toBeInTheDocument()
 
-    await selectApplicationDetailTab('Scale')
+    await selectApplicationDetailTab('Package and scale')
     expect(screen.queryByRole('button', { name: 'Edit items' })).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Save Package' })).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Delete Package' })).not.toBeInTheDocument()
@@ -2357,7 +2361,7 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
       expect(screen.getAllByRole('tab').map((tab) => tab.textContent)).toEqual([
         'Applicant',
         'Application',
-        'Scale',
+        'Package and scale',
         'Documents',
         'Remarks',
         'Offers',
@@ -2783,7 +2787,9 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
     const productLocationInput = await itemDetails.findByLabelText('Location of logs')
     expect(itemDetails.getByText('Required fields')).toBeInTheDocument()
     expect(
-      itemDetails.getByRole('heading', { level: 2, name: 'Scale details' }).querySelector('svg'),
+      itemDetails
+        .getByRole('heading', { level: 2, name: 'Advertising details' })
+        .querySelector('svg'),
     ).toBeInTheDocument()
 
     await waitFor(() => {
@@ -3569,7 +3575,9 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
     const application = within(await selectApplicationSummaryTile())
     await chooseComboBoxOption(getSummaryComboBox(application, 'Product type'), 'Harvested Timber')
     const dependentScaleDetails = within(
-      await application.findByRole('region', { name: 'Scale details for changed product type' }),
+      await application.findByRole('region', {
+        name: 'Advertising details for changed product type',
+      }),
     )
     fireEvent.change(dependentScaleDetails.getByLabelText('Location of logs'), {
       target: { value: 'Changed location' },
@@ -3608,10 +3616,12 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
     const application = within(await selectApplicationSummaryTile())
     await chooseComboBoxOption(getSummaryComboBox(application, 'Product type'), 'Timber')
     expect(
-      await application.findByRole('region', { name: 'Scale details for changed product type' }),
+      await application.findByRole('region', {
+        name: 'Advertising details for changed product type',
+      }),
     ).toBeInTheDocument()
 
-    await selectApplicationDetailTab('Scale')
+    await selectApplicationDetailTab('Package and scale')
     await userEvent.click(await screen.findByRole('button', { name: 'Discard changes' }))
     const scaleTile = await selectApplicationItemDetailsTile(false)
     const detailField = (label: string): HTMLElement => {
@@ -3625,7 +3635,7 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
     expect(mockedUpdateApplicationSummary).not.toHaveBeenCalled()
   })
 
-  it('keeps the entered Scale details when the product type changes to Timber', async () => {
+  it('keeps the entered Advertising details when the product type changes to Timber', async () => {
     render(
       <MemoryRouter initialEntries={['/provincial/application/321']}>
         <Routes>
@@ -3640,7 +3650,9 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
     const application = within(await selectApplicationSummaryTile())
     await chooseComboBoxOption(getSummaryComboBox(application, 'Product type'), 'Timber')
     const scaleDetails = within(
-      await application.findByRole('region', { name: 'Scale details for changed product type' }),
+      await application.findByRole('region', {
+        name: 'Advertising details for changed product type',
+      }),
     )
     expect(scaleDetails.getByLabelText('Location of logs')).toHaveValue('BC')
     expect(scaleDetails.getByLabelText('Location of logs')).toHaveAttribute(
@@ -4221,8 +4233,8 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
     expect(screen.queryByRole('button', { name: 'Edit applicant details' })).toBeNull()
     await selectApplicationDetailTab('Application')
     expect(screen.queryByRole('button', { name: 'Edit application details' })).toBeNull()
-    await selectApplicationDetailTab('Scale')
-    expect(screen.queryByRole('button', { name: 'Edit scale details' })).toBeNull()
+    await selectApplicationDetailTab('Package and scale')
+    expect(screen.queryByRole('button', { name: 'Edit advertising details' })).toBeNull()
     // Remarks don't depend on the summary.
     await selectApplicationDetailTab('Remarks')
     expect(screen.getByRole('button', { name: 'Add remark' })).toBeEnabled()
@@ -4443,7 +4455,7 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
       })
       renderApplicationDetailPage()
 
-      await selectApplicationDetailTab('Scale')
+      await selectApplicationDetailTab('Package and scale')
       expect(await screen.findByText('TM001')).toBeInTheDocument()
       const scaleRow = screen.getByText('TM001').closest('tr') as HTMLElement
       if (editable) {

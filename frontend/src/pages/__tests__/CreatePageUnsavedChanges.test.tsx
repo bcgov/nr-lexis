@@ -163,7 +163,7 @@ const createCases = [
 
 const getDraftField = async (testCase: (typeof createCases)[number]) => {
   if (testCase.name === 'application') {
-    await userEvent.click(screen.getByRole('tab', { name: 'Scale' }))
+    await userEvent.click(screen.getByRole('tab', { name: 'Package and scale' }))
     return screen.getByRole('textbox', { name: 'Location of logs' })
   }
 

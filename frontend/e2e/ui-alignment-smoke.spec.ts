@@ -2006,8 +2006,8 @@ test.describe('FSPTS-aligned LEXIS shell', () => {
     await expect(page.getByRole('tabpanel', { name: 'Remarks' })).toHaveText(
       'Available after the application is saved.',
     )
-    await page.getByRole('tab', { name: 'Scale' }).click()
-    const scaleSection = page.getByRole('region', { name: 'Scale' })
+    await page.getByRole('tab', { name: 'Package and scale' }).click()
+    const scaleSection = page.getByRole('region', { name: 'Package and scale' })
     await expect(scaleSection).toBeVisible()
     await expect(scaleSection).toHaveCSS('background-color', 'rgb(38, 38, 38)')
   })
