@@ -633,7 +633,7 @@ public class ExemptionRepository extends OracleRepositorySupport {
 
   /**
    * Application and package numbers match any application linked to the exemption, not only the
-   * canonical one; submitters match only their own client's provincial applications.
+   * canonical one; submitters match only applications that let them open the exemption.
    */
   private void addLinkedApplicationFilter(
       DirectSqlBuilder where, ExemptionSearchCriteria criteria, String scopedClientNumber) {
@@ -660,8 +660,7 @@ public class ExemptionRepository extends OracleRepositorySupport {
     }
     if (scopedClientNumber != null) {
       clause.append(
-          " AND (EEA_MATCH.EXPORT_JURISDICTION_CODE = 'P'"
-              + " OR EEA_MATCH.EXPORT_JURISDICTION_CODE IS NULL)"
+          " AND EEA_MATCH.EXPORT_JURISDICTION_CODE = 'P'"
               + " AND (EEA_MATCH.OWNER_CLIENT_NUMBER = ? OR EEA_MATCH.AGENT_CLIENT_NUMBER = ?)");
       bindValues.add(scopedClientNumber);
       bindValues.add(scopedClientNumber);
@@ -735,8 +734,6 @@ public class ExemptionRepository extends OracleRepositorySupport {
   private boolean supportsFilterOnlyCount(
       ExemptionSearchCriteria criteria, String scopedClientNumber) {
     return scopedClientNumber == null
-        && trim(criteria.applicationNumber()) == null
-        && trim(criteria.packageNumber()) == null
         && trim(criteria.ownerClientNumber()) == null
         && trim(criteria.applicantClientNumber()) == null
         && trim(criteria.agentClientNumber()) == null

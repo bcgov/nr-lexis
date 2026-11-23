@@ -518,8 +518,7 @@ class ExemptionRepositoryTest {
             "EXISTS (SELECT 1 FROM EXPORT_EXEMPTION_APPLICATION EEA_MATCH "
                 + "WHERE EEA_MATCH.EXEMPTION_NUMBER = EE.EXEMPTION_NUMBER "
                 + "AND TO_CHAR(EEA_MATCH.APPLICATION_NUMBER) LIKE '%' || ? || '%' "
-                + "AND (EEA_MATCH.EXPORT_JURISDICTION_CODE = 'P' "
-                + "OR EEA_MATCH.EXPORT_JURISDICTION_CODE IS NULL) "
+                + "AND EEA_MATCH.EXPORT_JURISDICTION_CODE = 'P' "
                 + "AND (EEA_MATCH.OWNER_CLIENT_NUMBER = ? "
                 + "OR EEA_MATCH.AGENT_CLIENT_NUMBER = ?))")
         .doesNotContain("EEA.APPLICATION_NUMBER");
@@ -790,6 +789,24 @@ class ExemptionRepositoryTest {
         .doesNotContain("EXPORT_PERMIT_DETAIL")
         .doesNotContain("EXEMPTION_ORG_UNIT");
     assertThat(repository.bindValues()).containsExactly("EX-1");
+  }
+
+  @Test
+  void numberOnlyLookupShouldUseTheFilterOnlyCountAndPageFirstPlan() {
+    TestExemptionRepository repository = new TestExemptionRepository();
+
+    repository.search(
+        new ExemptionSearchCriteria(
+            "257841", "PKG-1", null, null, null, null, null, null, null, List.of(), 0, 10));
+
+    assertThat(repository.countSelectSql())
+        .contains("SELECT COUNT(*) FROM EXPORT_EXEMPTION EE")
+        .doesNotContain("CANONICAL_EXEMPTION_APPLICATION AS");
+    assertThat(repository.pageSelectSql()).contains("PAGE_EXEMPTIONS AS");
+    assertThat(repository.pageSelectSql().indexOf("EEA_MATCH.APPLICATION_NUMBER"))
+        .isLessThan(repository.pageSelectSql().indexOf("CANONICAL_EXEMPTION_APPLICATION AS"));
+    assertThat(repository.bindValues()).containsExactly("257841", "PKG-1");
+    assertThat(repository.countBindValues).isEqualTo(repository.bindValues());
   }
 
   @Test
