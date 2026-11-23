@@ -20,9 +20,9 @@ const REVIEW_TIERS = {
     reviewFocus: GENERAL_REVIEW_FOCUS,
     includeFullFileContents: true,
     maxPromptCharacters: 400_000,
-    effort: "medium",
+    effort: "xhigh",
     models: {
-      anthropic: { model: "claude-sonnet-5-5", displayName: "Claude Sonnet 5.5", usdPerMillionInputTokens: 2, usdPerMillionOutputTokens: 10, supportsRefusalFallback: true },
+      anthropic: { model: "claude-opus-5-5", displayName: "Claude Opus 5.5", usdPerMillionInputTokens: 4, usdPerMillionOutputTokens: 20, supportsRefusalFallback: true },
       openai: { model: "gpt-6.2-sol", displayName: "GPT-6.2 Sol", effort: "max", usdPerMillionInputTokens: 2, usdPerMillionOutputTokens: 10 },
     },
   },
