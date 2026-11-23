@@ -17,6 +17,7 @@ import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.util.ArrayList;
 import java.util.LinkedHashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -585,16 +586,7 @@ public class ExemptionRepository extends OracleRepositorySupport {
       where.addLeadingBinds(scopedClientNumber, scopedClientNumber);
     }
 
-    where.addNumberLike("EEA.APPLICATION_NUMBER", criteria.applicationNumber());
-    String packageNumber = trim(criteria.packageNumber());
-    if (packageNumber != null) {
-      where.addRawWithBinds(
-          " AND EXISTS ("
-              + "SELECT 1 FROM EXPORT_PACKAGE EP "
-              + "WHERE EP.APPLICATION_NUMBER = EEA.APPLICATION_NUMBER "
-              + "AND EP.PACKAGE_NUMBER LIKE '%' || ? || '%')",
-          packageNumber);
-    }
+    addLinkedApplicationFilter(where, criteria, scopedClientNumber);
     where.addLike("EE.EXEMPTION_NUMBER", criteria.exemptionNumber());
     if ("NULL".equals(trim(criteria.exemptionType()))) {
       // None refers to the exemption's own missing type, not an unlinked application.
@@ -637,6 +629,43 @@ public class ExemptionRepository extends OracleRepositorySupport {
       addNonMinisterialRegionFilter(where, criteria.nonMinisterialRegionNumbers());
     }
     return where.build(suffix);
+  }
+
+  /**
+   * Application and package numbers match any application linked to the exemption, not only the
+   * canonical one; submitters match only their own client's applications.
+   */
+  private void addLinkedApplicationFilter(
+      DirectSqlBuilder where, ExemptionSearchCriteria criteria, String scopedClientNumber) {
+    String applicationNumber = trim(criteria.applicationNumber());
+    String packageNumber = trim(criteria.packageNumber());
+    if (applicationNumber == null && packageNumber == null) {
+      return;
+    }
+    StringBuilder clause =
+        new StringBuilder(
+            " AND EXISTS (SELECT 1 FROM EXPORT_EXEMPTION_APPLICATION EEA_MATCH "
+                + "WHERE EEA_MATCH.EXEMPTION_NUMBER = EE.EXEMPTION_NUMBER");
+    List<Object> bindValues = new ArrayList<>();
+    if (applicationNumber != null) {
+      clause.append(" AND TO_CHAR(EEA_MATCH.APPLICATION_NUMBER) LIKE '%' || ? || '%'");
+      bindValues.add(applicationNumber);
+    }
+    if (packageNumber != null) {
+      clause.append(
+          " AND EXISTS (SELECT 1 FROM EXPORT_PACKAGE EP "
+              + "WHERE EP.APPLICATION_NUMBER = EEA_MATCH.APPLICATION_NUMBER "
+              + "AND EP.PACKAGE_NUMBER LIKE '%' || ? || '%')");
+      bindValues.add(packageNumber);
+    }
+    if (scopedClientNumber != null) {
+      clause.append(
+          " AND (EEA_MATCH.OWNER_CLIENT_NUMBER = ? OR EEA_MATCH.AGENT_CLIENT_NUMBER = ?)");
+      bindValues.add(scopedClientNumber);
+      bindValues.add(scopedClientNumber);
+    }
+    clause.append(")");
+    where.addRawWithBinds(clause.toString(), bindValues.toArray());
   }
 
   private String broadClientNumber(ExemptionSearchCriteria criteria) {

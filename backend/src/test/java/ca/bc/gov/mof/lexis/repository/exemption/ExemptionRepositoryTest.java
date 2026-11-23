@@ -354,8 +354,14 @@ class ExemptionRepositoryTest {
             10));
 
     assertThat(repository.whereSql())
-        .contains("TO_CHAR(EEA.APPLICATION_NUMBER)")
-        .contains("EXISTS (SELECT 1 FROM EXPORT_PACKAGE EP")
+        .contains(
+            "EXISTS (SELECT 1 FROM EXPORT_EXEMPTION_APPLICATION EEA_MATCH "
+                + "WHERE EEA_MATCH.EXEMPTION_NUMBER = EE.EXEMPTION_NUMBER "
+                + "AND TO_CHAR(EEA_MATCH.APPLICATION_NUMBER) LIKE '%' || ? || '%' "
+                + "AND EXISTS (SELECT 1 FROM EXPORT_PACKAGE EP "
+                + "WHERE EP.APPLICATION_NUMBER = EEA_MATCH.APPLICATION_NUMBER")
+        .doesNotContain("EEA.APPLICATION_NUMBER")
+        .doesNotContain("EEA_MATCH.OWNER_CLIENT_NUMBER")
         .contains("EE.EXEMPTION_NUMBER")
         .contains("ES.ADVERTISING_DATE")
         .contains("EEA_REGION.ORG_UNIT_NO IN (?)")
@@ -481,6 +487,41 @@ class ExemptionRepositoryTest {
             1826L);
     assertThat(repository.countCalls()).isEqualTo(1);
     assertThat(repository.pageCalls()).isEqualTo(1);
+  }
+
+  @Test
+  void scopedIndustryApplicationNumberShouldMatchOnlyTheClientsOwnLinkedApplications() {
+    TestExemptionRepository repository = new TestExemptionRepository();
+
+    repository.search(
+        new ExemptionSearchCriteria(
+            "257841",
+            null,
+            null,
+            null,
+            null,
+            "00012345",
+            null,
+            null,
+            null,
+            List.of(),
+            true,
+            false,
+            true,
+            null,
+            0,
+            10));
+
+    assertThat(repository.whereSql())
+        .contains(
+            "EXISTS (SELECT 1 FROM EXPORT_EXEMPTION_APPLICATION EEA_MATCH "
+                + "WHERE EEA_MATCH.EXEMPTION_NUMBER = EE.EXEMPTION_NUMBER "
+                + "AND TO_CHAR(EEA_MATCH.APPLICATION_NUMBER) LIKE '%' || ? || '%' "
+                + "AND (EEA_MATCH.OWNER_CLIENT_NUMBER = ? "
+                + "OR EEA_MATCH.AGENT_CLIENT_NUMBER = ?))")
+        .doesNotContain("EEA.APPLICATION_NUMBER");
+    assertThat(repository.bindValues())
+        .containsExactly("00012345", "00012345", "257841", "00012345", "00012345");
   }
 
   @Test
@@ -749,7 +790,7 @@ class ExemptionRepositoryTest {
   }
 
   @Test
-  void countShouldApplyFiltersToTheCanonicalLinkedApplication() {
+  void countShouldMatchAnyLinkedApplicationNumberAndTheCanonicalListDate() {
     TestExemptionRepository repository = new TestExemptionRepository();
 
     repository.count(
@@ -768,7 +809,8 @@ class ExemptionRepositoryTest {
             10));
 
     assertThat(repository.whereSql())
-        .contains("TO_CHAR(EEA.APPLICATION_NUMBER) LIKE '%' || ? || '%'")
+        .contains("TO_CHAR(EEA_MATCH.APPLICATION_NUMBER) LIKE '%' || ? || '%'")
+        .doesNotContain("EEA.APPLICATION_NUMBER")
         .contains("ES.ADVERTISING_DATE >= ?")
         .doesNotContain("CANON_EEA")
         .doesNotContain("GROUP BY", "ORDER BY EE.");
