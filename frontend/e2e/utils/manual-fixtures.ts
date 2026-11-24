@@ -249,7 +249,7 @@ const summaryPage = <T>(results: T[]): SummaryPage<T> => ({
 const SUMMARY_APPLICATIONS = summaryPage<SummaryApplication>([
   {
     application: 48107,
-    status: 'Pending',
+    status: 'Approved',
     reason: 'Surplus',
     exemptionType: null,
     exemptionNumber: null,
@@ -353,7 +353,7 @@ const SUMMARY_OFFERS_PLACED = summaryPage<SummaryOffer>([
 ])
 
 const APPLICATION_SEARCH_ROWS = [
-  [48107, 'Pending', '', OWN_CLIENT, '', '2026-12-16', 'RWC', 980],
+  [48107, 'Approved', '', OWN_CLIENT, '', '2026-12-16', 'RWC', 980],
   [NEW_APPLICATION, 'New', '', OWN_CLIENT, '', '2026-12-02', 'RSC', 1320],
   [48106, 'Withdrawn', '', OWN_CLIENT, '', '2026-11-18', 'RWC', 450],
   [48105, 'Approved', '', OWN_CLIENT, '', '2026-11-18', 'RSC', 2210.5],
