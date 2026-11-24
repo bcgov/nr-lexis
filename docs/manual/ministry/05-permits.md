@@ -194,9 +194,9 @@ never entered by hand: they follow the permit's status.
 
 ### Print a permit
 
-Select **Download PDF** at the top of a **Complete** permit. The PDF has
-the permit on the first page and the detailed summary by timber mark on the
-second.
+Select **Download PDF** at the top of a **Complete** permit. The PDF opens
+in a new tab, where you can save or print it. It has the permit on the first
+page and the detailed summary by timber mark on the second.
 
 <!-- roles: administrator, application-approver -->
 ### What clients can change
