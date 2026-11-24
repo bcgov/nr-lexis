@@ -97,6 +97,18 @@ that differ from legacy LEXIS are in `docs/intentional-legacy-divergences.md`.
   variant where a role sees the screen but can't change it. Write to "you",
   not "Application Approvers can".
 
+### Business-confirmed content
+
+These override what the code suggests. Keep them when you edit or regenerate
+a chapter, and add new ones here when the business confirms wording.
+
+- **Pending** is not an application status users see. Don't name it in
+  either edition (status tables, review steps, what can be changed) or use it
+  in `manual-fixtures.ts`, even though the code still accepts `PND` for old
+  records. The permit **(Pending)** label is separate and stays.
+- Ministry `02-applications.md`, **Disapprove an application**, step 4: keep
+  the business's wording and order word for word. Reflow lines only.
+
 ## 4. Screenshots and the PDFs
 
 Screenshots live in `docs/manual/<edition>/images/` and are referenced as
