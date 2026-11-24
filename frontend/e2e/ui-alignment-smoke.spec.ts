@@ -1008,12 +1008,17 @@ test.describe('FSPTS-aligned LEXIS shell', () => {
     )
     const profileLayout = await profilePanel.evaluate((panel) => {
       const avatar = panel.querySelector('.profile-avatar')
+      const preferences = panel.querySelector('.profile-panel__preferences')
+      const logOutButton = panel.querySelector('.profile-panel__signout')
       if (!(avatar instanceof HTMLElement)) throw new Error('Profile avatar not found')
+      if (!preferences || !logOutButton) throw new Error('Profile panel sections not found')
       return {
         panelWidth: panel.getBoundingClientRect().width,
         avatarWidth: avatar.getBoundingClientRect().width,
         avatarHeight: avatar.getBoundingClientRect().height,
         backgroundColor: getComputedStyle(panel).backgroundColor,
+        gapBetweenPreferencesAndLogOut:
+          logOutButton.getBoundingClientRect().top - preferences.getBoundingClientRect().bottom,
       }
     })
     expect(profileLayout).toEqual({
@@ -1021,6 +1026,8 @@ test.describe('FSPTS-aligned LEXIS shell', () => {
       avatarWidth: 64,
       avatarHeight: 64,
       backgroundColor: 'rgb(255, 255, 255)',
+      // 24px body padding plus the 1px divider.
+      gapBetweenPreferencesAndLogOut: 25,
     })
     const coastSearchRequest = page.waitForRequest((request) => {
       const url = new URL(request.url())

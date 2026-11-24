@@ -761,9 +761,10 @@ a.csp-side-nav__link.cds--side-nav__link--active[aria-current='page'] {
 }
 
 .profile-panel__body {
-  flex: 1;
+  // Sized to its content so the actions sit directly below it; it scrolls only when the panel is short.
+  flex: 0 1 auto;
   min-height: 0;
-  padding: 16px 16px 0;
+  padding: 16px 16px 24px;
   overflow-y: auto;
 }
 
