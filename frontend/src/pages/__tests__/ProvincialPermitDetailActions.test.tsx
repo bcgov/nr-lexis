@@ -1215,9 +1215,10 @@ describe('Provincial Permit Detail Action Smoke', () => {
     })
     mockedRunReport.mockResolvedValue({
       source: 'api',
-      blob: new Blob(['permit report']),
       filename: 'permit-report.pdf',
       contentType: 'application/pdf',
+      downloaded: false,
+      openedInNewTab: true,
     })
   })
 
@@ -13826,7 +13827,7 @@ describe('Provincial Permit Detail Action Smoke', () => {
     expect(screen.queryByRole('button', { name: 'Edit fee override' })).not.toBeInTheDocument()
   })
 
-  it('downloads the completed permit report with its response filename', async () => {
+  it('opens the completed permit report in a new tab', async () => {
     render(
       <MemoryRouter initialEntries={['/provincial/permit/777']}>
         <Routes>
@@ -13847,20 +13848,16 @@ describe('Provincial Permit Detail Action Smoke', () => {
         actionMapping: 'generate',
         values: { permitNumber: '777' },
       })
-      expect(mockedTriggerBrowserDownload).toHaveBeenCalledWith(
-        expect.any(Blob),
-        'permit-report.pdf',
-      )
     })
-    expect(await screen.findByText('Permit report downloaded.')).toBeVisible()
+    expect(await screen.findByText('Permit report opened in a new tab.')).toBeVisible()
     expect(screen.queryByText('Action completed')).not.toBeInTheDocument()
   })
 
-  it('stays silent when the permit report file picker is cancelled', async () => {
+  it('stays silent when the permit report tab is closed', async () => {
     mockedRunReport.mockResolvedValueOnce({
       source: 'api',
       filename: 'permit-report.pdf',
-      contentType: 'application/octet-stream',
+      contentType: 'application/pdf',
       downloaded: false,
       cancelled: true,
     })
@@ -13879,8 +13876,7 @@ describe('Provincial Permit Detail Action Smoke', () => {
 
     await waitFor(() => expect(mockedRunReport).toHaveBeenCalledTimes(1))
     await screen.findByRole('button', { name: 'Download PDF' })
-    expect(mockedTriggerBrowserDownload).not.toHaveBeenCalled()
-    expect(screen.queryByText('Permit report downloaded.')).not.toBeInTheDocument()
+    expect(screen.queryByText(/Permit report (opened|downloaded)/)).not.toBeInTheDocument()
     expect(screen.queryByText('Action failed')).not.toBeInTheDocument()
   })
 

@@ -209,7 +209,6 @@ import {
   type ShippingReferenceOptions,
 } from '@/service/shipping-reference-service'
 import { withoutActionError, type ActionResult } from '@/utils/action-result'
-import { triggerBrowserDownload } from '@/utils/download'
 import { fieldErrorText, fieldErrorTexts } from '@/utils/field-error'
 import { formatPermitNumber, formatPermitStatus } from '@/utils/permit'
 import { formatPackageNumberLabel, isValidEmail, normalizeTrimmedText } from '@/utils/text'
@@ -5799,11 +5798,14 @@ const ProvincialPermitDetailsPage = () => {
         actionMapping: 'generate',
         values: { permitNumber: resolvedPermitNumber },
       })
-      if (result.blob) {
-        triggerBrowserDownload(result.blob, result.filename)
-      }
       if (!result.cancelled) {
-        setActionResult({ kind: 'success', title: 'Permit report downloaded.', message: '' })
+        setActionResult({
+          kind: 'success',
+          title: result.openedInNewTab
+            ? 'Permit report opened in a new tab.'
+            : 'Permit report downloaded.',
+          message: '',
+        })
       }
     } catch (error) {
       console.error(error)

@@ -185,8 +185,9 @@ the status in **My permits**.
 2. Select **Download PDF** at the top of the permit. It is there on every
    tab once the permit is **Complete**.
 
-The permit downloads as a PDF. The second page is the detailed summary by
-timber mark. The permit shows the receipt number or the invoice number.
+The permit opens as a PDF in a new tab, where you can save or print it. The
+second page is the detailed summary by timber mark. The permit shows the
+receipt number or the invoice number.
 
 If the timber also needs a federal export permit, apply through the federal
 Export Controls Online System (EXCOL). The **Permit** tab of a Ministerial

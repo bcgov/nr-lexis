@@ -156,7 +156,7 @@ Your **Exemption search** starts on Ministerial exemptions with status New.
 ### Print the approved exemption
 
 Select **Print approved exemption** at the top of an **Active** exemption.
-The report downloads as a file.
+The report opens as a PDF in a new tab, where you can save or print it.
 <!-- /roles -->
 
 <!-- roles: administrator, application-approver -->

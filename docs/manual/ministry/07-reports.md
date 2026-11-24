@@ -1,7 +1,8 @@
 # 7. Reports <!-- roles: administrator, application-approver, read-only -->
 
-Each report is a page of options and a **Generate report** button. There is
-no on-screen preview: the report downloads as a file.
+Each report is a page of options and a **Generate report** button. A PDF
+report opens in a new browser tab, where you can read, save or print it. A CSV
+or XLS report downloads as a file.
 
 ## Screens
 
@@ -22,8 +23,9 @@ no on-screen preview: the report downloads as a file.
 2. Fill in the options you need. Most are optional: an empty option means
    "all".
 3. Choose the **Output format**.
-4. Select **Generate report**. When the file is ready, a notice says the
-   report was downloaded.
+4. Select **Generate report**. A PDF opens in a new tab when it is ready. A
+   CSV or XLS file downloads. A notice says the report opened or downloaded.
+   Closing the new tab before the PDF appears cancels the report.
 
 ![The Advertising list report options](images/07-advertising-list.png)
 
