@@ -145,8 +145,8 @@ details** or **Advertising details** card.
   the package volume is less than the total application volume." Select
   **Save changes** to save anyway.
 
-After the details lock, you can still change the agent on an application
-that is on a Ministerial or Blanket OIC permit, while each of its permits is
+After the details lock, you can still add or remove the agent on an
+application that is on a Ministerial permit, while each of its permits is
 Active or Payment pending.
 <!-- /roles -->
 
