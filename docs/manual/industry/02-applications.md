@@ -19,7 +19,7 @@ make offers on it.
 
 | Status | What it means |
 |---|---|
-| **New**, **Pending** | Saved and waiting for review by the export office. |
+| **New** | Saved and waiting for review by the export office. |
 | **Approved** | Approved for advertising on its list date. |
 | **Rejected**, **Withdrawn** | Not advertised. The export office gives the reason. |
 | **Exempted** | Included in an exemption. Search results show **Exempted - New** until the exemption is approved. |
