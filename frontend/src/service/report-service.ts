@@ -397,12 +397,17 @@ const openPdfReport = async (
   try {
     const response = await postReport(request, { responseType: 'blob' })
     const filename = extractResponseFilename(response.headers, defaultFilename)
+    const contentType =
+      getResponseHeaderValue(response.headers, 'content-type') ?? 'application/octet-stream'
+    // Closing the tab while the report runs cancels it, like dismissing the save dialog.
+    if (previewTarget?.closed) {
+      return { source: 'api', filename, contentType, downloaded: false, cancelled: true }
+    }
     openDocumentPreview(response.data as Blob, filename, previewTarget)
     return {
       source: 'api',
       filename,
-      contentType:
-        getResponseHeaderValue(response.headers, 'content-type') ?? 'application/octet-stream',
+      contentType,
       downloaded: !previewTarget,
       openedInNewTab: Boolean(previewTarget),
     }

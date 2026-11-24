@@ -220,6 +220,25 @@ describe('report-service', () => {
     expect(openDocumentPreview).not.toHaveBeenCalled()
   })
 
+  it('cancels a PDF report when its tab is closed before the report is ready', async () => {
+    postMock.mockImplementation(async () => {
+      Object.assign(previewTarget, { closed: true })
+      return { status: 200, data: new Blob(['%PDF-1.7']), headers: {} }
+    })
+
+    const result = await runReport({
+      reportId: 'permitReport',
+      actionMapping: 'generate',
+      values: {},
+    })
+
+    expect(openDocumentPreview).not.toHaveBeenCalled()
+    expect(result).toEqual(
+      expect.objectContaining({ filename: 'permit.pdf', downloaded: false, cancelled: true }),
+    )
+    expect(result.openedInNewTab).toBeUndefined()
+  })
+
   it('downloads a PDF report when the browser blocks the new tab', async () => {
     vi.mocked(window.open).mockReturnValue(null)
     const reportBlob = new Blob(['%PDF-1.7'], { type: 'application/pdf' })

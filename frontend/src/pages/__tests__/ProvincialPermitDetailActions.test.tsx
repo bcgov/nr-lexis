@@ -13853,6 +13853,33 @@ describe('Provincial Permit Detail Action Smoke', () => {
     expect(screen.queryByText('Action completed')).not.toBeInTheDocument()
   })
 
+  it('stays silent when the permit report tab is closed', async () => {
+    mockedRunReport.mockResolvedValueOnce({
+      source: 'api',
+      filename: 'permit-report.pdf',
+      contentType: 'application/pdf',
+      downloaded: false,
+      cancelled: true,
+    })
+    render(
+      <MemoryRouter initialEntries={['/provincial/permit/777']}>
+        <Routes>
+          <Route
+            path="/provincial/permit/:permitNumber"
+            element={<ProvincialPermitDetailsPage />}
+          />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    await userEvent.click(await screen.findByRole('button', { name: 'Download PDF' }))
+
+    await waitFor(() => expect(mockedRunReport).toHaveBeenCalledTimes(1))
+    await screen.findByRole('button', { name: 'Download PDF' })
+    expect(screen.queryByText(/Permit report (opened|downloaded)/)).not.toBeInTheDocument()
+    expect(screen.queryByText('Action failed')).not.toBeInTheDocument()
+  })
+
   it('hides permit report action when the user lacks report access', async () => {
     mockedUseAuth.mockReturnValue(
       createTestAuthContext({
