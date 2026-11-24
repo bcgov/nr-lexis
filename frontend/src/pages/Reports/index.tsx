@@ -1395,7 +1395,9 @@ export const ReportsPageContent = () => {
       }
       // A cancelled save picker produced no file, so it stays silent.
       if (!runResult.cancelled) {
-        setDownloadedMessage(`${selectedReport.title} downloaded.`)
+        setDownloadedMessage(
+          `${selectedReport.title} ${runResult.openedInNewTab ? 'opened in a new tab' : 'downloaded'}.`,
+        )
       }
     } catch (error) {
       console.error(error)

@@ -26,7 +26,6 @@ import {
 } from '@/service/provincial-exemption-detail-service'
 import { fetchCurrentExemptionRecordVersion } from '@/service/record-version-service'
 import { ReportRequestError, runReport } from '@/service/report-service'
-import { triggerBrowserDownload } from '@/utils/download'
 import { createTestAuthContext, createTestCapabilities } from '@/test-utils/auth'
 import type * as ExemptionDetailService from '@/service/provincial-exemption-detail-service'
 
@@ -80,7 +79,6 @@ vi.mock('@/utils/download', () => ({
 }))
 
 const mockedRunReport = vi.mocked(runReport)
-const mockedTriggerBrowserDownload = vi.mocked(triggerBrowserDownload)
 const mockedSendExemptionApprovalNotifications = vi.mocked(sendExemptionApprovalNotifications)
 
 const exemptionDetail: ProvincialExemptionDetail = {
@@ -186,9 +184,10 @@ describe('Provincial exemption edit context', () => {
     })
     mockedRunReport.mockResolvedValue({
       source: 'api',
-      blob: new Blob(['approved exemption report']),
       filename: 'approved-exemption.pdf',
       contentType: 'application/pdf',
+      downloaded: false,
+      openedInNewTab: true,
     })
   })
 
@@ -2712,7 +2711,7 @@ describe('Provincial exemption edit context', () => {
     expect(vi.mocked(updateExemption)).not.toHaveBeenCalled()
   })
 
-  it('downloads the approved exemption report with its response filename', async () => {
+  it('opens the approved exemption report in a new tab', async () => {
     vi.mocked(useAuth).mockReturnValue(
       createTestAuthContext({
         canPerform: (action: string) => action === '/approvedExemptionReport',
@@ -2737,45 +2736,10 @@ describe('Provincial exemption edit context', () => {
         reportId: 'approvedExemptionReport',
         values: { exemptionNumber: 'BOIC-205' },
       })
-      expect(mockedTriggerBrowserDownload).toHaveBeenCalledWith(
-        expect.any(Blob),
-        'approved-exemption.pdf',
-      )
     })
-    expect(await screen.findByText('Approved exemption report downloaded.')).toBeInTheDocument()
-  })
-
-  it('shows no report notice when the save dialog is cancelled', async () => {
-    vi.mocked(useAuth).mockReturnValue(
-      createTestAuthContext({
-        canPerform: (action: string) => action === '/approvedExemptionReport',
-      }),
-    )
-    mockedRunReport.mockResolvedValue({
-      source: 'api',
-      filename: 'approved-exemption.pdf',
-      contentType: 'application/octet-stream',
-      downloaded: false,
-      cancelled: true,
-    })
-
-    render(
-      <MemoryRouter initialEntries={['/provincial/exemption/BOIC-205']}>
-        <Routes>
-          <Route
-            path="/provincial/exemption/:exemptionNumber"
-            element={<ProvincialExemptionDetailsPage />}
-          />
-        </Routes>
-      </MemoryRouter>,
-    )
-
-    await userEvent.click(await screen.findByRole('button', { name: 'Print approved exemption' }))
-
-    await waitFor(() => expect(mockedRunReport).toHaveBeenCalledTimes(1))
-    await screen.findByRole('button', { name: 'Print approved exemption' })
-    expect(screen.queryByText('Approved exemption report downloaded.')).not.toBeInTheDocument()
-    expect(screen.queryByText('Action failed')).not.toBeInTheDocument()
+    expect(
+      await screen.findByText('Approved exemption report opened in a new tab.'),
+    ).toBeInTheDocument()
   })
 
   it('shows the approved exemption report request error', async () => {
@@ -2805,7 +2769,6 @@ describe('Provincial exemption edit context', () => {
     expect(
       await screen.findByText('No approved exemption data matched this exemption.'),
     ).toBeInTheDocument()
-    expect(mockedTriggerBrowserDownload).not.toHaveBeenCalled()
     consoleError.mockRestore()
   })
 

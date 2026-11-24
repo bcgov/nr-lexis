@@ -1215,9 +1215,10 @@ describe('Provincial Permit Detail Action Smoke', () => {
     })
     mockedRunReport.mockResolvedValue({
       source: 'api',
-      blob: new Blob(['permit report']),
       filename: 'permit-report.pdf',
       contentType: 'application/pdf',
+      downloaded: false,
+      openedInNewTab: true,
     })
   })
 
@@ -13826,7 +13827,7 @@ describe('Provincial Permit Detail Action Smoke', () => {
     expect(screen.queryByRole('button', { name: 'Edit fee override' })).not.toBeInTheDocument()
   })
 
-  it('downloads the completed permit report with its response filename', async () => {
+  it('opens the completed permit report in a new tab', async () => {
     render(
       <MemoryRouter initialEntries={['/provincial/permit/777']}>
         <Routes>
@@ -13847,41 +13848,9 @@ describe('Provincial Permit Detail Action Smoke', () => {
         actionMapping: 'generate',
         values: { permitNumber: '777' },
       })
-      expect(mockedTriggerBrowserDownload).toHaveBeenCalledWith(
-        expect.any(Blob),
-        'permit-report.pdf',
-      )
     })
-    expect(await screen.findByText('Permit report downloaded.')).toBeVisible()
+    expect(await screen.findByText('Permit report opened in a new tab.')).toBeVisible()
     expect(screen.queryByText('Action completed')).not.toBeInTheDocument()
-  })
-
-  it('stays silent when the permit report file picker is cancelled', async () => {
-    mockedRunReport.mockResolvedValueOnce({
-      source: 'api',
-      filename: 'permit-report.pdf',
-      contentType: 'application/octet-stream',
-      downloaded: false,
-      cancelled: true,
-    })
-    render(
-      <MemoryRouter initialEntries={['/provincial/permit/777']}>
-        <Routes>
-          <Route
-            path="/provincial/permit/:permitNumber"
-            element={<ProvincialPermitDetailsPage />}
-          />
-        </Routes>
-      </MemoryRouter>,
-    )
-
-    await userEvent.click(await screen.findByRole('button', { name: 'Download PDF' }))
-
-    await waitFor(() => expect(mockedRunReport).toHaveBeenCalledTimes(1))
-    await screen.findByRole('button', { name: 'Download PDF' })
-    expect(mockedTriggerBrowserDownload).not.toHaveBeenCalled()
-    expect(screen.queryByText('Permit report downloaded.')).not.toBeInTheDocument()
-    expect(screen.queryByText('Action failed')).not.toBeInTheDocument()
   })
 
   it('hides permit report action when the user lacks report access', async () => {

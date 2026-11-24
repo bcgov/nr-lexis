@@ -1937,6 +1937,31 @@ describe('Reports Page Actions', () => {
     expect(screen.queryByText('Application report downloaded.')).not.toBeInTheDocument()
   })
 
+  it('announces a PDF report opened in a new tab', async () => {
+    mockReportPermissions()
+    mockedRunReport.mockResolvedValueOnce({
+      source: 'api',
+      filename: 'application-report.pdf',
+      contentType: 'application/pdf',
+      downloaded: false,
+      openedInNewTab: true,
+    })
+    render(
+      <MemoryRouter initialEntries={['/reports']}>
+        <Routes>
+          <Route path="/reports" element={<ReportsPage />} />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    await screen.findByRole('heading', { name: 'Application report' })
+    await userEvent.type(screen.getByLabelText('Received from date'), '2026-01-01')
+    await userEvent.click(screen.getByRole('button', { name: 'Generate report' }))
+
+    expect(await screen.findByText('Application report opened in a new tab.')).toBeVisible()
+    expect(mockedTriggerBrowserDownload).not.toHaveBeenCalled()
+  })
+
   it('stays silent when the save picker is cancelled', async () => {
     mockReportPermissions()
     mockedRunReport.mockResolvedValue({

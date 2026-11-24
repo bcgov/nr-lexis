@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { runReport } from '@/service/report-service'
+import { openDocumentPreview } from '@/utils/document-preview'
 
 const postMock = vi.fn()
 
@@ -11,14 +12,20 @@ vi.mock('@/service/api-service', () => ({
   },
 }))
 
+vi.mock('@/utils/document-preview', () => ({ openDocumentPreview: vi.fn() }))
+
 describe('report-service', () => {
+  let previewTarget: Window
   beforeEach(() => {
     vi.clearAllMocks()
     vi.unstubAllEnvs()
+    previewTarget = { opener: window, close: vi.fn() } as unknown as Window
+    vi.spyOn(window, 'open').mockReturnValue(previewTarget)
   })
 
   afterEach(() => {
     vi.useRealTimers()
+    vi.restoreAllMocks()
     Reflect.deleteProperty(window, 'showSaveFilePicker')
   })
 
@@ -45,18 +52,18 @@ describe('report-service', () => {
         },
       }),
       headers: {
-        'content-type': 'application/pdf',
-        'content-disposition': 'attachment; filename="offer-report.pdf"',
+        'content-type': 'text/csv',
+        'content-disposition': 'attachment; filename="offer-report.csv"',
       },
     })
 
     const result = await runReport({
       reportId: 'offerReport',
       actionMapping: 'generate',
-      values: {},
+      values: { outputFormat: 'CSV' },
     })
 
-    expect(showSaveFilePicker).toHaveBeenCalledWith({ suggestedName: 'offer-report.pdf' })
+    expect(showSaveFilePicker).toHaveBeenCalledOnce()
     expect(postMock.mock.calls[0][2]).toEqual(
       expect.objectContaining({ adapter: 'fetch', responseType: 'stream' }),
     )
@@ -64,8 +71,8 @@ describe('report-service', () => {
     expect(new TextDecoder().decode(Uint8Array.from(writtenBytes))).toBe('streamed report')
     expect(result).toEqual(
       expect.objectContaining({
-        filename: 'offer-report.pdf',
-        contentType: 'application/pdf',
+        filename: 'offer-report.csv',
+        contentType: 'text/csv',
         downloaded: true,
       }),
     )
@@ -83,13 +90,13 @@ describe('report-service', () => {
     const result = await runReport({
       reportId: 'offerReport',
       actionMapping: 'generate',
-      values: {},
+      values: { outputFormat: 'CSV' },
     })
 
     expect(postMock).not.toHaveBeenCalled()
     expect(result).toEqual(
       expect.objectContaining({
-        filename: 'offer-report.pdf',
+        filename: 'offer-report.csv',
         cancelled: true,
         downloaded: false,
       }),
@@ -150,9 +157,82 @@ describe('report-service', () => {
     postMock.mockRejectedValue(error)
 
     await expect(
-      runReport({ reportId: 'offerReport', actionMapping: 'generate', values: {} }),
+      runReport({
+        reportId: 'offerReport',
+        actionMapping: 'generate',
+        values: { outputFormat: 'CSV' },
+      }),
     ).rejects.toThrow('Oracle report generation failed.')
     expect(createWritable).not.toHaveBeenCalled()
+  })
+
+  it('opens a PDF report in a tab reserved before the request, without the save picker', async () => {
+    const showSaveFilePicker = vi.fn()
+    Object.defineProperty(window, 'showSaveFilePicker', {
+      configurable: true,
+      value: showSaveFilePicker,
+    })
+    const reportBlob = new Blob(['%PDF-1.7'], { type: 'application/pdf' })
+    postMock.mockResolvedValue({
+      status: 200,
+      data: reportBlob,
+      headers: {
+        'content-type': 'application/pdf',
+        'content-disposition': 'attachment; filename="advertising-list.pdf"',
+      },
+    })
+
+    const result = await runReport({
+      reportId: 'biweeklyListing',
+      actionMapping: 'generate',
+      values: { outputFormat: 'PDF' },
+    })
+
+    expect(window.open).toHaveBeenCalledWith('about:blank', '_blank')
+    expect(vi.mocked(window.open).mock.invocationCallOrder[0]).toBeLessThan(
+      postMock.mock.invocationCallOrder[0],
+    )
+    expect(previewTarget.opener).toBeNull()
+    expect(showSaveFilePicker).not.toHaveBeenCalled()
+    expect(postMock.mock.calls[0][2]).toEqual(expect.objectContaining({ responseType: 'blob' }))
+    expect(openDocumentPreview).toHaveBeenCalledWith(
+      reportBlob,
+      'advertising-list.pdf',
+      previewTarget,
+    )
+    expect(result).toEqual(
+      expect.objectContaining({
+        filename: 'advertising-list.pdf',
+        downloaded: false,
+        openedInNewTab: true,
+      }),
+    )
+    expect(result.blob).toBeUndefined()
+  })
+
+  it('closes the reserved tab when a PDF report fails', async () => {
+    postMock.mockResolvedValue({ status: 204, data: new Blob([]), headers: {} })
+
+    await expect(
+      runReport({ reportId: 'permitReport', actionMapping: 'generate', values: {} }),
+    ).rejects.toThrow('No report data matched the selected criteria.')
+    expect(previewTarget.close).toHaveBeenCalledOnce()
+    expect(openDocumentPreview).not.toHaveBeenCalled()
+  })
+
+  it('downloads a PDF report when the browser blocks the new tab', async () => {
+    vi.mocked(window.open).mockReturnValue(null)
+    const reportBlob = new Blob(['%PDF-1.7'], { type: 'application/pdf' })
+    postMock.mockResolvedValue({ status: 200, data: reportBlob, headers: {} })
+
+    const result = await runReport({
+      reportId: 'permitReport',
+      actionMapping: 'generate',
+      values: {},
+    })
+
+    expect(openDocumentPreview).toHaveBeenCalledWith(reportBlob, 'permit.pdf', null)
+    expect(result).toEqual(expect.objectContaining({ downloaded: true, openedInNewTab: false }))
   })
 
   it('posts report payload to default endpoint and parses filename from headers', async () => {

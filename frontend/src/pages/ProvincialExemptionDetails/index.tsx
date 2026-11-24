@@ -121,7 +121,6 @@ import { sanitizeNotificationText } from '@/utils/notification-messages'
 import { firstStringField, isRecord } from '@/utils/record'
 import { displayValueText, formatPhoneNumber } from '@/utils/text'
 import { displayVolume, formatVolumeInput } from '@/utils/volume'
-import { triggerBrowserDownload } from '@/utils/download'
 import IsoDatePicker from '../../components/IsoDatePicker'
 import SearchableSelect from '../../components/SearchableSelect'
 import RegionMultiSelect from '@/components/RegionMultiSelect'
@@ -2007,16 +2006,13 @@ const ProvincialExemptionDetailsPage = () => {
         reportId: 'approvedExemptionReport',
         values: { exemptionNumber: detail.exemptionNumber },
       })
-      if (result.blob) {
-        triggerBrowserDownload(result.blob, result.filename)
-      }
-      if (!result.cancelled) {
-        setActionResult({
-          kind: 'success',
-          title: 'Approved exemption report downloaded.',
-          message: '',
-        })
-      }
+      setActionResult({
+        kind: 'success',
+        title: result.openedInNewTab
+          ? 'Approved exemption report opened in a new tab.'
+          : 'Approved exemption report downloaded.',
+        message: '',
+      })
     } catch (error) {
       console.error(error)
       setActionResult({

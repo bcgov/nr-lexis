@@ -3,6 +3,7 @@ import { env } from '@/env'
 import apiService from '@/service/api-service'
 import { extractResponseFilename, getResponseHeaderValue } from '@/service/http-response-utils'
 import { getConfiguredBasePath } from '@/service/service-config-utils'
+import { openDocumentPreview } from '@/utils/document-preview'
 
 type RunReportRequest = {
   reportId: string
@@ -16,6 +17,7 @@ type RunReportResult = {
   filename: string
   contentType: string
   downloaded?: boolean
+  openedInNewTab?: boolean
   cancelled?: boolean
 }
 
@@ -350,12 +352,76 @@ const readErrorPayload = async (
   return text
 }
 
+const REPORT_REQUEST_HEADERS = {
+  Accept: 'application/octet-stream',
+  'Content-Type': 'application/json',
+}
+
+const postReport = async (
+  request: RunReportRequest,
+  responseConfig: AxiosRequestConfig<ReportApiPayload>,
+) => {
+  let response
+  try {
+    response = await apiService
+      .getAxiosInstance()
+      .post<
+        Blob | ReadableStream<Uint8Array>
+      >(buildModernReportEndpoint(request.reportId), buildReportPayload(request.reportId, request.values, request.actionMapping), { ...responseConfig, headers: REPORT_REQUEST_HEADERS })
+  } catch (error) {
+    if (axios.isAxiosError(error)) {
+      const responseContentType = error.response?.headers
+        ? (getResponseHeaderValue(error.response.headers, 'content-type') ?? undefined)
+        : undefined
+      const message = await readErrorPayload(error.response?.data, responseContentType)
+      throw new ReportRequestError(message || DEFAULT_REPORT_ERROR_MESSAGE)
+    }
+    throw error
+  }
+
+  if (response.status === 204 || (response.data instanceof Blob && response.data.size === 0)) {
+    throw new ReportRequestError('No report data matched the selected criteria.')
+  }
+  return response
+}
+
+const openPdfReport = async (
+  request: RunReportRequest,
+  defaultFilename: string,
+): Promise<RunReportResult> => {
+  // Reserve the tab during the click; browsers block a tab opened after a slow report.
+  const previewTarget = window.open('about:blank', '_blank')
+  if (previewTarget) {
+    previewTarget.opener = null
+  }
+  try {
+    const response = await postReport(request, { responseType: 'blob' })
+    const filename = extractResponseFilename(response.headers, defaultFilename)
+    openDocumentPreview(response.data as Blob, filename, previewTarget)
+    return {
+      source: 'api',
+      filename,
+      contentType:
+        getResponseHeaderValue(response.headers, 'content-type') ?? 'application/octet-stream',
+      downloaded: !previewTarget,
+      openedInNewTab: Boolean(previewTarget),
+    }
+  } catch (error) {
+    previewTarget?.close()
+    throw error
+  }
+}
+
 export const runReport = async (request: RunReportRequest): Promise<RunReportResult> => {
   const defaultFilename = getDefaultFilename(
     request.reportId,
     request.values,
     request.actionMapping,
   )
+  if (resolveReportFormat(request.reportId, request.values, request.actionMapping) === 'PDF') {
+    return openPdfReport(request, defaultFilename)
+  }
+
   const savePicker = getReportSavePicker()
   let fileHandle: ReportFileHandle | undefined
   if (savePicker) {
@@ -381,35 +447,10 @@ export const runReport = async (request: RunReportRequest): Promise<RunReportRes
     }
   }
 
-  const requestConfig: AxiosRequestConfig<ReportApiPayload> = {
-    ...(fileHandle ? { adapter: 'fetch', responseType: 'stream' } : { responseType: 'blob' }),
-    headers: {
-      Accept: 'application/octet-stream',
-      'Content-Type': 'application/json',
-    },
-  }
-
-  let response
-  try {
-    response = await apiService
-      .getAxiosInstance()
-      .post<
-        Blob | ReadableStream<Uint8Array>
-      >(buildModernReportEndpoint(request.reportId), buildReportPayload(request.reportId, request.values, request.actionMapping), requestConfig)
-  } catch (error) {
-    if (axios.isAxiosError(error)) {
-      const responseContentType = error.response?.headers
-        ? (getResponseHeaderValue(error.response.headers, 'content-type') ?? undefined)
-        : undefined
-      const message = await readErrorPayload(error.response?.data, responseContentType)
-      throw new ReportRequestError(message || DEFAULT_REPORT_ERROR_MESSAGE)
-    }
-    throw error
-  }
-
-  if (response.status === 204 || (response.data instanceof Blob && response.data.size === 0)) {
-    throw new ReportRequestError('No report data matched the selected criteria.')
-  }
+  const response = await postReport(
+    request,
+    fileHandle ? { adapter: 'fetch', responseType: 'stream' } : { responseType: 'blob' },
+  )
 
   const contentType =
     getResponseHeaderValue(response.headers, 'content-type') ?? 'application/octet-stream'
