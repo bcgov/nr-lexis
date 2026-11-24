@@ -108,6 +108,13 @@ a chapter, and add new ones here when the business confirms wording.
   records. The permit **(Pending)** label is separate and stays.
 - Ministry `02-applications.md`, **Disapprove an application**, step 4: keep
   the business's wording and order word for word. Reflow lines only.
+- Users never see an application on a Blanket OIC permit. Ministry
+  `02-applications.md`, **Change an application**: the agent change after the
+  details lock names Ministerial permits only, and says add or remove, not
+  change.
+- Don't say "reactivate" for permits. Say a Complete or Payment pending
+  permit can be set back to Active, and that a Cancelled or Expired permit
+  can't.
 
 ## 4. Screenshots and the PDFs
 
