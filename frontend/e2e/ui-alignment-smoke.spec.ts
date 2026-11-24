@@ -1026,7 +1026,7 @@ test.describe('FSPTS-aligned LEXIS shell', () => {
       avatarWidth: 64,
       avatarHeight: 64,
       backgroundColor: 'rgb(255, 255, 255)',
-      // 24px body padding plus the 1px divider.
+      // 24px body spacer plus the 1px divider.
       gapBetweenPreferencesAndLogOut: 25,
     })
     const coastSearchRequest = page.waitForRequest((request) => {

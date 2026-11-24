@@ -764,8 +764,15 @@ a.csp-side-nav__link.cds--side-nav__link--active[aria-current='page'] {
   // Sized to its content so the actions sit directly below it; it scrolls only when the panel is short.
   flex: 0 1 auto;
   min-height: 0;
-  padding: 16px 16px 24px;
+  padding: 16px 16px 0;
   overflow-y: auto;
+}
+
+// Gap above the actions, inside the scroller so a short panel can still shrink the body.
+.profile-panel__body::after {
+  content: '';
+  display: block;
+  height: 24px;
 }
 
 .profile-panel__identity {
