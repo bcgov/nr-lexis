@@ -1937,7 +1937,7 @@ describe('Reports Page Actions', () => {
     expect(screen.queryByText('Application report downloaded.')).not.toBeInTheDocument()
   })
 
-  it('announces a PDF report opened in a new tab', async () => {
+  it('shows no notice when a PDF report opens in a new tab', async () => {
     mockReportPermissions()
     mockedRunReport.mockResolvedValueOnce({
       source: 'api',
@@ -1958,7 +1958,11 @@ describe('Reports Page Actions', () => {
     await userEvent.type(screen.getByLabelText('Received from date'), '2026-01-01')
     await userEvent.click(screen.getByRole('button', { name: 'Generate report' }))
 
-    expect(await screen.findByText('Application report opened in a new tab.')).toBeVisible()
+    await waitFor(() => expect(mockedRunReport).toHaveBeenCalledTimes(1))
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: 'Generate report' })).toBeEnabled(),
+    )
+    expect(screen.queryByText(/Application report (opened|downloaded)/)).not.toBeInTheDocument()
     expect(mockedTriggerBrowserDownload).not.toHaveBeenCalled()
   })
 

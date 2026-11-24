@@ -2002,16 +2002,9 @@ const ProvincialExemptionDetailsPage = () => {
     setGeneratingReport(true)
     setActionResult(null)
     try {
-      const result = await runReport({
+      await runReport({
         reportId: 'approvedExemptionReport',
         values: { exemptionNumber: detail.exemptionNumber },
-      })
-      setActionResult({
-        kind: 'success',
-        title: result.openedInNewTab
-          ? 'Approved exemption report opened in a new tab.'
-          : 'Approved exemption report downloaded.',
-        message: '',
       })
     } catch (error) {
       console.error(error)

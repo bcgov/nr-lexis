@@ -2711,7 +2711,7 @@ describe('Provincial exemption edit context', () => {
     expect(vi.mocked(updateExemption)).not.toHaveBeenCalled()
   })
 
-  it('opens the approved exemption report in a new tab', async () => {
+  it('generates the approved exemption report without a notice', async () => {
     vi.mocked(useAuth).mockReturnValue(
       createTestAuthContext({
         canPerform: (action: string) => action === '/approvedExemptionReport',
@@ -2737,9 +2737,11 @@ describe('Provincial exemption edit context', () => {
         values: { exemptionNumber: 'BOIC-205' },
       })
     })
-    expect(
-      await screen.findByText('Approved exemption report opened in a new tab.'),
-    ).toBeInTheDocument()
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: 'Print approved exemption' })).toBeEnabled(),
+    )
+    expect(screen.queryByText(/Approved exemption report/)).not.toBeInTheDocument()
+    expect(screen.queryByText('Action failed')).not.toBeInTheDocument()
   })
 
   it('shows the approved exemption report request error', async () => {

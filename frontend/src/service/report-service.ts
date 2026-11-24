@@ -3,7 +3,6 @@ import { env } from '@/env'
 import apiService from '@/service/api-service'
 import { extractResponseFilename, getResponseHeaderValue } from '@/service/http-response-utils'
 import { getConfiguredBasePath } from '@/service/service-config-utils'
-import { openDocumentPreview } from '@/utils/document-preview'
 
 type RunReportRequest = {
   reportId: string
@@ -390,20 +389,15 @@ const openPdfReport = async (
   defaultFilename: string,
 ): Promise<RunReportResult> => {
   const response = await postReport(request, { responseType: 'blob' })
-  const filename = extractResponseFilename(response.headers, defaultFilename)
-  // A browser can block a tab opened long after the click; the PDF then downloads instead.
-  const previewTarget = window.open('about:blank', '_blank')
-  if (previewTarget) {
-    previewTarget.opener = null
-  }
-  openDocumentPreview(response.data as Blob, filename, previewTarget)
+  // Not revoked: the new tab loads the URL after this returns.
+  window.open(URL.createObjectURL(response.data as Blob), '_blank', 'noopener,noreferrer')
   return {
     source: 'api',
-    filename,
+    filename: extractResponseFilename(response.headers, defaultFilename),
     contentType:
       getResponseHeaderValue(response.headers, 'content-type') ?? 'application/octet-stream',
-    downloaded: !previewTarget,
-    openedInNewTab: Boolean(previewTarget),
+    downloaded: false,
+    openedInNewTab: true,
   }
 }
 

@@ -1,6 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { runReport } from '@/service/report-service'
-import { openDocumentPreview } from '@/utils/document-preview'
 
 const postMock = vi.fn()
 
@@ -12,15 +11,12 @@ vi.mock('@/service/api-service', () => ({
   },
 }))
 
-vi.mock('@/utils/document-preview', () => ({ openDocumentPreview: vi.fn() }))
-
 describe('report-service', () => {
-  let previewTarget: Window
   beforeEach(() => {
     vi.clearAllMocks()
     vi.unstubAllEnvs()
-    previewTarget = { opener: window } as unknown as Window
-    vi.spyOn(window, 'open').mockReturnValue(previewTarget)
+    vi.spyOn(window, 'open').mockReturnValue(null)
+    vi.spyOn(URL, 'createObjectURL').mockReturnValue('blob:report')
   })
 
   afterEach(() => {
@@ -188,18 +184,13 @@ describe('report-service', () => {
       values: { outputFormat: 'PDF' },
     })
 
-    expect(window.open).toHaveBeenCalledWith('about:blank', '_blank')
+    expect(URL.createObjectURL).toHaveBeenCalledWith(reportBlob)
+    expect(window.open).toHaveBeenCalledWith('blob:report', '_blank', 'noopener,noreferrer')
     expect(vi.mocked(window.open).mock.invocationCallOrder[0]).toBeGreaterThan(
       postMock.mock.invocationCallOrder[0],
     )
-    expect(previewTarget.opener).toBeNull()
     expect(showSaveFilePicker).not.toHaveBeenCalled()
     expect(postMock.mock.calls[0][2]).toEqual(expect.objectContaining({ responseType: 'blob' }))
-    expect(openDocumentPreview).toHaveBeenCalledWith(
-      reportBlob,
-      'advertising-list.pdf',
-      previewTarget,
-    )
     expect(result).toEqual(
       expect.objectContaining({
         filename: 'advertising-list.pdf',
@@ -217,22 +208,6 @@ describe('report-service', () => {
       runReport({ reportId: 'permitReport', actionMapping: 'generate', values: {} }),
     ).rejects.toThrow('No report data matched the selected criteria.')
     expect(window.open).not.toHaveBeenCalled()
-    expect(openDocumentPreview).not.toHaveBeenCalled()
-  })
-
-  it('downloads a PDF report when the browser blocks the new tab', async () => {
-    vi.mocked(window.open).mockReturnValue(null)
-    const reportBlob = new Blob(['%PDF-1.7'], { type: 'application/pdf' })
-    postMock.mockResolvedValue({ status: 200, data: reportBlob, headers: {} })
-
-    const result = await runReport({
-      reportId: 'permitReport',
-      actionMapping: 'generate',
-      values: {},
-    })
-
-    expect(openDocumentPreview).toHaveBeenCalledWith(reportBlob, 'permit.pdf', null)
-    expect(result).toEqual(expect.objectContaining({ downloaded: true, openedInNewTab: false }))
   })
 
   it('posts report payload to default endpoint and parses filename from headers', async () => {

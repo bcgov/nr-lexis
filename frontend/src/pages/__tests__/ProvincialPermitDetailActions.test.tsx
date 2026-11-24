@@ -13827,7 +13827,7 @@ describe('Provincial Permit Detail Action Smoke', () => {
     expect(screen.queryByRole('button', { name: 'Edit fee override' })).not.toBeInTheDocument()
   })
 
-  it('opens the completed permit report in a new tab', async () => {
+  it('generates the completed permit report without a notice', async () => {
     render(
       <MemoryRouter initialEntries={['/provincial/permit/777']}>
         <Routes>
@@ -13849,7 +13849,8 @@ describe('Provincial Permit Detail Action Smoke', () => {
         values: { permitNumber: '777' },
       })
     })
-    expect(await screen.findByText('Permit report opened in a new tab.')).toBeVisible()
+    await waitFor(() => expect(printButton).toBeEnabled())
+    expect(screen.queryByText(/Permit report/)).not.toBeInTheDocument()
     expect(screen.queryByText('Action completed')).not.toBeInTheDocument()
   })
 

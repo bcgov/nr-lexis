@@ -5793,17 +5793,10 @@ const ProvincialPermitDetailsPage = () => {
     setActionResult(null)
     setIsOpeningPermitReport(true)
     try {
-      const result = await runReport({
+      await runReport({
         reportId: 'permitReport',
         actionMapping: 'generate',
         values: { permitNumber: resolvedPermitNumber },
-      })
-      setActionResult({
-        kind: 'success',
-        title: result.openedInNewTab
-          ? 'Permit report opened in a new tab.'
-          : 'Permit report downloaded.',
-        message: '',
       })
     } catch (error) {
       console.error(error)
