@@ -389,31 +389,21 @@ const openPdfReport = async (
   request: RunReportRequest,
   defaultFilename: string,
 ): Promise<RunReportResult> => {
-  // Reserve the tab during the click; browsers block a tab opened after a slow report.
+  const response = await postReport(request, { responseType: 'blob' })
+  const filename = extractResponseFilename(response.headers, defaultFilename)
+  // A browser can block a tab opened long after the click; the PDF then downloads instead.
   const previewTarget = window.open('about:blank', '_blank')
   if (previewTarget) {
     previewTarget.opener = null
   }
-  try {
-    const response = await postReport(request, { responseType: 'blob' })
-    const filename = extractResponseFilename(response.headers, defaultFilename)
-    const contentType =
-      getResponseHeaderValue(response.headers, 'content-type') ?? 'application/octet-stream'
-    // Closing the tab while the report runs cancels it, like dismissing the save dialog.
-    if (previewTarget?.closed) {
-      return { source: 'api', filename, contentType, downloaded: false, cancelled: true }
-    }
-    openDocumentPreview(response.data as Blob, filename, previewTarget)
-    return {
-      source: 'api',
-      filename,
-      contentType,
-      downloaded: !previewTarget,
-      openedInNewTab: Boolean(previewTarget),
-    }
-  } catch (error) {
-    previewTarget?.close()
-    throw error
+  openDocumentPreview(response.data as Blob, filename, previewTarget)
+  return {
+    source: 'api',
+    filename,
+    contentType:
+      getResponseHeaderValue(response.headers, 'content-type') ?? 'application/octet-stream',
+    downloaded: !previewTarget,
+    openedInNewTab: Boolean(previewTarget),
   }
 }
 

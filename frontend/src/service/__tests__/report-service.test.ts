@@ -19,7 +19,7 @@ describe('report-service', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     vi.unstubAllEnvs()
-    previewTarget = { opener: window, close: vi.fn() } as unknown as Window
+    previewTarget = { opener: window } as unknown as Window
     vi.spyOn(window, 'open').mockReturnValue(previewTarget)
   })
 
@@ -166,7 +166,7 @@ describe('report-service', () => {
     expect(createWritable).not.toHaveBeenCalled()
   })
 
-  it('opens a PDF report in a tab reserved before the request, without the save picker', async () => {
+  it('opens a generated PDF report in a new tab without the save picker', async () => {
     const showSaveFilePicker = vi.fn()
     Object.defineProperty(window, 'showSaveFilePicker', {
       configurable: true,
@@ -189,7 +189,7 @@ describe('report-service', () => {
     })
 
     expect(window.open).toHaveBeenCalledWith('about:blank', '_blank')
-    expect(vi.mocked(window.open).mock.invocationCallOrder[0]).toBeLessThan(
+    expect(vi.mocked(window.open).mock.invocationCallOrder[0]).toBeGreaterThan(
       postMock.mock.invocationCallOrder[0],
     )
     expect(previewTarget.opener).toBeNull()
@@ -210,33 +210,14 @@ describe('report-service', () => {
     expect(result.blob).toBeUndefined()
   })
 
-  it('closes the reserved tab when a PDF report fails', async () => {
+  it('opens no tab when a PDF report fails', async () => {
     postMock.mockResolvedValue({ status: 204, data: new Blob([]), headers: {} })
 
     await expect(
       runReport({ reportId: 'permitReport', actionMapping: 'generate', values: {} }),
     ).rejects.toThrow('No report data matched the selected criteria.')
-    expect(previewTarget.close).toHaveBeenCalledOnce()
+    expect(window.open).not.toHaveBeenCalled()
     expect(openDocumentPreview).not.toHaveBeenCalled()
-  })
-
-  it('cancels a PDF report when its tab is closed before the report is ready', async () => {
-    postMock.mockImplementation(async () => {
-      Object.assign(previewTarget, { closed: true })
-      return { status: 200, data: new Blob(['%PDF-1.7']), headers: {} }
-    })
-
-    const result = await runReport({
-      reportId: 'permitReport',
-      actionMapping: 'generate',
-      values: {},
-    })
-
-    expect(openDocumentPreview).not.toHaveBeenCalled()
-    expect(result).toEqual(
-      expect.objectContaining({ filename: 'permit.pdf', downloaded: false, cancelled: true }),
-    )
-    expect(result.openedInNewTab).toBeUndefined()
   })
 
   it('downloads a PDF report when the browser blocks the new tab', async () => {

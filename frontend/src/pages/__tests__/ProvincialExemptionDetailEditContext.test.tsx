@@ -2742,41 +2742,6 @@ describe('Provincial exemption edit context', () => {
     ).toBeInTheDocument()
   })
 
-  it('shows no report notice when the report tab is closed', async () => {
-    vi.mocked(useAuth).mockReturnValue(
-      createTestAuthContext({
-        canPerform: (action: string) => action === '/approvedExemptionReport',
-      }),
-    )
-    mockedRunReport.mockResolvedValue({
-      source: 'api',
-      filename: 'approved-exemption.pdf',
-      contentType: 'application/pdf',
-      downloaded: false,
-      cancelled: true,
-    })
-
-    render(
-      <MemoryRouter initialEntries={['/provincial/exemption/BOIC-205']}>
-        <Routes>
-          <Route
-            path="/provincial/exemption/:exemptionNumber"
-            element={<ProvincialExemptionDetailsPage />}
-          />
-        </Routes>
-      </MemoryRouter>,
-    )
-
-    await userEvent.click(await screen.findByRole('button', { name: 'Print approved exemption' }))
-
-    await waitFor(() => expect(mockedRunReport).toHaveBeenCalledTimes(1))
-    await screen.findByRole('button', { name: 'Print approved exemption' })
-    expect(
-      screen.queryByText(/Approved exemption report (opened|downloaded)/),
-    ).not.toBeInTheDocument()
-    expect(screen.queryByText('Action failed')).not.toBeInTheDocument()
-  })
-
   it('shows the approved exemption report request error', async () => {
     vi.mocked(useAuth).mockReturnValue(
       createTestAuthContext({

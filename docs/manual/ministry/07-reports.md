@@ -25,7 +25,7 @@ or XLS report downloads as a file.
 3. Choose the **Output format**.
 4. Select **Generate report**. A PDF opens in a new tab when it is ready. A
    CSV or XLS file downloads. A notice says the report opened or downloaded.
-   Closing the new tab before the PDF appears cancels the report.
+   If your browser blocks the new tab, the PDF downloads instead.
 
 ![The Advertising list report options](images/07-advertising-list.png)
 
