@@ -71,11 +71,11 @@ than the application volume. Correct the application and approve it again.
 2. Choose the **Application status**: **Rejected** or **Withdrawn**.
 3. Enter the **Remark** (up to 250 characters). It is included in the email
    to the applicant and saved on the application's **Remarks** tab.
-4. **Send disapproval email** starts ticked. The **Owner email**, and the
-   **Agent email** when the applicant is an agent, come from their client
-   locations. Select **Edit recipients** to change an address for this email
-   only. If no address is on file, type one. Clear the tick to disapprove
-   without an email.
+4. **Send disapproval email** starts ticked. Clear the tick to disapprove
+   without an email. The **Owner email**, and the **Agent email** when the
+   applicant is an agent, come from their client locations. Select **Edit
+   recipients** to change an address for this email only. If no address is
+   on file, type one.
 5. Select **Disapprove and send email**, or **Disapprove application** when
    the tick is cleared.
 
