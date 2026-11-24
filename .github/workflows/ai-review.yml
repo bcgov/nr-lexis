@@ -23,26 +23,7 @@ jobs:
       group: ai-review-${{ github.event.issue.number }}
       cancel-in-progress: false
     steps:
-      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+      - uses: alexmcdermid/ai-review@80f7f5c0dec36e30b8749dbaa27b41a6d78c880b # main
         with:
-          sparse-checkout: .github/ai-review
-          persist-credentials: false
-      - name: Use Node
-        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.5.0
-        with:
-          node-version: 24
-          cache: npm
-          cache-dependency-path: .github/ai-review/package-lock.json
-      - name: Install
-        run: npm ci --prefix .github/ai-review --ignore-scripts
-      - name: Review pull request
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          ANTHROPIC_REVIEWER_API_KEY: ${{ secrets.ANTHROPIC_REVIEWER_API_KEY }}
-          OPENAI_API_REVIEWER_KEY: ${{ secrets.OPENAI_API_REVIEWER_KEY }}
-          PULL_REQUEST_NUMBER: ${{ github.event.issue.number }}
-          REVIEW_COMMAND: ${{ github.event.comment.body }}
-          REVIEW_COMMAND_COMMENT_ID: ${{ github.event.comment.id }}
-          DEFAULT_REVIEW_TIER: ${{ vars.AI_REVIEW_DEFAULT_TIER || 'standard' }}
-          DEFAULT_REVIEW_PROVIDERS: ${{ vars.AI_REVIEW_DEFAULT_PROVIDERS || 'both' }}
-        run: node .github/ai-review/review-pull-request.mjs
+          anthropic-api-key: ${{ secrets.ANTHROPIC_REVIEWER_API_KEY }}
+          openai-api-key: ${{ secrets.OPENAI_API_REVIEWER_KEY }}
