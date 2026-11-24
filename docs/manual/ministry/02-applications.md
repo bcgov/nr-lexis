@@ -16,7 +16,7 @@ for a client.
 
 | Menu item | Use it to |
 |---|---|
-| **Provincial › Application review** | Approve or disapprove New and Pending applications for the Advertising List. | <!-- roles: administrator, application-approver -->
+| **Provincial › Application review** | Approve or disapprove New applications for the Advertising List. | <!-- roles: administrator, application-approver -->
 | **Provincial › Create application** | Enter an application for a client. | <!-- roles: administrator, application-approver -->
 | **Provincial › Upload applications** | Create applications from files. | <!-- roles: administrator, application-approver -->
 | **Provincial › Application search** | Find provincial applications, and start an exemption from approved ones. | <!-- roles: administrator, application-approver -->
@@ -27,7 +27,7 @@ for a client.
 
 | Status | What it means |
 |---|---|
-| **New**, **Pending** | Waiting for review. Both are listed in **Application review**. |
+| **New** | Waiting for review. Listed in **Application review**. |
 | **Approved** | Approved for advertising on its list date. |
 | **Rejected**, **Withdrawn** | Disapproved, with a remark giving the reason. |
 | **Exempted** | Linked to an exemption. Search results show **Exempted - New** until the exemption is approved. |
@@ -39,9 +39,8 @@ for a client.
 <!-- roles: administrator, application-approver -->
 ### Review applications for the Advertising List
 
-1. **Provincial › Application review**. The queue opens with every New and
-   Pending application in your regions, provincial and federal, 100 to a
-   page.
+1. **Provincial › Application review**. The queue opens with every New
+   application in your regions, provincial and federal, 100 to a page.
 2. Narrow it with **Application number**, **Product type**, **Region**,
    or the received date or list date range, and select **Search**.
 3. Select the number in the **Application** column to check an application,
@@ -97,9 +96,9 @@ The **Review** tab on an application does the same job for one application.
 
 ![The Review tab on an application](images/02-application-review-tab.png)
 
-- A **New** or **Pending** application can be approved.
-- A **New**, **Pending** or **Approved** application can be rejected or
-  withdrawn. For an approved one, only within six days of its list date.
+- A **New** application can be approved.
+- A **New** or **Approved** application can be rejected or withdrawn. For an
+  approved one, only within six days of its list date.
 
 ### Move an application to another list date
 
@@ -139,8 +138,7 @@ details** or **Advertising details** card.
 - A **New** application can be changed at any time.
 - An **Approved** application can be changed until six days after its list
   date, or at any time if it has no list date.
-- **Pending**, **Rejected**, **Withdrawn** and **Expired** applications
-  can't be changed.
+- **Rejected**, **Withdrawn** and **Expired** applications can't be changed.
 - The owner client can't be changed once the application is saved.
 - If the application volume is larger than the package volumes together,
   saving opens **Confirm application details** with the warning "The sum of
