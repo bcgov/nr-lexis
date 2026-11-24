@@ -3,7 +3,6 @@ import { env } from '@/env'
 import apiService from '@/service/api-service'
 import { extractResponseFilename, getResponseHeaderValue } from '@/service/http-response-utils'
 import { getConfiguredBasePath } from '@/service/service-config-utils'
-import { openDocumentPreview } from '@/utils/document-preview'
 
 type RunReportRequest = {
   reportId: string
@@ -389,31 +388,16 @@ const openPdfReport = async (
   request: RunReportRequest,
   defaultFilename: string,
 ): Promise<RunReportResult> => {
-  // Reserve the tab during the click; browsers block a tab opened after a slow report.
-  const previewTarget = window.open('about:blank', '_blank')
-  if (previewTarget) {
-    previewTarget.opener = null
-  }
-  try {
-    const response = await postReport(request, { responseType: 'blob' })
-    const filename = extractResponseFilename(response.headers, defaultFilename)
-    const contentType =
-      getResponseHeaderValue(response.headers, 'content-type') ?? 'application/octet-stream'
-    // Closing the tab while the report runs cancels it, like dismissing the save dialog.
-    if (previewTarget?.closed) {
-      return { source: 'api', filename, contentType, downloaded: false, cancelled: true }
-    }
-    openDocumentPreview(response.data as Blob, filename, previewTarget)
-    return {
-      source: 'api',
-      filename,
-      contentType,
-      downloaded: !previewTarget,
-      openedInNewTab: Boolean(previewTarget),
-    }
-  } catch (error) {
-    previewTarget?.close()
-    throw error
+  const response = await postReport(request, { responseType: 'blob' })
+  // Not revoked: the new tab loads the URL after this returns.
+  window.open(URL.createObjectURL(response.data as Blob), '_blank', 'noopener,noreferrer')
+  return {
+    source: 'api',
+    filename: extractResponseFilename(response.headers, defaultFilename),
+    contentType:
+      getResponseHeaderValue(response.headers, 'content-type') ?? 'application/octet-stream',
+    downloaded: false,
+    openedInNewTab: true,
   }
 }
 

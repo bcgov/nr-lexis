@@ -24,10 +24,13 @@ or XLS report downloads as a file.
    "all".
 3. Choose the **Output format**.
 4. Select **Generate report**. A PDF opens in a new tab when it is ready. A
-   CSV or XLS file downloads. A notice says the report opened or downloaded.
-   Closing the new tab before the PDF appears cancels the report.
+   CSV or XLS file downloads, and a notice says the report was downloaded.
 
 ![The Advertising list report options](images/07-advertising-list.png)
+
+> **Tip:** If a PDF report doesn't open, your browser has blocked the new
+> tab. Allow pop-ups for LEXIS from the browser's address bar, then generate
+> the report again.
 
 **Clear all** empties the options. If nothing matches, LEXIS says **No
 report data matched the selected criteria** and no file is produced.

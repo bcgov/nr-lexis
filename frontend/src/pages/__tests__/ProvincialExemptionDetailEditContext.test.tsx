@@ -2711,7 +2711,7 @@ describe('Provincial exemption edit context', () => {
     expect(vi.mocked(updateExemption)).not.toHaveBeenCalled()
   })
 
-  it('opens the approved exemption report in a new tab', async () => {
+  it('generates the approved exemption report without a notice', async () => {
     vi.mocked(useAuth).mockReturnValue(
       createTestAuthContext({
         canPerform: (action: string) => action === '/approvedExemptionReport',
@@ -2737,43 +2737,10 @@ describe('Provincial exemption edit context', () => {
         values: { exemptionNumber: 'BOIC-205' },
       })
     })
-    expect(
-      await screen.findByText('Approved exemption report opened in a new tab.'),
-    ).toBeInTheDocument()
-  })
-
-  it('shows no report notice when the report tab is closed', async () => {
-    vi.mocked(useAuth).mockReturnValue(
-      createTestAuthContext({
-        canPerform: (action: string) => action === '/approvedExemptionReport',
-      }),
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: 'Print approved exemption' })).toBeEnabled(),
     )
-    mockedRunReport.mockResolvedValue({
-      source: 'api',
-      filename: 'approved-exemption.pdf',
-      contentType: 'application/pdf',
-      downloaded: false,
-      cancelled: true,
-    })
-
-    render(
-      <MemoryRouter initialEntries={['/provincial/exemption/BOIC-205']}>
-        <Routes>
-          <Route
-            path="/provincial/exemption/:exemptionNumber"
-            element={<ProvincialExemptionDetailsPage />}
-          />
-        </Routes>
-      </MemoryRouter>,
-    )
-
-    await userEvent.click(await screen.findByRole('button', { name: 'Print approved exemption' }))
-
-    await waitFor(() => expect(mockedRunReport).toHaveBeenCalledTimes(1))
-    await screen.findByRole('button', { name: 'Print approved exemption' })
-    expect(
-      screen.queryByText(/Approved exemption report (opened|downloaded)/),
-    ).not.toBeInTheDocument()
+    expect(screen.queryByText(/Approved exemption report/)).not.toBeInTheDocument()
     expect(screen.queryByText('Action failed')).not.toBeInTheDocument()
   })
 

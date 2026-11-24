@@ -1393,11 +1393,9 @@ export const ReportsPageContent = () => {
       if (runResult.blob) {
         triggerBrowserDownload(runResult.blob, runResult.filename)
       }
-      // A dismissed save dialog or closed report tab produced nothing, so it stays silent.
-      if (!runResult.cancelled) {
-        setDownloadedMessage(
-          `${selectedReport.title} ${runResult.openedInNewTab ? 'opened in a new tab' : 'downloaded'}.`,
-        )
+      // A PDF shows in its own tab and a cancelled save picker produced no file, so both stay silent.
+      if (!runResult.cancelled && !runResult.openedInNewTab) {
+        setDownloadedMessage(`${selectedReport.title} downloaded.`)
       }
     } catch (error) {
       console.error(error)
