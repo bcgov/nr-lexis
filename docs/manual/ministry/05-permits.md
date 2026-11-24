@@ -7,7 +7,7 @@ notify the applicant. Completing a permit creates its invoice.
 
 | Role | Can |
 |---|---|
-| Application Approver, Administrator | Start, change, complete, cancel and reactivate permits, override fees, enter receipt numbers. An Application Approver works in their regions. | <!-- roles: administrator, application-approver -->
+| Application Approver, Administrator | Start, change, complete and cancel permits, set Complete or Payment pending permits back to Active, override fees, enter receipt numbers. An Application Approver works in their regions. | <!-- roles: administrator, application-approver -->
 | Read Only | Find and open permits in their regions, open documents and print completed permits. | <!-- roles: read-only -->
 
 ## Permit statuses
@@ -169,15 +169,16 @@ says whether the confirmation email was sent.
 The approval email goes from the export mailbox for the permit's region to
 the address you confirm. It gives the permit number and lists its packages.
 
-### Cancel, reactivate or replace a permit
+### Cancel, reopen or replace a permit
 
 Change the **Status** in **Edit permit details**.
 
 - **Cancelled** cancels every active invoice for the permit. Its Permitted
   applications normally go back to **Exempted**. Shipping and documents can
   still be changed on a cancelled permit, except the port of export.
-- **Active**, from Complete, Payment pending or Cancelled, also cancels the
-  active invoices and reopens the permit for changes.
+- **Active**, from Complete or Payment pending, also cancels the active
+  invoices and reopens the permit for changes.
+- A Cancelled or Expired permit can't be set back to Active.
 - To replace an issued permit, set it back to **Active**, make the
   correction and complete it again. The new invoice replaces the earlier
   one.
