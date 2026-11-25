@@ -2227,7 +2227,7 @@ function ProvincialApplicationItemsPanel({
                                   deletingScaleId === row.id
                                 }
                                 renderIcon={deletingScaleId === row.id ? PendingIcon : TrashCan}
-                                aria-label={`${deletingScaleId === row.id ? 'Deleting' : 'Delete'} scale ${row.timberMark}, ${row.species}, grade ${row.grade.replace(/^Grade\s+/i, '')}`}
+                                aria-label={`${deletingScaleId === row.id ? 'Deleting' : 'Delete'} scale ${row.timberMark}, ${row.species}, grade ${row.grade}`}
                                 onClick={() => {
                                   if (itemsBusy) return
                                   confirmItemDiscard(() => {
@@ -2382,7 +2382,7 @@ function ProvincialApplicationItemsPanel({
                 {[
                   `Timber mark ${scalePendingDeletion.timberMark}`,
                   scalePendingDeletion.species,
-                  `Grade ${scalePendingDeletion.grade.replace(/^Grade\s+/i, '')}`,
+                  `Grade ${scalePendingDeletion.grade}`,
                   `${formatVolume(scalePendingDeletion.volume)} m³`,
                 ].join(' · ')}
               </strong>{' '}

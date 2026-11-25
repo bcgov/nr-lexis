@@ -8515,7 +8515,7 @@ describe('Provincial Permit Detail Action Smoke', () => {
     expect(within(feeRows).queryByText('TM-PLAIN')).not.toBeInTheDocument()
   })
 
-  it.each(['A', 'Grade A'])('adds and removes scales: %s', async (grade) => {
+  it('adds and removes scales', async () => {
     const blanketOicPermit = {
       ...permitDetail,
       permitStatusCode: 'ACT',
@@ -8553,7 +8553,7 @@ describe('Provincial Permit Detail Action Smoke', () => {
           timberMark: 'TM-9',
           scaleType: '',
           species: 'HE',
-          grade,
+          grade: 'A',
           pieces: 12,
           volume: 10.5,
           packageNumber: 'BOIC-9',
@@ -8613,7 +8613,7 @@ describe('Provincial Permit Detail Action Smoke', () => {
     await selectPermitDetailTab('Items')
     await userEvent.click(
       within(screen.getByRole('region', { name: 'Scale rows' })).getByRole('button', {
-        name: `Delete scale TM-9, HE, grade ${grade}`,
+        name: 'Delete scale TM-9, HE, grade A',
       }),
     )
     const removalConfirmation = await screen.findByRole('dialog', {

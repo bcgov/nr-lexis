@@ -21,6 +21,7 @@ import java.util.Arrays;
 import java.util.List;
 import java.util.Optional;
 import java.util.stream.Stream;
+import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.EnumSource;
@@ -151,20 +152,29 @@ class ScaleCodeReferenceRepositoryTest {
     verify(later).getString("DESCRIPTION");
   }
 
-  @ParameterizedTest
-  @EnumSource(value = CodeType.class, names = {"SPECIES", "GRADE"})
-  void permitLookupsShouldRejectBlankInputsWithoutQuerying(CodeType type) {
+  @Test
+  void permitSpeciesDescriptionShouldRejectBlankInputsWithoutQuerying() {
     JdbcTemplate jdbcTemplate = mock(JdbcTemplate.class);
 
     for (String code : Arrays.asList(null, "", " \t ")) {
-      assertThat(type.permitDescription(jdbcTemplate, code)).isEmpty();
-      assertThat(type.permitValidation(jdbcTemplate, code)).isFalse();
+      assertThat(CodeType.SPECIES.permitDescription(jdbcTemplate, code)).isEmpty();
     }
     verifyNoInteractions(jdbcTemplate);
   }
 
   @ParameterizedTest
   @EnumSource(value = CodeType.class, names = {"SPECIES", "GRADE"})
+  void permitValidationShouldRejectBlankInputsWithoutQuerying(CodeType type) {
+    JdbcTemplate jdbcTemplate = mock(JdbcTemplate.class);
+
+    for (String code : Arrays.asList(null, "", " \t ")) {
+      assertThat(type.permitValidation(jdbcTemplate, code)).isFalse();
+    }
+    verifyNoInteractions(jdbcTemplate);
+  }
+
+  @ParameterizedTest
+  @EnumSource(value = CodeType.class, names = {"SPECIES"})
   void permitDescriptionsShouldBindTrimmedStringsAndChooseOnlyTheFirstDescription(CodeType type)
       throws Exception {
     JdbcTemplate jdbcTemplate = mock(JdbcTemplate.class);
@@ -181,7 +191,7 @@ class ScaleCodeReferenceRepositoryTest {
   }
 
   @ParameterizedTest
-  @EnumSource(value = CodeType.class, names = {"SPECIES", "GRADE"})
+  @EnumSource(value = CodeType.class, names = {"SPECIES"})
   @SuppressWarnings("unchecked")
   void permitDescriptionsShouldReturnEmptyOnAbsenceAndQueryOrColumnFailures(CodeType type)
       throws Exception {
@@ -201,7 +211,7 @@ class ScaleCodeReferenceRepositoryTest {
   }
 
   @ParameterizedTest
-  @EnumSource(value = CodeType.class, names = {"SPECIES", "GRADE"})
+  @EnumSource(value = CodeType.class, names = {"SPECIES"})
   @SuppressWarnings("unchecked")
   void permitDescriptionsShouldNotBorrowStaticFallbacksFromOtherCodeFamilies(CodeType type) {
     JdbcTemplate jdbcTemplate = mock(JdbcTemplate.class);
@@ -284,14 +294,19 @@ class ScaleCodeReferenceRepositoryTest {
 
   private static Stream<Arguments> applicationCallers() {
     return Arrays.stream(CodeType.values())
-        .flatMap(type -> Stream.of(Arguments.of(type, false), Arguments.of(type, true)));
+        .flatMap(type -> requiredModes(type).map(required -> Arguments.of(type, required)));
+  }
+
+  // Grade has only the required application lookup.
+  private static Stream<Boolean> requiredModes(CodeType type) {
+    return type == CodeType.GRADE ? Stream.of(true) : Stream.of(false, true);
   }
 
   private static Stream<Arguments> applicationColumnCases() {
     return Arrays.stream(CodeType.values())
         .flatMap(
             type ->
-                Stream.of(false, true)
+                requiredModes(type)
                     .flatMap(
                         required ->
                             Stream.of("CODE", "DESCRIPTION", "GROUP_BY", "ORDER_BY")
@@ -314,8 +329,7 @@ class ScaleCodeReferenceRepositoryTest {
       return switch (this) {
         case SPECIES ->
             required ? repository.findSpeciesCodeRequired(code) : repository.findSpeciesCode(code);
-        case GRADE ->
-            required ? repository.findGradeCodeRequired(code) : repository.findGradeCode(code);
+        case GRADE -> repository.findGradeCodeRequired(code);
         case END_USE ->
             required ? repository.findEndUseCodeRequired(code) : repository.findEndUseCode(code);
       };
@@ -325,7 +339,7 @@ class ScaleCodeReferenceRepositoryTest {
       PermitRpcRepository repository = new PermitRpcRepository(jdbc);
       return switch (this) {
         case SPECIES -> repository.findSpeciesDescription(code);
-        case GRADE -> repository.findGradeDescription(code);
+        case GRADE -> throw new IllegalArgumentException("No permit grade description lookup");
         case END_USE -> throw new IllegalArgumentException("No permit end-use description lookup");
       };
     }

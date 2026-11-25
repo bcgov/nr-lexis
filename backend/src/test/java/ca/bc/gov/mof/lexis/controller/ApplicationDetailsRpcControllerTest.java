@@ -3336,9 +3336,9 @@ class ApplicationDetailsRpcControllerTest {
         .thenReturn(
             List.of(
                 new ApplicationDetailsRpcService.ApplicationPackageScaleItem(
-                    true, "TM001", "Douglas-fir", 12L, "Grade J", "10.5", "55", "C"),
+                    true, "TM001", "Douglas-fir", 12L, "J", "10.5", "55", "C"),
                 new ApplicationDetailsRpcService.ApplicationPackageScaleItem(
-                    false, "Unmanufactured", "Hemlock", 8L, "Grade U", "6.0", "56", "")));
+                    false, "Unmanufactured", "Hemlock", 8L, "U", "6.0", "56", "")));
 
     ResponseEntity<List<ApplicationDetailsRpcController.ApplicationPackageScaleResponseDto>> response =
         controller.getScalesForPackageLegacy("PKG-903");
@@ -3356,8 +3356,8 @@ class ApplicationDetailsRpcControllerTest {
             ApplicationDetailsRpcController.ApplicationPackageScaleResponseDto::id,
             ApplicationDetailsRpcController.ApplicationPackageScaleResponseDto::cascadeSplitCode)
         .containsExactly(
-            tuple(true, "TM001", "Douglas-fir", 12L, "Grade J", "10.5", "55", "C"),
-            tuple(false, "Unmanufactured", "Hemlock", 8L, "Grade U", "6.0", "56", ""));
+            tuple(true, "TM001", "Douglas-fir", 12L, "J", "10.5", "55", "C"),
+            tuple(false, "Unmanufactured", "Hemlock", 8L, "U", "6.0", "56", ""));
     verify(service).getScalesForPackage("PKG-903");
   }
 

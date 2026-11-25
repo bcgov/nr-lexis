@@ -289,7 +289,7 @@ const scaleDeletionLabel = (row: ProvincialPermitItemRow): string =>
   [
     `Timber mark ${displayValueText(row.timberMark)}`,
     displayValueText(row.species),
-    `Grade ${displayValueText(row.grade).replace(/^Grade\s+/i, '')}`,
+    `Grade ${displayValueText(row.grade)}`,
     `${formatVolume(row.volume)} m³`,
   ].join(' · ')
 
