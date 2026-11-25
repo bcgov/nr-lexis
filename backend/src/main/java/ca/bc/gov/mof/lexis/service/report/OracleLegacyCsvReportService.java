@@ -51,8 +51,57 @@ public class OracleLegacyCsvReportService {
       "{ call LEXIS_REPORTING.OFFERS_REPORT_CSV(?,?,?,?) }";
   private static final String FEE_SUMMARY_CSV_PROCEDURE =
       "{ call LEXIS_REPORTING.FEE_SUMMARY_RPT_CSV(?,?,?,?) }";
-  private static final String BIWEEKLY_CSV_PROCEDURE =
-      "{ call LEXIS_REPORTING.BIWEEKLY_REPORT_CSV(?,?,?,?) }";
+  // LEXIS_REPORTING.BIWEEKLY_REPORT_CSV plus contact emails; Jurisdiction header spelling fixed.
+  private static final String BIWEEKLY_CSV_SELECT =
+      """
+      SELECT ES.ADVERTISING_DATE AS "Notification Date",
+             OU.ORG_UNIT_NAME AS "Region",
+             FC.CLIENT_NAME AS "Client Name",
+             CL.ADDRESS_1 AS "Client Address 1",
+             CL.ADDRESS_2 AS "Client Address 2",
+             CL.ADDRESS_3 AS "Client Address 3",
+             CL.CITY AS "Client City",
+             CL.PROVINCE AS "Client Province",
+             CL.POSTAL_CODE AS "Client Postal Code",
+             EEA.OWNER_CONTACT_NAME AS "Client Contact Name",
+             CL.BUSINESS_PHONE AS "Client Contact Phone",
+             CL.EMAIL_ADDRESS AS "Client Contact Email",
+             EEA.EXPORT_JURISDICTION_CODE AS "Jurisdiction Code",
+             NVL(EEA.FED_APPLICATION_NUMBER, EEA.APPLICATION_NUMBER) AS "Application Number",
+             LEXIS_REPORTING.RETRIEVE_SPECIES_ENDUSE(EEA.APPLICATION_NUMBER) AS "Species Enduse",
+             EPTC.DESCRIPTION AS "Product Type",
+             EEA.PRODUCT_LOCATION AS "Product Location",
+             EEA.EXEMPTION_APPLICATION_VOLUME AS "Exemption Application Volume",
+             EEA.AVERAGE_LOG_VOLUME AS "Average Log Volume",
+             AFC.CLIENT_NAME AS "Agent Name",
+             ACL.BUSINESS_PHONE AS "Agent Phone",
+             EEA.AGENT_CONTACT_NAME AS "Agent Contact Name",
+             ACL.EMAIL_ADDRESS AS "Agent Contact Email",
+             EP.PACKAGE_NUMBER AS "Package Number",
+             EP.PACKAGE_VOLUME AS "Package Volume",
+             EEA.EXPORT_GROWTH_TYPE_CODE AS "Age Class",
+             EP.AVERAGE_LENGTH AS "Average Length",
+             EP.AVERAGE_DIAMETER AS "Average Diameter"
+        FROM THE.EXPORT_EXEMPTION_APPLICATION EEA
+        LEFT OUTER JOIN THE.EXPORT_PACKAGE EP
+          ON EEA.APPLICATION_NUMBER = EP.APPLICATION_NUMBER
+       INNER JOIN THE.V_CLIENT_PUBLIC FC
+          ON EEA.OWNER_CLIENT_NUMBER = FC.CLIENT_NUMBER
+       INNER JOIN THE.CLIENT_LOCATION CL
+          ON EEA.OWNER_CLIENT_NUMBER = CL.CLIENT_NUMBER
+         AND EEA.OWNER_CLIENT_LOCATION_CODE = CL.CLIENT_LOCN_CODE
+        LEFT JOIN THE.V_CLIENT_PUBLIC AFC
+          ON EEA.AGENT_CLIENT_NUMBER = AFC.CLIENT_NUMBER
+        LEFT JOIN THE.CLIENT_LOCATION ACL
+          ON EEA.AGENT_CLIENT_NUMBER = ACL.CLIENT_NUMBER
+         AND EEA.AGENT_CLIENT_LOCATION_CODE = ACL.CLIENT_LOCN_CODE
+       INNER JOIN THE.EXPORT_SCHEDULE ES
+          ON ES.EXPORT_SCHEDULE_ID = EEA.EXPORT_SCHEDULE_ID
+       INNER JOIN THE.EXPORT_PRODUCT_TYPE_CODE EPTC
+          ON EPTC.EXPORT_PRODUCT_TYPE_CODE = EEA.EXPORT_PRODUCT_TYPE_CODE
+       INNER JOIN THE.ORG_UNIT OU
+          ON OU.ORG_UNIT_NO = EEA.ORG_UNIT_NO
+      """;
   private static final String TRANSPORT_CSV_PROCEDURE =
       "{ call LEXIS_REPORTING.TRANSPORT_REPORT_CSV(?,?,?,?) }";
   private static final String EXEMPTIONS_CSV_PROCEDURE =
@@ -253,9 +302,9 @@ public class OracleLegacyCsvReportService {
     Map<String, String> parameters = requestParameters(request);
     DynamicWhere where = buildBiweeklyWhere(parameters);
     return Optional.of(
-        executeDynamicCursorCsv(
-            BIWEEKLY_CSV_PROCEDURE,
-            where,
+        executeQueryCsv(
+            BIWEEKLY_CSV_SELECT + " WHERE " + where.sql(),
+            where.bindValues(),
             "biweekly",
             LexisJasperReportDefinition.BIWEEKLY_LISTING.resolveFilename(
                 LexisReportFormat.CSV)));
@@ -426,6 +475,33 @@ public class OracleLegacyCsvReportService {
     } catch (SQLException ex) {
       LOGGER.error(
           "event=lexis_report operation=filtered_cursor_load outcome=failed failureType={}",
+          exceptionType(ex));
+      throw new LexisReportGenerationException(
+          "The " + reportName + " report data could not be loaded", ex);
+    }
+  }
+
+  private LexisGeneratedReport executeQueryCsv(
+      String sql, List<String> bindValues, String reportName, String filename) {
+    try (LexisReportArtifact artifact = reportResources.createArtifact()) {
+      try (Connection connection = dataSource.getConnection();
+          PreparedStatement statement = connection.prepareStatement(sql)) {
+        reportResources.applyQueryControls(statement);
+        for (int index = 0; index < bindValues.size(); index++) {
+          statement.setString(index + 1, bindValues.get(index));
+        }
+        try (ResultSet rs = statement.executeQuery()) {
+          reportResources.applyFetchSize(rs);
+          renderCursorCsv(rs, artifact.outputStream(), reportName);
+        }
+      }
+      return artifact.complete(filename, LexisReportFormat.CSV.mediaType());
+    } catch (IOException ex) {
+      throw csvRenderFailure(reportName, ex);
+    } catch (SQLException ex) {
+      LOGGER.error(
+          "event=lexis_report operation=query_load outcome=failed report={} failureType={}",
+          controlSafe(reportName),
           exceptionType(ex));
       throw new LexisReportGenerationException(
           "The " + reportName + " report data could not be loaded", ex);
