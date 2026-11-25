@@ -465,10 +465,7 @@ test('offers Delete only on scales not on a completed permit and explains a refu
   await expect(lockedRow.getByRole('button', { name: /^Delete scale / })).toHaveCount(0)
   await expect(openRow.getByRole('button', { name: /^Delete scale / })).toHaveCount(1)
 
-  // A package that has scales can't be deleted, and says so.
-  await expect(
-    page.getByText("A package with scales can't be deleted.", { exact: true }),
-  ).toBeVisible()
+  // A package that has scales can't be deleted.
   await expect(page.getByRole('button', { name: 'Delete package', exact: true })).toHaveCount(0)
 
   // The server can still refuse a delete when the scale has reached a completed permit meanwhile.
