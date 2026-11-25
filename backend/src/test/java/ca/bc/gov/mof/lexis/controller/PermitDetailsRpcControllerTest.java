@@ -468,7 +468,7 @@ class PermitDetailsRpcControllerTest {
         new PermitScalesForPackageRpcResponseDto(
             List.of(
                 new PermitScaleItemRpcResponseDto(
-                    "TM1", 11L, "Hemlock", "Grade J", "7.6", "7000123", "101", "W", "RCO")));
+                    "TM1", 11L, "Hemlock", "J", "7.6", "7000123", "101", "W", "RCO")));
     when(service.getScalesForPackage("PKG-903")).thenReturn(dto);
     when(service.packageBelongsToPermit("PKG-903", 7000123L)).thenReturn(true);
 

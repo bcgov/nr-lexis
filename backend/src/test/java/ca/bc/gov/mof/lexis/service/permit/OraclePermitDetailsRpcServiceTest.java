@@ -836,7 +836,6 @@ class OraclePermitDetailsRpcServiceTest {
     when(repository.findScaleDetailsByPackageNumber("PKG-903"))
         .thenReturn(List.of(scale("101", "TM1", "HEM", "J", 7.60d, 11L, "7000123", "PKG-903")));
     when(repository.findSpeciesDescription("HEM")).thenReturn(Optional.of("Hemlock"));
-    when(repository.findGradeDescription("J")).thenReturn(Optional.of("Grade J"));
     when(applicationService.findPackageByPackageNumber("PKG-903"))
         .thenReturn(Optional.of(new LexisPackageLookupDto("PKG-903", 1000456L, 7.60d, "S")));
     when(repository.findGrowthTypeDescription("S")).thenReturn(Optional.of("Standing"));
@@ -850,19 +849,18 @@ class OraclePermitDetailsRpcServiceTest {
     assertThat(response.growthType()).isEqualTo("Standing");
     assertThat(response.scaleList()).hasSize(1);
     assertThat(response.scaleList().get(0).species()).isEqualTo("Hemlock");
-    assertThat(response.scaleList().get(0).grade()).isEqualTo("Grade J");
+    assertThat(response.scaleList().get(0).grade()).isEqualTo("J");
     assertThat(response.scaleList().get(0).fee()).isEqualTo("$7.60");
   }
 
   @Test
-  void scaleFeesShouldResolveRepeatedSpeciesAndGradeDescriptionsOncePerRequest() {
+  void scaleFeesShouldResolveRepeatedSpeciesDescriptionsOncePerRequest() {
     when(repository.findScaleDetailsByPackageNumber("PKG-903"))
         .thenReturn(
             List.of(
                 scale("101", "TM1", "HEM", "J", 7.60d, 11L, "7000123", "PKG-903"),
                 scale("102", "TM2", "HEM", "J", 3.40d, 5L, "7000123", "PKG-903")));
     when(repository.findSpeciesDescription("HEM")).thenReturn(Optional.of("Hemlock"));
-    when(repository.findGradeDescription("J")).thenReturn(Optional.of("Grade J"));
     when(applicationService.findPackageByPackageNumber("PKG-903"))
         .thenReturn(Optional.of(new LexisPackageLookupDto("PKG-903", 1000456L, 11.0d, "S")));
     when(repository.findGrowthTypeDescription("S")).thenReturn(Optional.of("Standing"));
@@ -877,7 +875,6 @@ class OraclePermitDetailsRpcServiceTest {
     assertThat(response.totalFeeForPackage()).isEqualTo("$11.00");
     assertThat(response.scaleList()).hasSize(2);
     verify(repository, times(1)).findSpeciesDescription("HEM");
-    verify(repository, times(1)).findGradeDescription("J");
   }
 
   @Test
@@ -893,7 +890,6 @@ class OraclePermitDetailsRpcServiceTest {
                     firstScale,
                     "T",
                     "Hemlock",
-                    "Grade J",
                     "S",
                     "Second Growth",
                     BigDecimal.valueOf(125.0d)),
@@ -901,7 +897,6 @@ class OraclePermitDetailsRpcServiceTest {
                     secondScale,
                     "T",
                     "Fir",
-                    "Grade K",
                     "O",
                     "Old Growth",
                     BigDecimal.valueOf(95.0d))));
@@ -920,13 +915,12 @@ class OraclePermitDetailsRpcServiceTest {
             tuple("PKG-903", "$7.60", "Second Growth"),
             tuple("PKG-999", "$3.40", "Old Growth"));
     assertThat(response.packageList().get(0).scaleList().get(0).species()).isEqualTo("Hemlock");
-    assertThat(response.packageList().get(0).scaleList().get(0).grade()).isEqualTo("Grade J");
+    assertThat(response.packageList().get(0).scaleList().get(0).grade()).isEqualTo("J");
     assertThat(response.packageList().get(0).scaleList().get(0).amv()).isEqualTo("$125.00");
     verify(repository, times(1)).findPermitFeeScaleRows(7000123L);
     verify(repository, never()).findAverageMarketValueByScaleId(any());
     verify(repository, never()).isApplicationUnmanufactured(anyLong());
     verify(repository, never()).findSpeciesDescription(any());
-    verify(repository, never()).findGradeDescription(any());
     verify(repository, never()).findApplicationInfoByNumber(anyLong());
     verify(repository, never()).findGrowthTypeDescription(any());
     verifyNoInteractions(applicationService);
@@ -968,7 +962,6 @@ class OraclePermitDetailsRpcServiceTest {
                     scale("101", "TM1", "HEM", "J", 7.60d, 11L, "7000123", "PKG-903"),
                     "T",
                     "Hemlock",
-                    "Grade J",
                     "S",
                     "Second Growth",
                     BigDecimal.valueOf(125))));
@@ -1062,7 +1055,6 @@ class OraclePermitDetailsRpcServiceTest {
                     scale("101", "TM1", "HEM", "J", 7.60d, 11L, "7000123", "PKG-903"),
                     "T",
                     "Hemlock",
-                    "Grade J",
                     "S",
                     "Second Growth",
                     BigDecimal.valueOf(125))));
@@ -1088,9 +1080,9 @@ class OraclePermitDetailsRpcServiceTest {
         .thenReturn(
             List.of(
                 new PermitFeeScaleRow(
-                    firstScale, "T", "Hemlock", "Grade J", "S", "Second Growth", BigDecimal.ONE),
+                    firstScale, "T", "Hemlock", "S", "Second Growth", BigDecimal.ONE),
                 new PermitFeeScaleRow(
-                    secondScale, "T", "Fir", "Grade K", "S", "Second Growth", BigDecimal.ONE)));
+                    secondScale, "T", "Fir", "S", "Second Growth", BigDecimal.ONE)));
 
     PermitAllScaleFeesRpcResponseDto response = service.getAllScaleFees(7000123L, true);
 
@@ -1137,10 +1129,10 @@ class OraclePermitDetailsRpcServiceTest {
             List.of(
                 new PermitFeeScaleRow(
                     scale("101", "TM1", "HEM", "J", 0.05d, 1L, "7000123", "PKG-903"),
-                    "T", "Hemlock", "Grade J", "S", "Second Growth", BigDecimal.ONE),
+                    "T", "Hemlock", "S", "Second Growth", BigDecimal.ONE),
                 new PermitFeeScaleRow(
                     scale("102", "TM2", "FIR", "K", 2.0d, 1L, "7000123", "PKG-903"),
-                    "T", "Fir", "Grade K", "S", "Second Growth", BigDecimal.ONE)));
+                    "T", "Fir", "S", "Second Growth", BigDecimal.ONE)));
 
     PermitAllScaleFeesRpcResponseDto response = service.getAllScaleFees(7000123L, true);
 
@@ -1163,7 +1155,7 @@ class OraclePermitDetailsRpcServiceTest {
     when(repository.findPermitFeeScaleRows(7000123L))
         .thenReturn(List.of(new PermitFeeScaleRow(
             scale("101", "TM1", "HEM", "J", 1.04d, 1L, "7000123", "PKG-903  "),
-            "T", "Hemlock", "Grade J", "S", "Second Growth", BigDecimal.ONE)));
+            "T", "Hemlock", "S", "Second Growth", BigDecimal.ONE)));
 
     PermitAllScaleFeesRpcResponseDto response = service.getAllScaleFees(7000123L, true);
 
@@ -1224,7 +1216,7 @@ class OraclePermitDetailsRpcServiceTest {
     when(repository.findPermitFeeScaleRows(7000123L))
         .thenReturn(List.of(new PermitFeeScaleRow(
             scale("101", "TM1", "HEM", "J", 1.04d, 1L, "7000123", "PKG-903"),
-            "T", "Hemlock", "Grade J", "S", "Second Growth", BigDecimal.ONE)));
+            "T", "Hemlock", "S", "Second Growth", BigDecimal.ONE)));
 
     PermitAllScaleFeesRpcResponseDto response = service.getAllScaleFees(7000123L, true);
 
@@ -1240,7 +1232,6 @@ class OraclePermitDetailsRpcServiceTest {
     when(repository.findScaleDetailsByPackageNumber("PKG-903"))
         .thenReturn(List.of(scale("101", "TM1", "HEM", "J", 7.60d, 11L, "7000123", "PKG-903")));
     when(repository.findSpeciesDescription("HEM")).thenReturn(Optional.of("Hemlock"));
-    when(repository.findGradeDescription("J")).thenReturn(Optional.of("Grade J"));
     when(repository.findApplicationInfoByNumber(1000456L))
         .thenReturn(
             Optional.of(
@@ -1253,7 +1244,7 @@ class OraclePermitDetailsRpcServiceTest {
     assertThat(response.scaleList().get(0).timbermark()).isEqualTo("TM1");
     assertThat(response.scaleList().get(0).pieces()).isEqualTo(11L);
     assertThat(response.scaleList().get(0).species()).isEqualTo("Hemlock");
-    assertThat(response.scaleList().get(0).grade()).isEqualTo("Grade J");
+    assertThat(response.scaleList().get(0).grade()).isEqualTo("J");
     assertThat(response.scaleList().get(0).volume()).isEqualTo("7.6");
     assertThat(response.scaleList().get(0).permit()).isEqualTo("7000123");
     assertThat(response.scaleList().get(0).cascadeSplitCode()).isEqualTo("C");
@@ -1261,14 +1252,13 @@ class OraclePermitDetailsRpcServiceTest {
   }
 
   @Test
-  void scalesForPackageShouldResolveRepeatedSpeciesAndGradeDescriptionsOncePerRequest() {
+  void scalesForPackageShouldResolveRepeatedSpeciesDescriptionsOncePerRequest() {
     when(repository.findScaleDetailsByPackageNumber("PKG-903"))
         .thenReturn(
             List.of(
                 scale("101", "TM1", "HEM", "J", 7.60d, 11L, "7000123", "PKG-903"),
                 scale("102", "TM2", "HEM", "J", 3.40d, 5L, "7000123", "PKG-903")));
     when(repository.findSpeciesDescription("HEM")).thenReturn(Optional.of("Hemlock"));
-    when(repository.findGradeDescription("J")).thenReturn(Optional.of("Grade J"));
     when(repository.findApplicationInfoByNumber(1000456L))
         .thenReturn(
             Optional.of(
@@ -1279,7 +1269,6 @@ class OraclePermitDetailsRpcServiceTest {
 
     assertThat(response.scaleList()).hasSize(2);
     verify(repository, times(1)).findSpeciesDescription("HEM");
-    verify(repository, times(1)).findGradeDescription("J");
   }
 
   @Test
@@ -10372,7 +10361,7 @@ class OraclePermitDetailsRpcServiceTest {
   }
 
   private PermitCoreScaleRow coreScale(PermitScaleDetailRow scale) {
-    return new PermitCoreScaleRow(scale, scale.exportSpeciesCode(), scale.exportGradeCode());
+    return new PermitCoreScaleRow(scale, scale.exportSpeciesCode());
   }
 
   private ScaleMutationRow scaleMutation(

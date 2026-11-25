@@ -542,13 +542,12 @@ public class OraclePermitDetailsRpcService implements PermitDetailsRpcService {
     boolean maskTotalFeeForPackage = shouldMaskTotalFeeForPackage(feeContext);
     boolean countryCanada = isCanadaCountryCode(feeContext.exportCountryCode());
     Map<String, String> speciesDescriptionByCode = new HashMap<>();
-    Map<String, String> gradeDescriptionByCode = new HashMap<>();
     List<PermitRpcScaleItemDto> scaleList = new ArrayList<>(scales.size());
     BigDecimal totalFeeForPackage = BigDecimal.ZERO;
     for (PermitScaleDetailRow scale : scales) {
       String species =
           resolveSpeciesDescription(scale.exportSpeciesCode(), speciesDescriptionByCode);
-      String grade = resolveGradeDescription(scale.exportGradeCode(), gradeDescriptionByCode);
+      String grade = nonNull(trimToNull(scale.exportGradeCode()));
       BigDecimal fee = calculateRoundedFeeForScale(scale, feeContext);
       BigDecimal amv = getScaleDisplayAmv(scale, feeContext);
       String ewb = countryCanada ? "" : formatCurrencyNoScale(trimToNull(scale.ewb()));
@@ -590,7 +589,6 @@ public class OraclePermitDetailsRpcService implements PermitDetailsRpcService {
     List<PermitFeeScaleRow> feeRows = repository.findPermitFeeScaleRows(permitNumber);
     FeeCalculationContext feeContext = buildFeeContext(permitNumber, null, null);
     Map<String, String> speciesDescriptionByCode = new HashMap<>();
-    Map<String, String> gradeDescriptionByCode = new HashMap<>();
     for (PermitFeeScaleRow feeRow : feeRows) {
       PermitScaleDetailRow scale = feeRow.scaleRow();
       if (scale == null) {
@@ -608,7 +606,6 @@ public class OraclePermitDetailsRpcService implements PermitDetailsRpcService {
       }
       cacheDescription(
           speciesDescriptionByCode, scale.exportSpeciesCode(), feeRow.speciesDescription());
-      cacheDescription(gradeDescriptionByCode, scale.exportGradeCode(), feeRow.gradeDescription());
     }
 
     boolean maskScaleFees = shouldMaskScaleFeesForPackageView(feeContext);
@@ -664,7 +661,7 @@ public class OraclePermitDetailsRpcService implements PermitDetailsRpcService {
                   nonNull(scale.timberMark()),
                   resolveSpeciesDescription(
                       scale.exportSpeciesCode(), speciesDescriptionByCode),
-                  resolveGradeDescription(scale.exportGradeCode(), gradeDescriptionByCode),
+                  nonNull(trimToNull(scale.exportGradeCode())),
                   formatCurrency(amv),
                   formatVolume(scale.speciesGradeVolume()),
                   ministryUser,
@@ -1019,10 +1016,6 @@ public class OraclePermitDetailsRpcService implements PermitDetailsRpcService {
           context.speciesDescriptionByCode,
           scale.exportSpeciesCode(),
           coreScale.speciesDescription());
-      cacheDescription(
-          context.gradeDescriptionByCode,
-          scale.exportGradeCode(),
-          coreScale.gradeDescription());
     }
     context.scalesByPackage.replaceAll(
         (packageNumber, rows) -> sortCoreScaleRows(rows));
@@ -3542,7 +3535,7 @@ public class OraclePermitDetailsRpcService implements PermitDetailsRpcService {
                     scale.piecesCount(),
                     resolveSpeciesDescription(
                         scale.exportSpeciesCode(), lookupContext.speciesDescriptionByCode),
-                    resolveGradeDescription(scale.exportGradeCode(), lookupContext.gradeDescriptionByCode),
+                    nonNull(trimToNull(scale.exportGradeCode())),
                     formatVolume(scale.speciesGradeVolume()),
                     firstNonNull(trimToNull(scale.exportPermitDetailNumber()), ""),
                     nonNull(scale.exportScaleDetailId()),
@@ -3661,7 +3654,6 @@ public class OraclePermitDetailsRpcService implements PermitDetailsRpcService {
     private final Map<String, String> packageStatusDescriptionByCode = new HashMap<>();
     private final Map<String, String> endUseDescriptionByCode = new HashMap<>();
     private final Map<String, String> speciesDescriptionByCode = new HashMap<>();
-    private final Map<String, String> gradeDescriptionByCode = new HashMap<>();
     private final Map<Long, String> applicationEndUseByNumber = new HashMap<>();
     private final Map<String, String> packageEndUseByNumber = new HashMap<>();
     private final Map<Long, List<EndUsePairRow>> applicationEndUsesByNumber = new HashMap<>();
@@ -3731,15 +3723,6 @@ public class OraclePermitDetailsRpcService implements PermitDetailsRpcService {
     }
     return speciesDescriptionByCode.computeIfAbsent(
         normalizedCode, value -> repository.findSpeciesDescription(value).orElse(value));
-  }
-
-  private String resolveGradeDescription(String gradeCode, Map<String, String> gradeDescriptionByCode) {
-    String normalizedCode = trimToNull(gradeCode);
-    if (normalizedCode == null) {
-      return "";
-    }
-    return gradeDescriptionByCode.computeIfAbsent(
-        normalizedCode, value -> repository.findGradeDescription(value).orElse(value));
   }
 
   private PermitGbmsInvoiceHistoryItemRpcResponseDto toGbmsInvoiceHistoryItem(

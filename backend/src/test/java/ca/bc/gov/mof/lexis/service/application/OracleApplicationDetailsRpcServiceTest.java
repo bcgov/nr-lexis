@@ -2054,10 +2054,6 @@ class OracleApplicationDetailsRpcServiceTest {
         .thenReturn(Optional.of(new ApplicationDetailsRpcRepository.CodeRow("FIR", "Douglas-fir", 1L, 1L)));
     when(repository.findSpeciesCode("HEM"))
         .thenReturn(Optional.of(new ApplicationDetailsRpcRepository.CodeRow("HEM", "Hemlock", 1L, 2L)));
-    when(repository.findGradeCode("J"))
-        .thenReturn(Optional.of(new ApplicationDetailsRpcRepository.CodeRow("J", "Grade J", 1L, 1L)));
-    when(repository.findGradeCode("U"))
-        .thenReturn(Optional.of(new ApplicationDetailsRpcRepository.CodeRow("U", "Grade U", 1L, 2L)));
     when(repository.findPermitStatusCodeByPermitNumber(7000123L))
         .thenReturn(Optional.of(permitStatus));
 
@@ -2075,8 +2071,8 @@ class OracleApplicationDetailsRpcServiceTest {
             ApplicationDetailsRpcService.ApplicationPackageScaleItem::id,
             ApplicationDetailsRpcService.ApplicationPackageScaleItem::cascadeSplitCode)
         .containsExactly(
-            tuple(true, "TM001", "Douglas-fir", 12L, "Grade J", "10.55", "55", "C"),
-            tuple(false, "Unmanufactured", "Hemlock", 8L, "Grade U", "6.0", "56", ""));
+            tuple(true, "TM001", "Douglas-fir", 12L, "J", "10.55", "55", "C"),
+            tuple(false, "Unmanufactured", "Hemlock", 8L, "U", "6.0", "56", ""));
     verify(repository).findScaleDetailsByPackageNumber("PKG-903");
     verify(repository).findPermitStatusCodeByPermitNumber(7000123L);
   }
@@ -2091,8 +2087,6 @@ class OracleApplicationDetailsRpcServiceTest {
                     "55", "TM001", "FIR", "J", 10.55d, 12L, 1000456L, "7000123", "PKG-903", "C")));
     when(repository.findSpeciesCode("FIR"))
         .thenReturn(Optional.of(new ApplicationDetailsRpcRepository.CodeRow("FIR", "Douglas-fir", 1L, 1L)));
-    when(repository.findGradeCode("J"))
-        .thenReturn(Optional.of(new ApplicationDetailsRpcRepository.CodeRow("J", "Grade J", 1L, 1L)));
     when(repository.findPermitStatusCodeByPermitNumber(7000123L))
         .thenReturn(Optional.of(permitStatus));
 
@@ -3467,8 +3461,6 @@ class OracleApplicationDetailsRpcServiceTest {
                     "55", "TM001", "FI", "1", 12.5d, 10L, 1000456L, null, "PKG-903", "")));
     when(repository.findSpeciesCode("FI"))
         .thenReturn(Optional.of(new ApplicationDetailsRpcRepository.CodeRow("FI", "Douglas-fir", 1L, 1L)));
-    when(repository.findGradeCode("1"))
-        .thenReturn(Optional.of(new ApplicationDetailsRpcRepository.CodeRow("1", "Sawlog", 1L, 1L)));
     when(repository.findSpeciesCodeRequired("FI"))
         .thenReturn(
             Optional.of(
@@ -3489,7 +3481,7 @@ class OracleApplicationDetailsRpcServiceTest {
     assertThat(response.result()).isNotNull();
     assertThat(response.result().timberMark()).isEqualTo("TM001");
     assertThat(response.result().species()).isEqualTo("Douglas-fir");
-    assertThat(response.result().grade()).isEqualTo("Sawlog");
+    assertThat(response.result().grade()).isEqualTo("1");
     assertThat(response.result().id()).isEqualTo("55");
 
     ArgumentCaptor<ApplicationDetailsRpcRepository.ScaleMutationRecord> recordCaptor =
@@ -3787,10 +3779,6 @@ class OracleApplicationDetailsRpcServiceTest {
         .thenReturn(
             Optional.of(
                 new ApplicationDetailsRpcRepository.CodeRow("HE", "Hemlock", 1L, 1L)));
-    when(repository.findGradeCode("1"))
-        .thenReturn(
-            Optional.of(
-                new ApplicationDetailsRpcRepository.CodeRow("1", "Sawlog", 1L, 1L)));
     when(repository.insertScaleDetail(any()))
         .thenReturn(
             Optional.of(

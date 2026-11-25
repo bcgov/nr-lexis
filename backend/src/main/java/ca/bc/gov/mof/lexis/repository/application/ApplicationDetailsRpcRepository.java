@@ -917,10 +917,6 @@ public class ApplicationDetailsRpcRepository extends OracleRepositorySupport {
         .toList();
   }
 
-  public Optional<CodeRow> findGradeCode(String gradeCode) {
-    return findCodeRow(LexisCodeQueries.GRADE_BY_CODE, gradeCode, false);
-  }
-
   public Optional<CodeRow> findGradeCodeRequired(String gradeCode) {
     return findCodeRow(LexisCodeQueries.GRADE_BY_CODE, gradeCode, true);
   }

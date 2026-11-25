@@ -962,7 +962,6 @@ public class OracleApplicationDetailsRpcService implements ApplicationDetailsRpc
     }
 
     Map<String, String> speciesDescriptionByCode = new LinkedHashMap<>();
-    Map<String, String> gradeDescriptionByCode = new LinkedHashMap<>();
     Map<Long, Boolean> mutationLockedByPermitNumber = new LinkedHashMap<>();
     return repository.findScaleDetailsByPackageNumber(persistedPackageNumber).stream()
         .sorted(
@@ -981,7 +980,7 @@ public class OracleApplicationDetailsRpcService implements ApplicationDetailsRpc
                     formatTimberMark(row.timberMark()),
                     resolveSpeciesDescription(row.exportSpeciesCode(), speciesDescriptionByCode),
                     row.piecesCount(),
-                    resolveGradeDescription(row.exportGradeCode(), gradeDescriptionByCode),
+                    nonNull(trimToNull(row.exportGradeCode())),
                     formatStoredAmount(row.speciesGradeVolume()),
                     nonNull(trimToNull(row.exportScaleDetailId())),
                     nonNull(trimToNull(row.cascadeSplitCode()))))
@@ -2390,7 +2389,7 @@ public class OracleApplicationDetailsRpcService implements ApplicationDetailsRpc
         formatTimberMark(row.timberMark()),
         resolveSpeciesDescription(row.exportSpeciesCode(), new LinkedHashMap<>()),
         row.piecesCount(),
-        resolveGradeDescription(row.exportGradeCode(), new LinkedHashMap<>()),
+        nonNull(trimToNull(row.exportGradeCode())),
         formatStoredAmount(row.speciesGradeVolume()),
         nonNull(trimToNull(row.exportScaleDetailId())),
         nonNull(trimToNull(row.cascadeSplitCode())));
@@ -2537,26 +2536,6 @@ public class OracleApplicationDetailsRpcService implements ApplicationDetailsRpc
             .map(TextUtils::trimToNull)
             .orElse(normalizedCode);
     speciesDescriptionByCode.put(normalizedCode, resolved);
-    return resolved;
-  }
-
-  private String resolveGradeDescription(
-      String gradeCode, Map<String, String> gradeDescriptionByCode) {
-    String normalizedCode = trimToNull(gradeCode);
-    if (normalizedCode == null) {
-      return "";
-    }
-    String cached = gradeDescriptionByCode.get(normalizedCode);
-    if (cached != null) {
-      return cached;
-    }
-    String resolved =
-        repository
-            .findGradeCode(normalizedCode)
-            .map(ApplicationDetailsRpcRepository.CodeRow::description)
-            .map(TextUtils::trimToNull)
-            .orElse(normalizedCode);
-    gradeDescriptionByCode.put(normalizedCode, resolved);
     return resolved;
   }
 
