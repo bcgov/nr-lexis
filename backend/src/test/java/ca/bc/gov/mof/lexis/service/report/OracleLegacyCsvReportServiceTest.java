@@ -4,6 +4,10 @@ import static ca.bc.gov.mof.lexis.test.ReportTestArtifacts.content;
 import static java.util.Map.entry;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.anyInt;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
@@ -21,6 +25,7 @@ import java.sql.Types;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.regex.Pattern;
 import javax.sql.DataSource;
 import oracle.jdbc.OracleConnection;
 import org.junit.jupiter.api.Test;
@@ -704,18 +709,11 @@ class OracleLegacyCsvReportServiceTest {
       "'',2026-08-31,0001-01-01,2026-08-31",
       "'','',0001-01-01,9999-12-31"
   })
-  void shouldGenerateBiweeklyCsvFromLegacyDynamicProcedure(
+  void shouldGenerateBiweeklyCsvFromBoundQuery(
       String fromDate, String toDate, String expectedFromDate, String expectedToDate) throws Exception {
     when(dataSource.getConnection()).thenReturn(connection);
-    when(connection.prepareCall("{ call LEXIS_REPORTING.BIWEEKLY_REPORT_CSV(?,?,?,?) }"))
-        .thenReturn(callableStatement);
-    when(connection.unwrap(OracleConnection.class)).thenReturn(oracleConnection);
-    when(
-            oracleConnection.createOracleArray(
-                org.mockito.ArgumentMatchers.eq("CBR_VARCHAR2_ARRAY"),
-                org.mockito.ArgumentMatchers.any()))
-        .thenReturn(bindArray);
-    when(callableStatement.getObject(4)).thenReturn(resultSet);
+    when(connection.prepareStatement(anyString())).thenReturn(preparedStatement);
+    when(preparedStatement.executeQuery()).thenReturn(resultSet);
 
     when(resultSet.getMetaData()).thenReturn(metaData);
     when(metaData.getColumnCount()).thenReturn(3);
@@ -758,12 +756,12 @@ class OracleLegacyCsvReportServiceTest {
                 + "\"2026-08-12\",\"46175\",\"S\"\n");
 
     ArgumentCaptor<String> sqlCaptor = ArgumentCaptor.forClass(String.class);
-    verify(callableStatement).setString(org.mockito.ArgumentMatchers.eq(1), sqlCaptor.capture());
+    verify(connection).prepareStatement(sqlCaptor.capture());
     assertThat(sqlCaptor.getValue())
-        .contains("ES.ADVERTISING_DATE BETWEEN TO_DATE(:1, 'yyyy-mm-dd')")
+        .contains(" WHERE 1=1 AND ES.ADVERTISING_DATE BETWEEN TO_DATE(:1, 'yyyy-mm-dd')")
         .contains("EEA.EXPORT_APPLICATION_STATUS_CODE = :12")
-        .contains("EEA.EXPORT_PRODUCT_TYPE_CODE <> :13");
-    assertBindArrayValues(
+        .endsWith("EEA.EXPORT_PRODUCT_TYPE_CODE <> :13");
+    assertBoundInOrder(
         expectedFromDate,
         expectedToDate,
         "1903",
@@ -777,26 +775,95 @@ class OracleLegacyCsvReportServiceTest {
         "P",
         "APP",
         "T");
-    verify(callableStatement).setArray(2, bindArray);
-    verify(callableStatement).setInt(3, 13);
-    verify(callableStatement).registerOutParameter(4, Types.REF_CURSOR);
-    InOrder executionOrder = Mockito.inOrder(callableStatement, bindArray);
-    executionOrder.verify(callableStatement).execute();
-    executionOrder.verify(bindArray).free();
+    verify(preparedStatement).setQueryTimeout(120);
+    verify(preparedStatement).setFetchSize(100);
+    verify(resultSet).setFetchSize(100);
+    verify(resultSet).close();
+    verify(preparedStatement).close();
+    verify(connection).close();
+    verify(connection, never()).prepareCall(anyString());
   }
 
   @Test
-  void shouldFailBiweeklyReportWhenLegacyProcedureReturnsNoCursor() throws Exception {
+  void shouldQueryLegacyBiweeklyColumnsWithContactEmailsFromPublicClientView() throws Exception {
     when(dataSource.getConnection()).thenReturn(connection);
-    when(connection.prepareCall("{ call LEXIS_REPORTING.BIWEEKLY_REPORT_CSV(?,?,?,?) }"))
-        .thenReturn(callableStatement);
-    when(connection.unwrap(OracleConnection.class)).thenReturn(oracleConnection);
-    when(
-            oracleConnection.createOracleArray(
-                org.mockito.ArgumentMatchers.eq("CBR_VARCHAR2_ARRAY"),
-                org.mockito.ArgumentMatchers.any()))
-        .thenReturn(bindArray);
-    when(callableStatement.getObject(4)).thenReturn(null);
+    when(connection.prepareStatement(anyString())).thenReturn(preparedStatement);
+    when(preparedStatement.executeQuery()).thenReturn(resultSet);
+    when(resultSet.getMetaData()).thenReturn(metaData);
+
+    new OracleLegacyCsvReportService(dataSource)
+        .generateLegacyCsvReport(
+            LexisJasperReportDefinition.BIWEEKLY_LISTING,
+            new LexisReportRequestDto(Map.of(), "CSV"),
+            LexisReportFormat.CSV);
+
+    ArgumentCaptor<String> sqlCaptor = ArgumentCaptor.forClass(String.class);
+    verify(connection).prepareStatement(sqlCaptor.capture());
+    String sql = sqlCaptor.getValue();
+    assertThat(matches(sql, "AS \"([^\"]+)\""))
+        .containsExactly(
+            "Notification Date",
+            "Region",
+            "Client Name",
+            "Client Address 1",
+            "Client Address 2",
+            "Client Address 3",
+            "Client City",
+            "Client Province",
+            "Client Postal Code",
+            "Client Contact Name",
+            "Client Contact Phone",
+            "Client Contact Email",
+            "Jurisdiction Code",
+            "Application Number",
+            "Species Enduse",
+            "Product Type",
+            "Product Location",
+            "Exemption Application Volume",
+            "Average Log Volume",
+            "Agent Name",
+            "Agent Phone",
+            "Agent Contact Name",
+            "Agent Contact Email",
+            "Package Number",
+            "Package Volume",
+            "Age Class",
+            "Average Length",
+            "Average Diameter");
+    assertThat(sql)
+        .contains("CL.EMAIL_ADDRESS AS \"Client Contact Email\"")
+        .contains("ACL.EMAIL_ADDRESS AS \"Agent Contact Email\"")
+        .contains("LEXIS_REPORTING.RETRIEVE_SPECIES_ENDUSE(EEA.APPLICATION_NUMBER) AS")
+        .contains("INNER JOIN THE.V_CLIENT_PUBLIC FC")
+        .contains("LEFT JOIN THE.V_CLIENT_PUBLIC AFC")
+        .doesNotContain("FOREST_CLIENT");
+    assertThat(matches(sql, "(?:FROM|JOIN)\\s+(\\S+)"))
+        .containsExactly(
+            "THE.EXPORT_EXEMPTION_APPLICATION",
+            "THE.EXPORT_PACKAGE",
+            "THE.V_CLIENT_PUBLIC",
+            "THE.CLIENT_LOCATION",
+            "THE.V_CLIENT_PUBLIC",
+            "THE.CLIENT_LOCATION",
+            "THE.EXPORT_SCHEDULE",
+            "THE.EXPORT_PRODUCT_TYPE_CODE",
+            "THE.ORG_UNIT");
+    assertThat(sql)
+        .endsWith(
+            " WHERE 1=1 AND ES.ADVERTISING_DATE BETWEEN TO_DATE(:1, 'yyyy-mm-dd')"
+                + " AND TO_DATE(:2, 'yyyy-mm-dd')"
+                + " AND (1=0 OR EEA.EXPORT_JURISDICTION_CODE = :3"
+                + " OR EEA.EXPORT_JURISDICTION_CODE = :4)"
+                + " AND EEA.EXPORT_APPLICATION_STATUS_CODE = :5"
+                + " AND EEA.EXPORT_PRODUCT_TYPE_CODE <> :6");
+    assertBoundInOrder("0001-01-01", "9999-12-31", "P", "F", "APP", "T");
+  }
+
+  @Test
+  void shouldFailBiweeklyReportWhenQueryFails() throws Exception {
+    when(dataSource.getConnection()).thenReturn(connection);
+    when(connection.prepareStatement(anyString())).thenReturn(preparedStatement);
+    when(preparedStatement.executeQuery()).thenThrow(new SQLException("database unavailable"));
 
     OracleLegacyCsvReportService service = new OracleLegacyCsvReportService(dataSource);
 
@@ -809,7 +876,8 @@ class OracleLegacyCsvReportServiceTest {
         .isInstanceOf(LexisReportGenerationException.class)
         .hasMessage("The biweekly report data could not be loaded")
         .hasCauseInstanceOf(SQLException.class);
-    verify(bindArray).free();
+    verify(preparedStatement).close();
+    verify(connection).close();
   }
 
   @Test
@@ -971,6 +1039,19 @@ class OracleLegacyCsvReportServiceTest {
         .createOracleArray(
             org.mockito.ArgumentMatchers.eq("CBR_VARCHAR2_ARRAY"), bindValuesCaptor.capture());
     assertThat((String[]) bindValuesCaptor.getValue()).containsExactly(expectedValues);
+  }
+
+  private void assertBoundInOrder(String... expectedValues) throws Exception {
+    InOrder bindOrder = Mockito.inOrder(preparedStatement);
+    for (int index = 0; index < expectedValues.length; index++) {
+      bindOrder.verify(preparedStatement).setString(index + 1, expectedValues[index]);
+    }
+    bindOrder.verify(preparedStatement).executeQuery();
+    verify(preparedStatement, times(expectedValues.length)).setString(anyInt(), anyString());
+  }
+
+  private static List<String> matches(String text, String regex) {
+    return Pattern.compile(regex).matcher(text).results().map(match -> match.group(1)).toList();
   }
 
   private static String today() {
