@@ -2985,7 +2985,7 @@ test.describe('TEST IDIR admin regression', () => {
         'Cannot save yet.',
       )
       await expect(validation.locator('.cds--inline-notification__subtitle')).toHaveText(
-        'Complete the required fields in Applicant, Application and Scale tabs.',
+        'Complete the required fields in Applicant, Application and Package and scale tabs.',
       )
       for (const tabName of ['Applicant', 'Application', 'Package and scale']) {
         await expect(
