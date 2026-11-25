@@ -284,6 +284,7 @@ jobs:
           oc_namespace: ${{ secrets.oc_namespace }}
           oc_server: ${{ vars.oc_server }}
           oc_token: ${{ secrets.oc_token }}
+          oc_login_attempts: 7
           debug: false
           overwrite: true
           parameters:
@@ -376,6 +377,7 @@ jobs:
           oc_namespace: ${{ secrets.oc_namespace }}
           oc_server: ${{ vars.oc_server }}
           oc_token: ${{ secrets.oc_token }}
+          oc_login_attempts: 7
           debug: false
           overwrite: true
           parameters:
@@ -406,6 +408,7 @@ jobs:
           oc_namespace: ${{ secrets.oc_namespace }}
           oc_server: ${{ vars.oc_server }}
           oc_token: ${{ secrets.oc_token }}
+          oc_login_attempts: 7
           debug: false
           overwrite: true
           parameters:
@@ -426,6 +429,7 @@ jobs:
           oc_namespace: ${{ secrets.oc_namespace }}
           oc_server: ${{ vars.oc_server }}
           oc_token: ${{ secrets.oc_token }}
+          oc_login_attempts: 7
           debug: false
           overwrite: true
           parameters:
