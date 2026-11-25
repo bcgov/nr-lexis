@@ -143,7 +143,8 @@ class LexisSessionControllerTest {
                 List.of(),
                 false,
                 "76",
-                Map.of()));
+                Map.of(),
+                null));
 
     verify(sessionService).parseRolesFromPrincipal(authentication);
     verify(sessionService).resolveWelcomeRoute("idir\\jsmith", List.of("LEXIS_READ_ONLY", "LEXIS_ADMIN"));

@@ -11,7 +11,9 @@ Your access comes from the LEXIS role and regions granted to you in FAM
 (Forest Access Management). See [Who can do what](09-who-can-do-what.md).
 
 If LEXIS says **Access not granted** after you sign in, you have no LEXIS
-role yet.
+role yet. If the message also tells you to contact your administrator, you
+hold both Application Approver and Exemption Approver. The two can't be held
+together, and one must be removed in FAM before you can use LEXIS.
 
 ## Your landing page
 
@@ -22,11 +24,6 @@ LEXIS opens on the page your role uses most.
 | Administrator, Application Approver | **Provincial › Application review** | <!-- roles: administrator, application-approver -->
 | Read Only | **Provincial › Application search** | <!-- roles: read-only -->
 | Exemption Approver | **Provincial › Exemption search** | <!-- roles: exemption-approver -->
-
-<!-- roles: application-approver, exemption-approver -->
-With both Application Approver and Exemption Approver, LEXIS opens on
-**Provincial › Exemption search**.
-<!-- /roles -->
 
 If you followed a link to a record before logging in, LEXIS opens that
 record instead. **LEXIS** in the header always takes you back to your
