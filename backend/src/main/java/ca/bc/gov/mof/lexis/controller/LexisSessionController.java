@@ -85,6 +85,10 @@ public class LexisSessionController {
             : List.of();
     Map<String, List<Long>> actionRegions =
         authorizationService.resolveActionRegions(authorities, grantedActions);
+    String accessDeniedReason =
+        authorities.contains(LexisSessionService.APPROVER_CONFLICT_AUTHORITY)
+            ? LexisSessionService.APPROVER_CONFLICT_REASON
+            : null;
 
     LOGGER.debug(
         "Resolved LEXIS session capabilities: authenticated={}, principalPresent={}, roles={}, welcomeTarget={}, grantedActionCount={}, forestClientScoped={}, orgUnitNo={}",
@@ -108,7 +112,8 @@ public class LexisSessionController {
             forestClientScope.availableClientNumbers(),
             forestClientSelectionRequired,
             orgUnitNo,
-            actionRegions));
+            actionRegions,
+            accessDeniedReason));
   }
 
   @GetMapping("/canPerformAction")
