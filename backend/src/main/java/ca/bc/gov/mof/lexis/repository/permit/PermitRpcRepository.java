@@ -152,8 +152,7 @@ public class PermitRpcRepository extends OracleRepositorySupport {
         SD.ESTIMATED_WINNING_BID AS EWB,
         SD.FEE_IN_LIEU AS FIL,
         SD.MULTIPLICATION_FACTOR AS MF,
-        ESC.DESCRIPTION AS SPECIES_DESCRIPTION,
-        EGC.DESCRIPTION AS GRADE_DESCRIPTION
+        ESC.DESCRIPTION AS SPECIES_DESCRIPTION
       FROM EXPORT_SCALE_DETAIL SD
       INNER JOIN EXPORT_PACKAGE P
         ON P.PACKAGE_NUMBER = SD.PACKAGE_NUMBER
@@ -161,8 +160,6 @@ public class PermitRpcRepository extends OracleRepositorySupport {
         ON TM.TIMBER_MARK = SD.TIMBER_MARK
       LEFT JOIN EXPORT_SPECIES_CODE ESC
         ON ESC.EXPORT_SPECIES_CODE = SD.EXPORT_SPECIES_CODE
-      LEFT JOIN EXPORT_GRADE_CODE EGC
-        ON EGC.EXPORT_GRADE_CODE = SD.EXPORT_GRADE_CODE
       WHERE %s
       """;
   private static final String FIND_PERMIT_FEE_SCALE_ROWS =
@@ -185,7 +182,6 @@ public class PermitRpcRepository extends OracleRepositorySupport {
           SD.MULTIPLICATION_FACTOR AS MF,
           EEA.EXPORT_PRODUCT_TYPE_CODE AS APPLICATION_PRODUCT_TYPE_CODE,
           ESC.DESCRIPTION AS SPECIES_DESCRIPTION,
-          EGC.DESCRIPTION AS GRADE_DESCRIPTION,
           P.EXPORT_GROWTH_TYPE_CODE AS PACKAGE_GROWTH_TYPE_CODE,
           EGTC.DESCRIPTION AS PACKAGE_GROWTH_TYPE_DESCRIPTION,
           EPD.APPLICATION_DATE AS PERMIT_APPLICATION_DATE,
@@ -204,8 +200,6 @@ public class PermitRpcRepository extends OracleRepositorySupport {
           ON TM.TIMBER_MARK = SD.TIMBER_MARK
         LEFT JOIN EXPORT_SPECIES_CODE ESC
           ON ESC.EXPORT_SPECIES_CODE = SD.EXPORT_SPECIES_CODE
-        LEFT JOIN EXPORT_GRADE_CODE EGC
-          ON EGC.EXPORT_GRADE_CODE = SD.EXPORT_GRADE_CODE
         LEFT JOIN EXPORT_GROWTH_TYPE_CODE EGTC
           ON EGTC.EXPORT_GROWTH_TYPE_CODE = P.EXPORT_GROWTH_TYPE_CODE
         WHERE SD.EXPORT_PERMIT_DETAIL_NUMBER = ?
@@ -237,7 +231,6 @@ public class PermitRpcRepository extends OracleRepositorySupport {
         SC.MF,
         SC.APPLICATION_PRODUCT_TYPE_CODE,
         SC.SPECIES_DESCRIPTION,
-        SC.GRADE_DESCRIPTION,
         SC.PACKAGE_GROWTH_TYPE_CODE,
         SC.PACKAGE_GROWTH_TYPE_DESCRIPTION,
         ELA.AVERAGE_MARKET_PRICE
@@ -451,7 +444,6 @@ public class PermitRpcRepository extends OracleRepositorySupport {
       LEXIS_GROUP_9_PACKAGE + "DELETE_INVOICE_FILE_ATTACHMENT(?)";
 
   private static final String FIND_SPECIES_CODE = LEXIS_CODES_PACKAGE + "FIND_SPECIES_CODE(?,?)";
-  private static final String FIND_GRADE_CODE = LEXIS_CODES_PACKAGE + "FIND_GRADE_CODE(?,?)";
   private static final String FIND_GROWTH_TYPE_CODE = LEXIS_CODES_PACKAGE + "FIND_GROWTH_TYPE_CODE(?,?)";
   private static final String FIND_PACKAGE_STATUS_CODE =
       LEXIS_CODES_PACKAGE + "FIND_PACKAGE_STATUS_CODE(?,?)";
@@ -495,7 +487,6 @@ public class PermitRpcRepository extends OracleRepositorySupport {
                 mapPermitScaleDetailRow(rs),
                 getString(rs, "APPLICATION_PRODUCT_TYPE_CODE"),
                 getString(rs, "SPECIES_DESCRIPTION"),
-                getString(rs, "GRADE_DESCRIPTION"),
                 getString(rs, "PACKAGE_GROWTH_TYPE_CODE"),
                 getString(rs, "PACKAGE_GROWTH_TYPE_DESCRIPTION"),
                 rs.getBigDecimal("AVERAGE_MARKET_PRICE")),
@@ -827,8 +818,7 @@ public class PermitRpcRepository extends OracleRepositorySupport {
         (rs, rowNumber) ->
             new PermitCoreScaleRow(
                 mapPermitScaleDetailRow(rs),
-                getString(rs, "SPECIES_DESCRIPTION"),
-                getString(rs, "GRADE_DESCRIPTION")),
+                getString(rs, "SPECIES_DESCRIPTION")),
         bindValues.toArray());
   }
 
@@ -1766,11 +1756,6 @@ public class PermitRpcRepository extends OracleRepositorySupport {
     return codeExistsDirectRequired(LexisCodeQueries.SPECIES_BY_CODE, speciesCode);
   }
 
-  public Optional<String> findGradeDescription(String gradeCode) {
-    return findCodeDescriptionDirect(
-        LexisCodeQueries.GRADE_BY_CODE, FIND_GRADE_CODE, gradeCode);
-  }
-
   public boolean isGradeCodeValidRequired(String gradeCode) {
     return codeExistsDirectRequired(LexisCodeQueries.GRADE_BY_CODE, gradeCode);
   }
@@ -2304,14 +2289,12 @@ public class PermitRpcRepository extends OracleRepositorySupport {
       boolean assignedToPermit,
       String applicationStatusDescription) {}
 
-  public record PermitCoreScaleRow(
-      PermitScaleDetailRow scaleRow, String speciesDescription, String gradeDescription) {}
+  public record PermitCoreScaleRow(PermitScaleDetailRow scaleRow, String speciesDescription) {}
 
   public record PermitFeeScaleRow(
       PermitScaleDetailRow scaleRow,
       String applicationProductTypeCode,
       String speciesDescription,
-      String gradeDescription,
       String packageGrowthTypeCode,
       String packageGrowthTypeDescription,
       BigDecimal averageMarketValue) {}

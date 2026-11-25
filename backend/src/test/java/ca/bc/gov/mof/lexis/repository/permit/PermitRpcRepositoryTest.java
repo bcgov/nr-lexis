@@ -279,7 +279,6 @@ class PermitRpcRepositoryTest {
                   case "PACKAGE_NUMBER" -> "PKG-100";
                   case "APPLICATION_PRODUCT_TYPE_CODE" -> "T";
                   case "SPECIES_DESCRIPTION" -> "Hemlock";
-                  case "GRADE_DESCRIPTION" -> "Grade A";
                   case "PACKAGE_GROWTH_TYPE_CODE" -> "S";
                   case "PACKAGE_GROWTH_TYPE_DESCRIPTION" -> "Second Growth";
                   default -> null;
