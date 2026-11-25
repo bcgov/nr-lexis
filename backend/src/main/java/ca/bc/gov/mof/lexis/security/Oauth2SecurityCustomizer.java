@@ -140,8 +140,14 @@ public class Oauth2SecurityCustomizer
         && expectedClientId.equals(jwt.getClaimAsString("azp"))) {
       List<String> roles = clientRoles(jwt);
       String identityProvider = jwt.getClaimAsString("identity_provider");
-      authorities.addAll(
-          sessionService.parseGrantedAuthorities(identityCompatibleFamRoles(roles, identityProvider)));
+      if (isStaffIdentityProvider(identityProvider)
+          && sessionService.hasConflictingApproverRoles(roles)) {
+        authorities.add(LexisSessionService.APPROVER_CONFLICT_AUTHORITY);
+      } else {
+        authorities.addAll(
+            sessionService.parseGrantedAuthorities(
+                identityCompatibleFamRoles(roles, identityProvider)));
+      }
     } else if (keycloakIssuerUri != null
         && keycloakIssuerUri.equals(tokenIssuer)
         && !machineValidator.validate(jwt).hasErrors()) {
