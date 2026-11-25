@@ -28,7 +28,7 @@ if [[ "${nexcol_client_id}" == "${KC_SA_CLIENT_ID}" ]]; then
 fi
 
 # Reads and the token request are safe to repeat for about two minutes; writes are sent once.
-read_retry=(--retry 6 --retry-delay 10 --retry-all-errors)
+read_retry=(--retry 6 --retry-delay 10 --retry-max-time 120 --retry-all-errors)
 # curl clears an -o file before each retry; captured stdout would keep the failed attempt's body.
 response_file="$(mktemp)"
 trap 'rm -f "${response_file}"' EXIT
