@@ -235,9 +235,6 @@ public class OracleLexisSummaryService implements LexisSummaryService {
             null,
             null,
             normalizedClientNumber,
-            // Legacy Summary includes every client-accessible permit; its Permit Search applies
-            // the separate scale-link requirement.
-            false,
             NO_REGION_FILTER,
             firstPresent(sortField, PERMIT_SORT_DEFAULT),
             normalizedPage,
@@ -284,7 +281,6 @@ public class OracleLexisSummaryService implements LexisSummaryService {
             null,
             null,
             normalizedClientNumber,
-            false,
             NO_REGION_FILTER,
             firstPresent(sortField, FEE_SORT_DEFAULT),
             normalizedPage,

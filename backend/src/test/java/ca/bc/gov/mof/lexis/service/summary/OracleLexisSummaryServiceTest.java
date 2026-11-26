@@ -305,7 +305,6 @@ class OracleLexisSummaryServiceTest {
     assertThat(criteria.ownerClientNumber()).isNull();
     assertThat(criteria.applicantClientNumber()).isNull();
     assertThat(criteria.accessClientNumber()).isEqualTo("00077881");
-    assertThat(criteria.requireScalePermit()).isFalse();
     assertThat(criteria.regionNumbers()).isEmpty();
     assertThat(criteria.sortField()).isEqualTo("permitNumber DESC");
     assertThat(criteria.page()).isZero();
@@ -355,7 +354,6 @@ class OracleLexisSummaryServiceTest {
     assertThat(criteria.ownerClientNumber()).isNull();
     assertThat(criteria.applicantClientNumber()).isNull();
     assertThat(criteria.accessClientNumber()).isEqualTo("00077881");
-    assertThat(criteria.requireScalePermit()).isFalse();
     assertThat(criteria.regionNumbers()).isEmpty();
     assertThat(criteria.sortField()).isEqualTo("permitNumber DESC");
     assertThat(criteria.page()).isZero();
