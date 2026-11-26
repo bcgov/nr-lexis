@@ -307,6 +307,62 @@ describe('IsoDatePicker', () => {
     expect(screen.getByLabelText('Current date value')).toHaveTextContent('2026-10-01')
   })
 
+  describe('open calendar month name', () => {
+    const sixMonthsAhead = () => {
+      const date = new Date()
+      date.setDate(15)
+      date.setMonth(date.getMonth() + 6)
+      const iso = [
+        date.getFullYear(),
+        String(date.getMonth() + 1).padStart(2, '0'),
+        String(date.getDate()).padStart(2, '0'),
+      ].join('-')
+      return { iso, month: date.toLocaleString('en-US', { month: 'long' }) }
+    }
+    const shownMonth = (input: HTMLElement) =>
+      (
+        input as HTMLInputElement & { _flatpickr?: { calendarContainer: HTMLElement } }
+      )._flatpickr?.calendarContainer.querySelector('.cur-month')?.textContent
+
+    it('follows a date typed into the field', async () => {
+      const StatefulDatePicker = () => {
+        const [value, setValue] = useState('')
+        return (
+          <IsoDatePicker id="issueDate" labelText="Issued date" value={value} onChange={setValue} />
+        )
+      }
+      render(<StatefulDatePicker />)
+      const input = screen.getByLabelText('Issued date')
+      const target = sixMonthsAhead()
+
+      await userEvent.click(input)
+      await userEvent.type(input, target.iso)
+
+      expect(shownMonth(input)).toBe(target.month)
+    })
+
+    it('follows a date the page sets', async () => {
+      const onChange = vi.fn()
+      const { rerender } = render(
+        <IsoDatePicker id="expiryDate" labelText="Expiry date" value="" onChange={onChange} />,
+      )
+      const input = screen.getByLabelText('Expiry date')
+      const target = sixMonthsAhead()
+
+      await userEvent.click(input)
+      rerender(
+        <IsoDatePicker
+          id="expiryDate"
+          labelText="Expiry date"
+          value={target.iso}
+          onChange={onChange}
+        />,
+      )
+
+      expect(shownMonth(input)).toBe(target.month)
+    })
+  })
+
   it('does not emit a change when Carbon repeats the controlled date value', () => {
     const onChange = vi.fn()
     render(

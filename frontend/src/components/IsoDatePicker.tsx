@@ -2,7 +2,12 @@ import { DatePicker, DatePickerInput } from '@carbon/react'
 import { type ComponentProps, type ReactNode, useEffect, useRef } from 'react'
 import { isValidIsoDate } from '@/pages/shared/create-form-utils'
 import { fieldErrorText } from '@/utils/field-error'
-import { closeDateCalendar, focusDateCalendarDay, type DateInput } from '@/utils/focus'
+import {
+  closeDateCalendar,
+  focusDateCalendarDay,
+  refreshOpenCalendarMonthName,
+  type DateInput,
+} from '@/utils/focus'
 
 const ISO_DATE_INPUT_PATTERN = String.raw`\d{4}-\d{2}-\d{2}`
 
@@ -74,6 +79,10 @@ export default function IsoDatePicker({
   useEffect(() => {
     latestInputValueRef.current = value
   }, [value])
+
+  useEffect(() => {
+    refreshOpenCalendarMonthName(document.getElementById(id) as DateInput | null)
+  }, [id, flatpickrValue])
 
   useEffect(() => {
     // An ancestor's capture listener runs before Carbon's own listener on the input.

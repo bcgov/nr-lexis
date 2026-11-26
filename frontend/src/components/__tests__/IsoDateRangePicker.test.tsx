@@ -399,3 +399,27 @@ describe('IsoDateRangePicker', () => {
     )
   })
 })
+
+describe('IsoDateRangePicker open calendar month name', () => {
+  it('follows a date typed into the field', async () => {
+    const date = new Date()
+    date.setDate(15)
+    date.setMonth(date.getMonth() + 6)
+    const iso = [
+      date.getFullYear(),
+      String(date.getMonth() + 1).padStart(2, '0'),
+      String(date.getDate()).padStart(2, '0'),
+    ].join('-')
+    render(<Range />)
+    const from = screen.getByLabelText('List date from') as HTMLInputElement & {
+      _flatpickr?: { calendarContainer: HTMLElement }
+    }
+
+    await userEvent.click(from)
+    await userEvent.type(from, iso)
+
+    expect(from._flatpickr?.calendarContainer.querySelector('.cur-month')).toHaveTextContent(
+      date.toLocaleString('en-US', { month: 'long' }),
+    )
+  })
+})
