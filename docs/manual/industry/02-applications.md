@@ -154,6 +154,8 @@ details are accurate**.
 - You can change a **New** application up to and including its list date.
 - You can change an **Approved** application only before its list date, and
   not the list date itself.
+- If a change to the **Species list** rules out the **End use**, **End use** is
+  cleared and you choose another.
 - The owner can add or remove an agent only before the list date. If your
   organization is the agent, you can't remove the agent.
 - After that, the edit buttons are no longer shown. Ask your regional

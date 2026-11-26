@@ -344,6 +344,7 @@ const ProvincialExemptionCreatePage = () => {
               ? null
               : 'Conditions contain unsupported characters. Use unaccented letters, numbers, spaces, or standard punctuation.',
           () =>
+            // INTENTIONAL_LEGACY_DIVERGENCE(EXEMPTION_CONDITIONS_TYPED_LENGTH)
             form.otherConditions.length <= 250
               ? null
               : 'Conditions must contain at most 250 characters.',

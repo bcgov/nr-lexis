@@ -969,6 +969,49 @@ describe.sequential('Provincial Application Detail Actions - items', () => {
     await waitFor(() => expect(launcherButton).toHaveFocus())
   })
 
+  it('saves a comment-only edit with the stored package amounts unchanged', async () => {
+    const packageDetails = await mockedFetchApplicationPackageDetails('PKG-1')
+    mockedFetchApplicationPackageDetails.mockResolvedValue({
+      ...packageDetails,
+      volume: '12.25',
+      length: '4.25',
+      diameter: '99.99',
+    })
+    renderApplicationItems()
+    await selectApplicationDetailTab('Package and scale')
+
+    await userEvent.click(await screen.findByRole('button', { name: 'Edit package' }))
+    const comments = await screen.findByLabelText('Comments')
+    const drawer = within(comments.closest('.application-items-drawer') as HTMLElement)
+    fireEvent.change(comments, { target: { value: 'test-2026-11-26' } })
+    await userEvent.click(drawer.getByRole('button', { name: 'Save package' }))
+
+    await waitFor(() =>
+      expect(mockedUpdateApplicationPackage).toHaveBeenCalledWith(
+        expect.objectContaining({
+          volume: '12.25',
+          averageLength: '4.25',
+          averageDiameter: '99.99',
+          comments: 'test-2026-11-26',
+        }),
+      ),
+    )
+  })
+
+  it('still refuses a changed package volume with two decimals', async () => {
+    renderApplicationItems()
+    await selectApplicationDetailTab('Package and scale')
+
+    await userEvent.click(await screen.findByRole('button', { name: 'Edit package' }))
+    const volume = await screen.findByLabelText('Volume (m³)')
+    const drawer = within(volume.closest('.application-items-drawer') as HTMLElement)
+    fireEvent.change(volume, { target: { value: '12.25' } })
+    await userEvent.click(drawer.getByRole('button', { name: 'Save package' }))
+
+    expect(await drawer.findByText(/must have no more than one decimal place/)).toBeInTheDocument()
+    expect(mockedUpdateApplicationPackage).not.toHaveBeenCalled()
+  })
+
   it('returns focus to Edit package when Escape closes the drawer', async () => {
     render(
       <MemoryRouter initialEntries={['/provincial/application/321?tab=items']}>

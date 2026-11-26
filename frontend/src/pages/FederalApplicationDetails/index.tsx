@@ -460,6 +460,7 @@ const FederalApplicationDetailsPage = () => {
     }
 
     const normalizedRemark = remarkDraft.trim()
+    // INTENTIONAL_LEGACY_DIVERGENCE(FEDERAL_REMARK_REQUIRED)
     const remarkError = !normalizedRemark
       ? 'Remark is required.'
       : normalizedRemark.length > 250

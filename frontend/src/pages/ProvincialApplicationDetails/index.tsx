@@ -1724,6 +1724,9 @@ const ProvincialApplicationDetailsPage = () => {
     [summaryForm?.speciesCodes],
   )
   const summarySpeciesKey = summarySpeciesCodes.join(',')
+  const savedSummarySpeciesKey = summaryBaselineForm?.speciesCodes.join(',') ?? ''
+  const savedSummaryOrgUnitNumber = summaryBaselineForm?.orgUnitNumber
+  const savedSummaryEndUseCode = summaryBaselineForm?.endUseCode
   const summaryFieldErrors = useMemo<FieldErrors<ApplicationSummaryField>>(() => {
     if (!summaryForm) {
       return {}
@@ -1793,6 +1796,10 @@ const ProvincialApplicationDetailsPage = () => {
       ),
       speciesCodes:
         summaryForm.speciesCodes.length === 0 ? 'At least one species is required.' : undefined,
+      endUseCode:
+        summaryForm.speciesCodes.length === 0
+          ? undefined
+          : (requiredFieldError(summaryForm.endUseCode, 'End use') ?? undefined),
       exemptionReasonCode: firstValidationError(
         () =>
           requiredMaxLengthFieldError(
@@ -2707,7 +2714,12 @@ const ProvincialApplicationDetailsPage = () => {
           if (current.endUseCode && options.some((option) => option.code === current.endUseCode)) {
             return current
           }
-          return { ...current, endUseCode: options[0]?.code ?? current.endUseCode }
+          // A species change that rules out the end use clears it, as legacy did; the user picks one.
+          const keepsSavedEndUse =
+            summarySpeciesKey === savedSummarySpeciesKey &&
+            current.orgUnitNumber === savedSummaryOrgUnitNumber &&
+            current.endUseCode === savedSummaryEndUseCode
+          return keepsSavedEndUse ? current : { ...current, endUseCode: '' }
         })
       })
       .catch(() => {
@@ -2723,6 +2735,9 @@ const ProvincialApplicationDetailsPage = () => {
   }, [
     canEditSummary,
     hasSummaryForm,
+    savedSummaryEndUseCode,
+    savedSummaryOrgUnitNumber,
+    savedSummarySpeciesKey,
     summaryForm?.orgUnitNumber,
     summarySpeciesCodes,
     summarySpeciesKey,
@@ -3943,6 +3958,8 @@ const ProvincialApplicationDetailsPage = () => {
             labelText={requiredLabel('End use')}
             required
             value={summaryForm.endUseCode}
+            invalid={Boolean(visibleSummaryFieldError('endUseCode'))}
+            invalidText={visibleSummaryFieldError('endUseCode')}
             disabled={
               summaryForm.speciesCodes.length === 0 || applicationEndUseSelectOptions.length === 0
             }
