@@ -83,6 +83,7 @@ import {
 } from '@/service/search-options-service'
 import { submitProvincialApplicationCreate } from '@/service/create-submit-service'
 import {
+  fetchApplicationClientContactName,
   fetchApplicationClientData,
   fetchApplicationClientLocations,
   type ApplicationClientData,
@@ -977,8 +978,13 @@ const ProvincialApplicationCreatePage = () => {
       }
     })
 
-    void fetchClientData(ownerClientNumber, ownerClientLocationCode, ownerLookupCounterparty)
-      .then((clientData) => {
+    void Promise.all([
+      fetchClientData(ownerClientNumber, ownerClientLocationCode, ownerLookupCounterparty),
+      fetchApplicationClientContactName(ownerClientNumber, ownerClientLocationCode, 'owner', {
+        counterpartyClientNumber: ownerLookupCounterparty,
+      }),
+    ])
+      .then(([clientData, locationContactName]) => {
         const currentForm = currentFormRef.current
         if (
           !isActive ||
@@ -999,9 +1005,15 @@ const ProvincialApplicationCreatePage = () => {
           }
 
           const confirmedOwnerClientNumber = clientData?.clientNumber.trim() || ownerClientNumber
-          return current.ownerClientNumber === confirmedOwnerClientNumber
+          const ownerContactName = locationContactName || current.ownerContactName
+          return current.ownerClientNumber === confirmedOwnerClientNumber &&
+            current.ownerContactName === ownerContactName
             ? current
-            : { ...current, ownerClientNumber: confirmedOwnerClientNumber }
+            : {
+                ...current,
+                ownerClientNumber: confirmedOwnerClientNumber,
+                ownerContactName,
+              }
         })
       })
       .catch(() => {
@@ -1078,8 +1090,11 @@ const ProvincialApplicationCreatePage = () => {
       }
     })
 
-    void fetchApplicationClientData(agentClientNumber, agentClientLocationCode)
-      .then((clientData) => {
+    void Promise.all([
+      fetchApplicationClientData(agentClientNumber, agentClientLocationCode),
+      fetchApplicationClientContactName(agentClientNumber, agentClientLocationCode, 'agent'),
+    ])
+      .then(([clientData, locationContactName]) => {
         const currentForm = currentFormRef.current
         if (
           !isActive ||
@@ -1100,9 +1115,15 @@ const ProvincialApplicationCreatePage = () => {
           }
 
           const confirmedAgentClientNumber = clientData?.clientNumber.trim() || agentClientNumber
-          return current.agentClientNumber === confirmedAgentClientNumber
+          const agentContactName = locationContactName || current.agentContactName
+          return current.agentClientNumber === confirmedAgentClientNumber &&
+            current.agentContactName === agentContactName
             ? current
-            : { ...current, agentClientNumber: confirmedAgentClientNumber }
+            : {
+                ...current,
+                agentClientNumber: confirmedAgentClientNumber,
+                agentContactName,
+              }
         })
       })
       .catch(() => {

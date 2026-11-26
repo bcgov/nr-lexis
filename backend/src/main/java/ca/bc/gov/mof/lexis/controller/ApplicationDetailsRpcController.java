@@ -987,8 +987,10 @@ public class ApplicationDetailsRpcController {
       @RequestParam(name = "clientNumber", required = false) String clientNumber,
       @RequestParam(name = "clientLocationCode", required = false) String clientLocationCode,
       @RequestParam(name = "applicationNumber", required = false) String applicationNumber,
-      @RequestParam(name = "applicantType", required = false) String applicantType) {
-    requireClientAccess(clientNumber, null, applicationNumber, null);
+      @RequestParam(name = "applicantType", required = false) String applicantType,
+      @RequestParam(name = "counterpartyClientNumber", required = false)
+          String counterpartyClientNumber) {
+    requireClientAccess(clientNumber, counterpartyClientNumber, applicationNumber, null);
     ClientLookupService clientLookupService = clientLookupServiceProvider.getIfAvailable();
     if (clientLookupService == null) {
       LOGGER.warn("Client lookup service unavailable - returning no content for application contacts");
@@ -1020,7 +1022,8 @@ public class ApplicationDetailsRpcController {
       @RequestParam(name = "clientLocationCode", required = false) String clientLocationCode,
       @RequestParam(name = "applicationNumber", required = false) String applicationNumber,
       @RequestParam(name = "applicantType", required = false) String applicantType) {
-    return getContactsForLocation(clientNumber, clientLocationCode, applicationNumber, applicantType);
+    return getContactsForLocation(
+        clientNumber, clientLocationCode, applicationNumber, applicantType, null);
   }
 
   @GetMapping("/rpc/application-details/species-codes")

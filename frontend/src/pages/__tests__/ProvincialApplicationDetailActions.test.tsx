@@ -21,6 +21,7 @@ import {
   getApplicationSummaryTile,
   getSummaryComboBox,
   mockApplicationDetailAuth,
+  mockedFetchApplicationClientContactName,
   mockedFetchApplicationClientData,
   mockedFetchApplicationClientLocations,
   mockedFetchApplicationPermits,
@@ -1099,6 +1100,12 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
       applicationVolume: '',
       speciesCodes: [],
     })
+    mockedFetchApplicationClientContactName.mockImplementation(
+      async (_clientNumber, locationCode) =>
+        locationCode === '02'
+          ? 'ALTERNATE LOCATION CONTACT'
+          : applicationSummarySnapshot.ownerContactName,
+    )
 
     render(
       <MemoryRouter initialEntries={['/provincial/application/321']}>
@@ -1121,6 +1128,8 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
         level: 3,
       }),
     ).not.toBeInTheDocument()
+    // The saved view never fills the contact; only the open editor does.
+    expect(mockedFetchApplicationClientContactName).not.toHaveBeenCalled()
     await userEvent.click(
       ownerControls.getByRole('button', {
         name: 'Edit applicant details',
@@ -1132,15 +1141,25 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
     expect(ownerControls.getByText('Client', { selector: 'dt' })).toBeInTheDocument()
     expect(ownerControls.queryByLabelText('Applicant type')).not.toBeInTheDocument()
     expect(ownerControls.getByLabelText("I'm an agent")).toBeChecked()
+    const ownerContactName = ownerControls.getAllByRole('textbox', { name: 'Contact name' })[0]
+    await waitFor(() =>
+      expect(mockedFetchApplicationClientContactName).toHaveBeenCalledWith(
+        '00011122',
+        '00',
+        'owner',
+        {
+          applicationNumber: '321',
+        },
+      ),
+    )
+    expect(ownerContactName).toHaveValue(applicationSummarySnapshot.ownerContactName)
 
     await chooseComboBoxOption(
       ownerControls.getByRole('combobox', { name: 'Client location' }),
       '02 - Owner Alternate Location',
     )
-    await waitFor(() =>
-      expect(ownerControls.getAllByRole('textbox', { name: 'Contact name' })[0]).toBeEnabled(),
-    )
-    const ownerContactName = ownerControls.getAllByRole('textbox', { name: 'Contact name' })[0]
+    await waitFor(() => expect(ownerContactName).toHaveValue('ALTERNATE LOCATION CONTACT'))
+    expect(ownerContactName).toBeEnabled()
     fireEvent.change(ownerContactName, { target: { value: 'Advertising Owner' } })
     await waitFor(() => expect(ownerContactName).toHaveValue('Advertising Owner'))
 

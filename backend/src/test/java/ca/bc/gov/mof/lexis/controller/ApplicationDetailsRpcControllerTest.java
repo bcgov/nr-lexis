@@ -3066,6 +3066,23 @@ class ApplicationDetailsRpcControllerTest {
   }
 
   @Test
+  void getContactsForLocationShouldAllowAScopedSubmitterToLookUpTheirCounterparty() {
+    when(clientLookupServiceProvider.getIfAvailable()).thenReturn(clientLookupService);
+    when(clientLookupService.getContactsForLocation("00099999", "01"))
+        .thenReturn(List.of(new ClientLookupService.ClientContact("Owner Contact", "31")));
+    when(clientLookupService.getClientData("00099999", "01")).thenReturn(Optional.empty());
+
+    ResponseEntity<List<ApplicationDetailsRpcController.ApplicationClientContactResponseDto>>
+        response = controller.getContactsForLocation("00099999", "01", null, "owner", "77881");
+
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+    assertThat(response.getBody())
+        .extracting(ApplicationDetailsRpcController.ApplicationClientContactResponseDto::contactName)
+        .containsExactly("Owner Contact");
+    verify(provincialAuthorizationService).canCreateForClient(null, "00099999", "00077881");
+  }
+
+  @Test
   void getSpeciesCodesLegacyShouldReturnLegacyCodePayload() {
     when(serviceProvider.getIfAvailable()).thenReturn(service);
     when(service.getSpeciesCodes())

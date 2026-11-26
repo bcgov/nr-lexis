@@ -119,6 +119,7 @@ import {
   type ApplicationReviewStatusUpdateResult,
 } from '@/service/application-review-search-service'
 import {
+  fetchApplicationClientContactName,
   fetchApplicationClientData,
   fetchApplicationClientLocations,
   type ApplicationClientData,
@@ -2039,12 +2040,24 @@ const ProvincialApplicationDetailsPage = () => {
       }
     })
 
-    void fetchApplicationClientData(
-      summaryOwnerClientNumberForLookup,
-      summaryOwnerClientLocationCode,
-      { applicationNumber: applicationNumber ?? '' },
-    )
-      .then((clientData) => {
+    void Promise.all([
+      fetchApplicationClientData(
+        summaryOwnerClientNumberForLookup,
+        summaryOwnerClientLocationCode,
+        {
+          applicationNumber: applicationNumber ?? '',
+        },
+      ),
+      isEditingOwnerDetails
+        ? fetchApplicationClientContactName(
+            summaryOwnerClientNumberForLookup,
+            summaryOwnerClientLocationCode,
+            'owner',
+            { applicationNumber: applicationNumber ?? '' },
+          )
+        : '',
+    ])
+      .then(([clientData, locationContactName]) => {
         const currentForm = currentSummaryFormRef.current
         if (
           !isActive ||
@@ -2078,10 +2091,12 @@ const ProvincialApplicationDetailsPage = () => {
             return current
           }
 
-          const confirmedOwnerClientNumber = clientData.clientNumber.trim()
-          return confirmedOwnerClientNumber &&
-            current.ownerClientNumber !== confirmedOwnerClientNumber
-            ? { ...current, ownerClientNumber: confirmedOwnerClientNumber }
+          const confirmedOwnerClientNumber =
+            clientData.clientNumber.trim() || current.ownerClientNumber
+          const ownerContactName = locationContactName || current.ownerContactName
+          return current.ownerClientNumber !== confirmedOwnerClientNumber ||
+            current.ownerContactName !== ownerContactName
+            ? { ...current, ownerClientNumber: confirmedOwnerClientNumber, ownerContactName }
             : current
         })
       })
@@ -2144,12 +2159,22 @@ const ProvincialApplicationDetailsPage = () => {
       }
     })
 
-    void fetchApplicationClientData(
-      summaryAgentClientNumberForLookup,
-      summaryAgentClientLocationCode,
-      clientLookupContext(applicationNumber ?? '', agentLookupCounterparty),
-    )
-      .then((clientData) => {
+    void Promise.all([
+      fetchApplicationClientData(
+        summaryAgentClientNumberForLookup,
+        summaryAgentClientLocationCode,
+        clientLookupContext(applicationNumber ?? '', agentLookupCounterparty),
+      ),
+      isEditingOwnerDetails
+        ? fetchApplicationClientContactName(
+            summaryAgentClientNumberForLookup,
+            summaryAgentClientLocationCode,
+            'agent',
+            clientLookupContext(applicationNumber ?? '', agentLookupCounterparty),
+          )
+        : '',
+    ])
+      .then(([clientData, locationContactName]) => {
         const currentForm = currentSummaryFormRef.current
         if (
           !isActive ||
@@ -2183,10 +2208,12 @@ const ProvincialApplicationDetailsPage = () => {
             return current
           }
 
-          const confirmedAgentClientNumber = clientData.clientNumber.trim()
-          return confirmedAgentClientNumber &&
-            current.agentClientNumber !== confirmedAgentClientNumber
-            ? { ...current, agentClientNumber: confirmedAgentClientNumber }
+          const confirmedAgentClientNumber =
+            clientData.clientNumber.trim() || current.agentClientNumber
+          const agentContactName = locationContactName || current.agentContactName
+          return current.agentClientNumber !== confirmedAgentClientNumber ||
+            current.agentContactName !== agentContactName
+            ? { ...current, agentClientNumber: confirmedAgentClientNumber, agentContactName }
             : current
         })
       })

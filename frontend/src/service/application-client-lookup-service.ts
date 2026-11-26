@@ -207,6 +207,50 @@ export const fetchApplicationClientLocations = async (
   return parseClientLocations(data)
 }
 
+/**
+ * The contact name to fill in for a client location: the application's saved contact for its
+ * saved location, otherwise the location's first contact, or blank when none is on file.
+ */
+export const fetchApplicationClientContactName = async (
+  clientNumber: string,
+  clientLocationCode: string,
+  applicantType: 'owner' | 'agent',
+  context: Pick<ClientLookupContext, 'applicationNumber' | 'counterpartyClientNumber'> = {},
+): Promise<string> => {
+  const normalizedClientNumber = clientNumber.trim()
+  const normalizedClientLocationCode = clientLocationCode.trim()
+  const normalizedApplicationNumber = context.applicationNumber?.trim() ?? ''
+  const normalizedCounterpartyClientNumber = context.counterpartyClientNumber?.trim() ?? ''
+  if (!normalizedClientNumber || !normalizedClientLocationCode) {
+    return ''
+  }
+
+  // Not cached: the saved contact changes whenever the application is saved.
+  const response = await apiService
+    .getAxiosInstance()
+    .get<unknown>('/lexis/rpc/application-details/contacts-for-location', {
+      params: {
+        applicantType,
+        ...(normalizedApplicationNumber ? { applicationNumber: normalizedApplicationNumber } : {}),
+        clientLocationCode: normalizedClientLocationCode,
+        clientNumber: normalizedClientNumber,
+        ...(normalizedCounterpartyClientNumber
+          ? { counterpartyClientNumber: normalizedCounterpartyClientNumber }
+          : {}),
+      },
+    })
+  if (!Array.isArray(response.data)) {
+    throw new Error('Client contact lookup returned an empty or malformed response.')
+  }
+
+  // The lookup answers a location with no contacts with a placeholder row whose id is 0.
+  const contact = response.data.find(
+    (item) =>
+      isRecord(item) && stringField(item, 'contactId') !== '0' && stringField(item, 'contactName'),
+  )
+  return isRecord(contact) ? stringField(contact, 'contactName') : ''
+}
+
 export const fetchExemptionClientLocations = async (
   clientNumber: string,
 ): Promise<ApplicationClientLocation[]> => {
