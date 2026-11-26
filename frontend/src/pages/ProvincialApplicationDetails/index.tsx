@@ -2040,24 +2040,12 @@ const ProvincialApplicationDetailsPage = () => {
       }
     })
 
-    void Promise.all([
-      fetchApplicationClientData(
-        summaryOwnerClientNumberForLookup,
-        summaryOwnerClientLocationCode,
-        {
-          applicationNumber: applicationNumber ?? '',
-        },
-      ),
-      isEditingOwnerDetails
-        ? fetchApplicationClientContactName(
-            summaryOwnerClientNumberForLookup,
-            summaryOwnerClientLocationCode,
-            'owner',
-            { applicationNumber: applicationNumber ?? '' },
-          )
-        : '',
-    ])
-      .then(([clientData, locationContactName]) => {
+    void fetchApplicationClientData(
+      summaryOwnerClientNumberForLookup,
+      summaryOwnerClientLocationCode,
+      { applicationNumber: applicationNumber ?? '' },
+    )
+      .then((clientData) => {
         const currentForm = currentSummaryFormRef.current
         if (
           !isActive ||
@@ -2091,12 +2079,10 @@ const ProvincialApplicationDetailsPage = () => {
             return current
           }
 
-          const confirmedOwnerClientNumber =
-            clientData.clientNumber.trim() || current.ownerClientNumber
-          const ownerContactName = locationContactName || current.ownerContactName
-          return current.ownerClientNumber !== confirmedOwnerClientNumber ||
-            current.ownerContactName !== ownerContactName
-            ? { ...current, ownerClientNumber: confirmedOwnerClientNumber, ownerContactName }
+          const confirmedOwnerClientNumber = clientData.clientNumber.trim()
+          return confirmedOwnerClientNumber &&
+            current.ownerClientNumber !== confirmedOwnerClientNumber
+            ? { ...current, ownerClientNumber: confirmedOwnerClientNumber }
             : current
         })
       })
@@ -2159,22 +2145,12 @@ const ProvincialApplicationDetailsPage = () => {
       }
     })
 
-    void Promise.all([
-      fetchApplicationClientData(
-        summaryAgentClientNumberForLookup,
-        summaryAgentClientLocationCode,
-        clientLookupContext(applicationNumber ?? '', agentLookupCounterparty),
-      ),
-      isEditingOwnerDetails
-        ? fetchApplicationClientContactName(
-            summaryAgentClientNumberForLookup,
-            summaryAgentClientLocationCode,
-            'agent',
-            clientLookupContext(applicationNumber ?? '', agentLookupCounterparty),
-          )
-        : '',
-    ])
-      .then(([clientData, locationContactName]) => {
+    void fetchApplicationClientData(
+      summaryAgentClientNumberForLookup,
+      summaryAgentClientLocationCode,
+      clientLookupContext(applicationNumber ?? '', agentLookupCounterparty),
+    )
+      .then((clientData) => {
         const currentForm = currentSummaryFormRef.current
         if (
           !isActive ||
@@ -2208,12 +2184,10 @@ const ProvincialApplicationDetailsPage = () => {
             return current
           }
 
-          const confirmedAgentClientNumber =
-            clientData.clientNumber.trim() || current.agentClientNumber
-          const agentContactName = locationContactName || current.agentContactName
-          return current.agentClientNumber !== confirmedAgentClientNumber ||
-            current.agentContactName !== agentContactName
-            ? { ...current, agentClientNumber: confirmedAgentClientNumber, agentContactName }
+          const confirmedAgentClientNumber = clientData.clientNumber.trim()
+          return confirmedAgentClientNumber &&
+            current.agentClientNumber !== confirmedAgentClientNumber
+            ? { ...current, agentClientNumber: confirmedAgentClientNumber }
             : current
         })
       })
@@ -2252,6 +2226,97 @@ const ProvincialApplicationDetailsPage = () => {
     summaryAgentClientLocationCode,
     summaryAgentClientNumberForLookup,
     updateClientLookupFailure,
+  ])
+
+  // Best effort, only in the Applicant editor: a failed lookup leaves the name to be typed, and a
+  // name typed meanwhile is kept.
+  useEffect(() => {
+    if (
+      !isEditingOwnerDetails ||
+      !summaryOwnerClientNumberForLookup ||
+      !summaryOwnerClientLocationCode
+    ) {
+      return
+    }
+
+    let isActive = true
+    const contactNameAtLookupStart = currentSummaryFormRef.current?.ownerContactName ?? ''
+    void fetchApplicationClientContactName(
+      summaryOwnerClientNumberForLookup,
+      summaryOwnerClientLocationCode,
+      'owner',
+      { applicationNumber: applicationNumber ?? '' },
+    )
+      .then((locationContactName) => {
+        if (!isActive || !locationContactName) {
+          return
+        }
+
+        setSummaryForm((current) =>
+          current &&
+          clientLookupNumbersMatch(current.ownerClientNumber, summaryOwnerClientNumberForLookup) &&
+          current.ownerClientLocationCode.trim() === summaryOwnerClientLocationCode &&
+          current.ownerContactName === contactNameAtLookupStart &&
+          current.ownerContactName !== locationContactName
+            ? { ...current, ownerContactName: locationContactName }
+            : current,
+        )
+      })
+      .catch(() => undefined)
+
+    return () => {
+      isActive = false
+    }
+  }, [
+    applicationNumber,
+    isEditingOwnerDetails,
+    summaryOwnerClientLocationCode,
+    summaryOwnerClientNumberForLookup,
+  ])
+
+  useEffect(() => {
+    if (
+      !isEditingOwnerDetails ||
+      !summaryAgentClientNumberForLookup ||
+      !summaryAgentClientLocationCode
+    ) {
+      return
+    }
+
+    let isActive = true
+    const contactNameAtLookupStart = currentSummaryFormRef.current?.agentContactName ?? ''
+    void fetchApplicationClientContactName(
+      summaryAgentClientNumberForLookup,
+      summaryAgentClientLocationCode,
+      'agent',
+      clientLookupContext(applicationNumber ?? '', agentLookupCounterparty),
+    )
+      .then((locationContactName) => {
+        if (!isActive || !locationContactName) {
+          return
+        }
+
+        setSummaryForm((current) =>
+          current &&
+          clientLookupNumbersMatch(current.agentClientNumber, summaryAgentClientNumberForLookup) &&
+          current.agentClientLocationCode.trim() === summaryAgentClientLocationCode &&
+          current.agentContactName === contactNameAtLookupStart &&
+          current.agentContactName !== locationContactName
+            ? { ...current, agentContactName: locationContactName }
+            : current,
+        )
+      })
+      .catch(() => undefined)
+
+    return () => {
+      isActive = false
+    }
+  }, [
+    agentLookupCounterparty,
+    applicationNumber,
+    isEditingOwnerDetails,
+    summaryAgentClientLocationCode,
+    summaryAgentClientNumberForLookup,
   ])
 
   useEffect(() => {

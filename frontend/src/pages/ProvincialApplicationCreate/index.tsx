@@ -978,13 +978,8 @@ const ProvincialApplicationCreatePage = () => {
       }
     })
 
-    void Promise.all([
-      fetchClientData(ownerClientNumber, ownerClientLocationCode, ownerLookupCounterparty),
-      fetchApplicationClientContactName(ownerClientNumber, ownerClientLocationCode, 'owner', {
-        counterpartyClientNumber: ownerLookupCounterparty,
-      }),
-    ])
-      .then(([clientData, locationContactName]) => {
+    void fetchClientData(ownerClientNumber, ownerClientLocationCode, ownerLookupCounterparty)
+      .then((clientData) => {
         const currentForm = currentFormRef.current
         if (
           !isActive ||
@@ -1005,15 +1000,9 @@ const ProvincialApplicationCreatePage = () => {
           }
 
           const confirmedOwnerClientNumber = clientData?.clientNumber.trim() || ownerClientNumber
-          const ownerContactName = locationContactName || current.ownerContactName
-          return current.ownerClientNumber === confirmedOwnerClientNumber &&
-            current.ownerContactName === ownerContactName
+          return current.ownerClientNumber === confirmedOwnerClientNumber
             ? current
-            : {
-                ...current,
-                ownerClientNumber: confirmedOwnerClientNumber,
-                ownerContactName,
-              }
+            : { ...current, ownerClientNumber: confirmedOwnerClientNumber }
         })
       })
       .catch(() => {
@@ -1090,11 +1079,8 @@ const ProvincialApplicationCreatePage = () => {
       }
     })
 
-    void Promise.all([
-      fetchApplicationClientData(agentClientNumber, agentClientLocationCode),
-      fetchApplicationClientContactName(agentClientNumber, agentClientLocationCode, 'agent'),
-    ])
-      .then(([clientData, locationContactName]) => {
+    void fetchApplicationClientData(agentClientNumber, agentClientLocationCode)
+      .then((clientData) => {
         const currentForm = currentFormRef.current
         if (
           !isActive ||
@@ -1115,15 +1101,9 @@ const ProvincialApplicationCreatePage = () => {
           }
 
           const confirmedAgentClientNumber = clientData?.clientNumber.trim() || agentClientNumber
-          const agentContactName = locationContactName || current.agentContactName
-          return current.agentClientNumber === confirmedAgentClientNumber &&
-            current.agentContactName === agentContactName
+          return current.agentClientNumber === confirmedAgentClientNumber
             ? current
-            : {
-                ...current,
-                agentClientNumber: confirmedAgentClientNumber,
-                agentContactName,
-              }
+            : { ...current, agentClientNumber: confirmedAgentClientNumber }
         })
       })
       .catch(() => {
@@ -1151,6 +1131,85 @@ const ProvincialApplicationCreatePage = () => {
     form.agentClientLocationCode,
     form.applicantTypeCode,
     updateClientLookupFailure,
+  ])
+
+  // Best effort: a failed lookup leaves the name to be typed, and a name typed meanwhile is kept.
+  useEffect(() => {
+    const ownerClientNumber = ownerClientNumberForLookup.trim()
+    const ownerClientLocationCode = form.ownerClientLocationCode.trim()
+    if (!ownerClientNumber || !ownerClientLocationCode) {
+      return
+    }
+
+    let isActive = true
+    const contactNameAtLookupStart = currentFormRef.current.ownerContactName
+    void fetchApplicationClientContactName(ownerClientNumber, ownerClientLocationCode, 'owner', {
+      counterpartyClientNumber: ownerLookupCounterparty,
+    })
+      .then((locationContactName) => {
+        if (!isActive || !locationContactName) {
+          return
+        }
+
+        applyLoadedFormValues((current) =>
+          clientLookupNumbersMatch(current.ownerClientNumber, ownerClientNumber) &&
+          current.ownerClientLocationCode.trim() === ownerClientLocationCode &&
+          current.ownerContactName === contactNameAtLookupStart &&
+          current.ownerContactName !== locationContactName
+            ? { ...current, ownerContactName: locationContactName }
+            : current,
+        )
+      })
+      .catch(() => undefined)
+
+    return () => {
+      isActive = false
+    }
+  }, [
+    applyLoadedFormValues,
+    form.ownerClientLocationCode,
+    ownerClientNumberForLookup,
+    ownerLookupCounterparty,
+  ])
+
+  useEffect(() => {
+    const agentClientNumber = agentClientNumberForLookup.trim()
+    const agentClientLocationCode = form.agentClientLocationCode.trim()
+    if (
+      !isAgentApplicant(form.applicantTypeCode) ||
+      !agentClientNumber ||
+      !agentClientLocationCode
+    ) {
+      return
+    }
+
+    let isActive = true
+    const contactNameAtLookupStart = currentFormRef.current.agentContactName
+    void fetchApplicationClientContactName(agentClientNumber, agentClientLocationCode, 'agent')
+      .then((locationContactName) => {
+        if (!isActive || !locationContactName) {
+          return
+        }
+
+        applyLoadedFormValues((current) =>
+          clientLookupNumbersMatch(current.agentClientNumber, agentClientNumber) &&
+          current.agentClientLocationCode.trim() === agentClientLocationCode &&
+          current.agentContactName === contactNameAtLookupStart &&
+          current.agentContactName !== locationContactName
+            ? { ...current, agentContactName: locationContactName }
+            : current,
+        )
+      })
+      .catch(() => undefined)
+
+    return () => {
+      isActive = false
+    }
+  }, [
+    agentClientNumberForLookup,
+    applyLoadedFormValues,
+    form.agentClientLocationCode,
+    form.applicantTypeCode,
   ])
 
   useEffect(() => {

@@ -2367,6 +2367,66 @@ describe('Create Page Core Flows', () => {
     expect(ownerNameInput).toHaveValue('Typed Contact')
   })
 
+  it('keeps the client details when the contact lookup fails', async () => {
+    mockedFetchApplicationClientContactName.mockRejectedValue(new Error('contacts down'))
+
+    render(
+      <MemoryRouter
+        initialEntries={[
+          '/provincial/application/create?ownerClientNumber=00011111&ownerClientLocationCode=00',
+        ]}
+      >
+        <Routes>
+          <Route
+            path="/provincial/application/create"
+            element={<ProvincialApplicationCreatePage />}
+          />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    await selectApplicationCreateTab('Applicant')
+    expect(
+      await screen.findByRole('region', { name: 'Applicant client details' }),
+    ).toBeInTheDocument()
+    await waitFor(() => expect(mockedFetchApplicationClientContactName).toHaveBeenCalled())
+    expect(screen.queryByText('Client details unavailable')).not.toBeInTheDocument()
+    expect(screen.getByRole('textbox', { name: 'Contact name' })).toHaveValue('')
+  })
+
+  it('keeps a contact name typed while the contact lookup is in flight', async () => {
+    let resolveContactName: (contactName: string) => void = () => undefined
+    mockedFetchApplicationClientContactName.mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          resolveContactName = resolve
+        }),
+    )
+
+    render(
+      <MemoryRouter
+        initialEntries={[
+          '/provincial/application/create?ownerClientNumber=00011111&ownerClientLocationCode=00',
+        ]}
+      >
+        <Routes>
+          <Route
+            path="/provincial/application/create"
+            element={<ProvincialApplicationCreatePage />}
+          />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    await selectApplicationCreateTab('Applicant')
+    const ownerNameInput = await screen.findByRole('textbox', { name: 'Contact name' })
+    await waitFor(() => expect(mockedFetchApplicationClientContactName).toHaveBeenCalled())
+    fireEvent.change(ownerNameInput, { target: { value: 'Typed Contact' } })
+    await act(async () => resolveContactName('HEAD OFFICE CONTACT'))
+
+    expect(ownerNameInput).toHaveValue('Typed Contact')
+  })
+
   it('blocks provincial application submit when volume precision is invalid', async () => {
     render(
       <MemoryRouter
