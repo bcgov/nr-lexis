@@ -1173,10 +1173,13 @@ export const ReportsPageContent = () => {
   const reportGenerationDisabled = requiredReportOptionsLoading || requiredReportOptionsFailed
 
   const backendDefaultRegion = reportOptionSourcesByKey.report?.defaultRegion ?? ''
+  // Tenure analysis opens with every region selected, as legacy did.
   const defaultReportRegion =
-    !reportRegionsAllowed || reportRegionsAllowed.has(backendDefaultRegion)
-      ? backendDefaultRegion
-      : (reportFieldOptionsByKey.region?.[0]?.value ?? '')
+    selectedReport.id === 'tenureReport'
+      ? (reportFieldOptionsByKey.region ?? []).map((option) => option.value).join(',')
+      : !reportRegionsAllowed || reportRegionsAllowed.has(backendDefaultRegion)
+        ? backendDefaultRegion
+        : (reportFieldOptionsByKey.region?.[0]?.value ?? '')
   const hasInvalidReportDate = selectedReportVariant.fields.some(
     (field) =>
       field.type === 'date' &&
