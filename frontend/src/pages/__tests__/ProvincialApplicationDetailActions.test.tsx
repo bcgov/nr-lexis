@@ -3128,7 +3128,7 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
     expect(species).toHaveAccessibleName(/Total items selected: 1/)
   })
 
-  it('clears an end use that a species change rules out instead of picking one', async () => {
+  it('clears an end use that a species change rules out, also on a return to the saved species', async () => {
     mockedFetchApplicationSummarySnapshot.mockResolvedValueOnce({
       ...applicationSummarySnapshot,
       speciesCodes: ['FI', 'CE'],
@@ -3158,6 +3158,13 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
     const endUse = getSummaryComboBox(itemDetails, 'End use')
     await waitFor(() => expect(endUse).toHaveValue('Lumber'))
     const species = itemDetails.getByRole('combobox', { name: /^Species list/ })
+    await userEvent.click(species)
+    await userEvent.click(await itemDetails.findByRole('option', { name: /CE/ }))
+
+    await waitFor(() => expect(getSummaryComboBox(itemDetails, 'End use')).toHaveValue(''))
+    await userEvent.click(getSummaryComboBox(itemDetails, 'End use'))
+    await userEvent.click(await itemDetails.findByRole('option', { name: /Peeler/ }))
+    await waitFor(() => expect(getSummaryComboBox(itemDetails, 'End use')).toHaveValue('Peeler'))
     await userEvent.click(species)
     await userEvent.click(await itemDetails.findByRole('option', { name: /CE/ }))
 

@@ -1725,6 +1725,8 @@ const ProvincialApplicationDetailsPage = () => {
   )
   const summarySpeciesKey = summarySpeciesCodes.join(',')
   const savedSummarySpeciesKey = summaryBaselineForm?.speciesCodes.join(',') ?? ''
+  const savedSummaryOrgUnitNumber = summaryBaselineForm?.orgUnitNumber
+  const savedSummaryEndUseCode = summaryBaselineForm?.endUseCode
   const summaryFieldErrors = useMemo<FieldErrors<ApplicationSummaryField>>(() => {
     if (!summaryForm) {
       return {}
@@ -2713,9 +2715,11 @@ const ProvincialApplicationDetailsPage = () => {
             return current
           }
           // A species change that rules out the end use clears it, as legacy did; the user picks one.
-          return summarySpeciesKey === savedSummarySpeciesKey
-            ? current
-            : { ...current, endUseCode: '' }
+          const keepsSavedEndUse =
+            summarySpeciesKey === savedSummarySpeciesKey &&
+            current.orgUnitNumber === savedSummaryOrgUnitNumber &&
+            current.endUseCode === savedSummaryEndUseCode
+          return keepsSavedEndUse ? current : { ...current, endUseCode: '' }
         })
       })
       .catch(() => {
@@ -2731,6 +2735,8 @@ const ProvincialApplicationDetailsPage = () => {
   }, [
     canEditSummary,
     hasSummaryForm,
+    savedSummaryEndUseCode,
+    savedSummaryOrgUnitNumber,
     savedSummarySpeciesKey,
     summaryForm?.orgUnitNumber,
     summarySpeciesCodes,
