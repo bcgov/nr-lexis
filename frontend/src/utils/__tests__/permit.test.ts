@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest'
-import { defaultPermitExpiryDate, formatPermitNumber, formatPermitStatus } from '@/utils/permit'
+import {
+  defaultPermitExpiryDate,
+  formatPermitNumber,
+  formatPermitStatus,
+  permitExpiryDateAfterIssueDateChange,
+} from '@/utils/permit'
 
 describe('permit utilities', () => {
   it.each(['ACT', 'Active', ' active '])('marks active permit status %s as pending', (status) => {
@@ -54,5 +59,50 @@ describe('defaultPermitExpiryDate', () => {
     ['180 days is not after the submit date', { ...blankExpiry, submitDate: '2027-06-01' }],
   ])('leaves the expiry blank when %s', (_case, dates) => {
     expect(defaultPermitExpiryDate(dates)).toBeNull()
+  })
+})
+
+describe('permitExpiryDateAfterIssueDateChange', () => {
+  const change = { submitDate: '2026-11-01', previousIssueDate: '2026-11-25' }
+
+  it('moves a default expiry with a corrected issued date', () => {
+    expect(
+      permitExpiryDateAfterIssueDateChange({
+        ...change,
+        issueDate: '2026-11-26',
+        expiryDate: '2027-05-24',
+      }),
+    ).toBe('2027-05-25')
+  })
+
+  it('clears a default expiry while the issued date is partial', () => {
+    expect(
+      permitExpiryDateAfterIssueDateChange({
+        ...change,
+        issueDate: '2026-11-2',
+        expiryDate: '2027-05-24',
+      }),
+    ).toBe('')
+  })
+
+  it('fills a blank expiry', () => {
+    expect(
+      permitExpiryDateAfterIssueDateChange({
+        ...change,
+        previousIssueDate: '',
+        issueDate: '2026-11-26',
+        expiryDate: '',
+      }),
+    ).toBe('2027-05-25')
+  })
+
+  it('keeps an entered expiry', () => {
+    expect(
+      permitExpiryDateAfterIssueDateChange({
+        ...change,
+        issueDate: '2026-11-26',
+        expiryDate: '2027-01-15',
+      }),
+    ).toBe('2027-01-15')
   })
 })

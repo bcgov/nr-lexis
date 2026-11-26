@@ -70,7 +70,7 @@ import {
   type ShippingReferenceOptions,
 } from '@/service/shipping-reference-service'
 import { formatBusinessIsoDate } from '@/utils/date'
-import { defaultPermitExpiryDate } from '@/utils/permit'
+import { defaultPermitExpiryDate, permitExpiryDateAfterIssueDateChange } from '@/utils/permit'
 import { fieldErrorText } from '@/utils/field-error'
 import { requiredLabel } from '@/utils/required-label'
 import { resolveBlanketOicRegionContext } from './region-context'
@@ -515,6 +515,21 @@ const BlanketOicPermitCreateForm = ({
       })
       return permitExpiryDate ? { ...current, permitExpiryDate } : current
     })
+  }
+
+  const setIssueDate = (issueDate: string) => {
+    markFormEdited()
+    setForm((current) => ({
+      ...current,
+      permitIssueDate: issueDate,
+      permitExpiryDate: permitExpiryDateAfterIssueDateChange({
+        previousIssueDate: current.permitIssueDate,
+        issueDate,
+        submitDate: current.permitSubmitDate,
+        expiryDate: current.permitExpiryDate,
+        exemptionExpiryDate: exemptionExpiryDate ?? '',
+      }),
+    }))
   }
 
   // A client's lookups name the client in the other slot, which lets a Provincial Submitter look
@@ -1078,10 +1093,7 @@ const BlanketOicPermitCreateForm = ({
                           value={form.permitIssueDate}
                           invalid={!!fieldError('permitIssueDate')}
                           invalidText={fieldError('permitIssueDate')}
-                          onChange={(value) => {
-                            setField('permitIssueDate', value)
-                            fillBlankExpiryDate()
-                          }}
+                          onChange={setIssueDate}
                         />
                       }
                     />

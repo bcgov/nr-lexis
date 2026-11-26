@@ -210,7 +210,12 @@ import {
 } from '@/service/shipping-reference-service'
 import { withoutActionError, type ActionResult } from '@/utils/action-result'
 import { fieldErrorText, fieldErrorTexts } from '@/utils/field-error'
-import { defaultPermitExpiryDate, formatPermitNumber, formatPermitStatus } from '@/utils/permit'
+import {
+  defaultPermitExpiryDate,
+  formatPermitNumber,
+  formatPermitStatus,
+  permitExpiryDateAfterIssueDateChange,
+} from '@/utils/permit'
 import { formatPackageNumberLabel, isValidEmail, normalizeTrimmedText } from '@/utils/text'
 
 import './ProvincialPermitDetails.scss'
@@ -3315,6 +3320,26 @@ const ProvincialPermitDetailsPage = () => {
     })
   }
 
+  const setPermitIssueDate = (issueDate: string): void => {
+    setPermitForm((current) => {
+      if (!current) return current
+      const savedExpiryDate = detailValue(detail?.expiryDate)
+      const keepsSavedExpiry = !!savedExpiryDate && current.permitExpiryDate === savedExpiryDate
+      return {
+        ...current,
+        permitIssueDate: issueDate,
+        permitExpiryDate: keepsSavedExpiry
+          ? current.permitExpiryDate
+          : permitExpiryDateAfterIssueDateChange({
+              previousIssueDate: current.permitIssueDate,
+              issueDate,
+              submitDate: current.permitSubmitDate,
+              expiryDate: current.permitExpiryDate,
+            }),
+      }
+    })
+  }
+
   const resetPermitClientLookup = (kind: PermitClientKind): void => {
     const requestRef = kind === 'owner' ? ownerClientLookupRequestRef : agentClientLookupRequestRef
     requestRef.current += 1
@@ -6083,10 +6108,9 @@ const ProvincialPermitDetailsPage = () => {
       invalidText={permitFieldError(field)}
       disabled={isDisabled}
       onFocus={field === 'permitExpiryDate' ? fillBlankPermitExpiryDate : undefined}
-      onChange={(value) => {
-        setPermitFormField(field, value)
-        if (field === 'permitIssueDate') fillBlankPermitExpiryDate()
-      }}
+      onChange={(value) =>
+        field === 'permitIssueDate' ? setPermitIssueDate(value) : setPermitFormField(field, value)
+      }
     />
   )
 

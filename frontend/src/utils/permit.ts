@@ -66,3 +66,26 @@ export const defaultPermitExpiryDate = ({
     termExpiryDate > exemptionExpiryDate
   return exemptionExpiresFirst ? exemptionExpiryDate : termExpiryDate
 }
+
+/**
+ * The expiry after the issued date changes. A blank expiry, or one still at the previous issued
+ * date's default, takes the new default; an entered expiry is kept.
+ */
+export const permitExpiryDateAfterIssueDateChange = ({
+  previousIssueDate,
+  issueDate,
+  submitDate,
+  expiryDate,
+  exemptionExpiryDate = '',
+}: {
+  previousIssueDate: string
+  issueDate: string
+  submitDate: string
+  expiryDate: string
+  exemptionExpiryDate?: string
+}): string => {
+  const defaultFor = (date: string) =>
+    defaultPermitExpiryDate({ issueDate: date, submitDate, expiryDate: '', exemptionExpiryDate })
+  const followsIssueDate = !expiryDate.trim() || expiryDate === defaultFor(previousIssueDate)
+  return followsIssueDate ? (defaultFor(issueDate) ?? '') : expiryDate
+}

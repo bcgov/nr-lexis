@@ -11410,6 +11410,21 @@ describe('Provincial Permit Detail Action Smoke', () => {
     expect(expiryDate).toHaveValue('2027-05-25')
   })
 
+  it('moves a filled expiry when the issued date is corrected', async () => {
+    mockedFetchProvincialPermitDetail.mockResolvedValue(blanketOicPermitWithoutDates)
+    mockBlanketOicExemptionContext()
+    renderPermitDetails()
+
+    await userEvent.click(await screen.findByRole('button', { name: /Edit permit(?: details)?/ }))
+    const issueDate = screen.getByLabelText('Issued date')
+    await userEvent.type(issueDate, '2026-11-25')
+    expect(screen.getByLabelText('Expiry date')).toHaveValue('2027-05-24')
+    await userEvent.clear(issueDate)
+    await userEvent.type(issueDate, '2026-11-26')
+
+    expect(screen.getByLabelText('Expiry date')).toHaveValue('2027-05-25')
+  })
+
   it('keeps an entered expiry when the issued date changes', async () => {
     mockedFetchProvincialPermitDetail.mockResolvedValue({
       ...blanketOicPermitWithoutDates,
