@@ -3066,10 +3066,13 @@ class ApplicationDetailsRpcControllerTest {
   }
 
   @Test
-  void getContactsForLocationShouldAllowAScopedSubmitterToLookUpTheirCounterparty() {
+  void getContactsForLocationShouldGiveAScopedSubmitterOnlyTheirCounterpartysFirstContact() {
     when(clientLookupServiceProvider.getIfAvailable()).thenReturn(clientLookupService);
     when(clientLookupService.getContactsForLocation("00099999", "01"))
-        .thenReturn(List.of(new ClientLookupService.ClientContact("Owner Contact", "31")));
+        .thenReturn(
+            List.of(
+                new ClientLookupService.ClientContact("Owner Contact", "31"),
+                new ClientLookupService.ClientContact("Second Contact", "32")));
     when(clientLookupService.getClientData("00099999", "01")).thenReturn(Optional.empty());
 
     ResponseEntity<List<ApplicationDetailsRpcController.ApplicationClientContactResponseDto>>
