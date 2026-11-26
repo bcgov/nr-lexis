@@ -142,6 +142,8 @@ details** or **Advertising details** card.
   date, or at any time if it has no list date.
 - **Rejected**, **Withdrawn** and **Expired** applications can't be changed.
 - The owner client can't be changed once the application is saved.
+- If a change to the **Species list** rules out the **End use**, **End use** is
+  cleared and you choose another.
 - If the application volume is larger than the package volumes together,
   saving opens **Confirm application details** with the warning "The sum of
   the package volume is less than the total application volume." Select
