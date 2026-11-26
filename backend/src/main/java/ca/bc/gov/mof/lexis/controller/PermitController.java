@@ -242,7 +242,6 @@ public class PermitController {
         agentClientNumber,
         ownerClientNumber,
         accessClientNumber,
-        accessClientNumber != null,
         regionNumbers == null ? List.of() : regionNumbers,
         sortField,
         page,

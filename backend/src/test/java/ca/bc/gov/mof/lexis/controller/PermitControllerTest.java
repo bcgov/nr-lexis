@@ -172,7 +172,6 @@ class PermitControllerTest {
     assertThat(criteria.applicantClientNumber()).isEqualTo("00055667");
     assertThat(criteria.ownerClientNumber()).isEqualTo("00077881");
     assertThat(criteria.accessClientNumber()).isNull();
-    assertThat(criteria.requireScalePermit()).isFalse();
     assertThat(criteria.regionNumbers()).containsExactly(12L);
     assertThat(criteria.sortField()).isEqualTo("permitNumber DESC");
   }
@@ -210,7 +209,6 @@ class PermitControllerTest {
     assertThat(criteria.applicantClientNumber()).isNull();
     assertThat(criteria.ownerClientNumber()).isNull();
     assertThat(criteria.accessClientNumber()).isEqualTo("00077881");
-    assertThat(criteria.requireScalePermit()).isTrue();
   }
 
   @Test
@@ -246,7 +244,6 @@ class PermitControllerTest {
     assertThat(criteria.applicantClientNumber()).isEqualTo("00099999");
     assertThat(criteria.ownerClientNumber()).isEqualTo("00088888");
     assertThat(criteria.accessClientNumber()).isEqualTo("00077881");
-    assertThat(criteria.requireScalePermit()).isTrue();
     assertThat(criteria.regionNumbers()).isEmpty();
   }
 
@@ -278,7 +275,6 @@ class PermitControllerTest {
     assertThat(criteriaCaptor.getValue().applicantClientNumber()).isEqualTo("00099999");
     assertThat(criteriaCaptor.getValue().ownerClientNumber()).isEqualTo("00088888");
     assertThat(criteriaCaptor.getValue().accessClientNumber()).isEqualTo("00077881");
-    assertThat(criteriaCaptor.getValue().requireScalePermit()).isTrue();
   }
 
   @Test

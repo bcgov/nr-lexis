@@ -108,7 +108,7 @@ public class PermitOracleService implements PermitService {
   private PermitSearchCriteria normalizeCriteria(PermitSearchCriteria input) {
     if (input == null) {
       return new PermitSearchCriteria(
-          null, null, null, null, null, null, null, null, null, null, false, List.of(), null, 0, 25);
+          null, null, null, null, null, null, null, null, null, null, List.of(), null, 0, 25);
     }
 
     String packageNumber = trimToNull(input.packageNumber());
@@ -123,7 +123,6 @@ public class PermitOracleService implements PermitService {
         trimToNull(input.applicantClientNumber()),
         trimToNull(input.ownerClientNumber()),
         trimToNull(input.accessClientNumber()),
-        input.requireScalePermit(),
         positiveDistinctLongs(input.regionNumbers()),
         trimToNull(input.sortField()),
         Math.max(0, input.page()),
