@@ -91,5 +91,4 @@ Choose a **Report variant** first. The options change with it.
 
 All three take **Issued from date** and **Issued to date**. They start on
 the twelve months that ended last month. Changing the from date moves the to
-date to one year later. **Region** starts with every region in the list
-selected.
+date to one year later.

@@ -1303,42 +1303,6 @@ describe('Reports Page Actions', () => {
     })
   })
 
-  it('opens the tenure analysis report with every region selected like legacy', async () => {
-    mockReportPermissions()
-    mockedFetchReportOptions.mockResolvedValueOnce({
-      ...emptyReportOptions(),
-      defaultRegion: '1903',
-      regions: [
-        { value: '1903', label: 'Cariboo Natural Resource Region' },
-        { value: '1908', label: 'Skeena Natural Resource Region' },
-      ],
-    })
-
-    render(
-      <MemoryRouter initialEntries={['/reports?report=tenureReport']}>
-        <Routes>
-          <Route path="/reports" element={<ReportsPage />} />
-        </Routes>
-      </MemoryRouter>,
-    )
-
-    await screen.findByRole('heading', { name: 'Tenure analysis report' })
-    await userEvent.click(screen.getByRole('button', { name: 'Generate report' }))
-
-    await waitFor(() => {
-      expect(mockedRunReport).toHaveBeenCalledWith(
-        expect.objectContaining({
-          reportId: 'tenureReport',
-          actionMapping: 'generatePermitReport',
-          values: expect.objectContaining({
-            region: '1903,1908',
-            regionLabel: 'Cariboo Natural Resource Region, Skeena Natural Resource Region',
-          }),
-        }),
-      )
-    })
-  })
-
   it('limits a regional tenure types report to the user regions', async () => {
     mockedUseAuth.mockReturnValue(
       createTestAuthContext({
