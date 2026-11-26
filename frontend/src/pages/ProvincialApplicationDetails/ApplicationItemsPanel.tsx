@@ -816,7 +816,11 @@ function ProvincialApplicationItemsPanel({
       packageVolume: firstValidationError(
         () => requiredNumericFieldError(packageForm.volume, VOLUME_LABEL),
         () => greaterThanOrEqualFieldError(packageForm.volume, VOLUME_LABEL, 0),
-        () => atMostOneDecimalFieldError(packageForm.volume, VOLUME_LABEL),
+        // A stored two-decimal volume left as it is still saves.
+        () =>
+          packageForm.volume === packageBaselineForm.volume
+            ? null
+            : atMostOneDecimalFieldError(packageForm.volume, VOLUME_LABEL),
       ),
       packageAverageLength: firstValidationError(
         () => requiredNumericFieldError(packageForm.averageLength, AVERAGE_LENGTH_LABEL),
@@ -887,6 +891,7 @@ function ProvincialApplicationItemsPanel({
     }),
     [
       createPackageForm,
+      packageBaselineForm.volume,
       packageForm,
       packageNumbers,
       scaleForm,
@@ -2184,7 +2189,7 @@ function ProvincialApplicationItemsPanel({
                   aria-required="true"
                   helperText={
                     selectedPackageRemainingScaleVolume === null
-                      ? undefined
+                      ? null
                       : scaleVolumeLimitText(selectedPackageRemainingScaleVolume)
                   }
                   value={scaleForm.volume}

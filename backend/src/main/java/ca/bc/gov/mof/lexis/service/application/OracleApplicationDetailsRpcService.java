@@ -1547,7 +1547,8 @@ public class OracleApplicationDetailsRpcService implements ApplicationDetailsRpc
 
     if (request.volume() == null || request.volume() < 0.0d) {
       errors.add("The package volume must be greater than or equal to 0.");
-    } else if (!hasAtMostOneDecimal(request.volume())) {
+    } else if (!hasAtMostOneDecimal(request.volume())
+        && !keepsStoredVolume(request.volume(), update ? existing : null)) {
       errors.add("The package volume must have no more than one decimal place.");
     }
 
@@ -1922,6 +1923,14 @@ public class OracleApplicationDetailsRpcService implements ApplicationDetailsRpc
         || application.federalApplicationNumber() < 0) {
       errors.add("A non-negative federal application number is required for federal imports.");
     }
+  }
+
+  // A stored two-decimal volume left as it is still saves.
+  private boolean keepsStoredVolume(
+      Double volume, ApplicationDetailsRpcRepository.PackageMutationRow existing) {
+    return existing != null
+        && existing.packageVolume() != null
+        && BigDecimal.valueOf(volume).compareTo(BigDecimal.valueOf(existing.packageVolume())) == 0;
   }
 
   private boolean hasAtMostOneDecimal(Double value) {

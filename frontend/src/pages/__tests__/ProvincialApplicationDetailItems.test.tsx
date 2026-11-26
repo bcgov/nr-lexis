@@ -994,6 +994,39 @@ describe.sequential('Provincial Application Detail Actions - items', () => {
     },
   )
 
+  it('saves a comment-only edit of a package whose stored volume has two decimals', async () => {
+    const packageDetails = await mockedFetchApplicationPackageDetails('PKG-1')
+    mockedFetchApplicationPackageDetails.mockResolvedValue({ ...packageDetails, volume: '12.25' })
+    renderApplicationItems()
+    await selectApplicationDetailTab('Package and scale')
+
+    await userEvent.click(await screen.findByRole('button', { name: 'Edit package' }))
+    const comments = await screen.findByLabelText('Comments')
+    const drawer = within(comments.closest('.application-items-drawer') as HTMLElement)
+    fireEvent.change(comments, { target: { value: 'test-2026-11-26' } })
+    await userEvent.click(drawer.getByRole('button', { name: 'Save package' }))
+
+    await waitFor(() =>
+      expect(mockedUpdateApplicationPackage).toHaveBeenCalledWith(
+        expect.objectContaining({ volume: '12.25', comments: 'test-2026-11-26' }),
+      ),
+    )
+  })
+
+  it('still refuses a changed package volume with two decimals', async () => {
+    renderApplicationItems()
+    await selectApplicationDetailTab('Package and scale')
+
+    await userEvent.click(await screen.findByRole('button', { name: 'Edit package' }))
+    const volume = await screen.findByLabelText('Volume (m³)')
+    const drawer = within(volume.closest('.application-items-drawer') as HTMLElement)
+    fireEvent.change(volume, { target: { value: '12.25' } })
+    await userEvent.click(drawer.getByRole('button', { name: 'Save package' }))
+
+    expect(await drawer.findByText(/must have no more than one decimal place/)).toBeInTheDocument()
+    expect(mockedUpdateApplicationPackage).not.toHaveBeenCalled()
+  })
+
   it('saves package length and diameter at one decimal', async () => {
     const packageDetails = await mockedFetchApplicationPackageDetails('PKG-1')
     mockedFetchApplicationPackageDetails.mockResolvedValue({
