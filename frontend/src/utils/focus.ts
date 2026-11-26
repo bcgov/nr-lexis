@@ -63,6 +63,7 @@ type DateCalendar = {
   isOpen: boolean
   open: () => void
   close: () => void
+  changeMonth: (offset: number) => void
   calendarContainer: HTMLElement
 }
 export type DateInput = HTMLInputElement & { _flatpickr?: DateCalendar }
@@ -84,6 +85,12 @@ export const focusDateCalendarDay = (calendar: DateCalendar, preferredDay?: stri
     days.addEventListener('animationend', () => day.focus(), { once: true })
   }
   return !!day
+}
+
+// Carbon names an open calendar's month on open and month changes only, not when its date changes.
+export const refreshOpenCalendarMonthName = (input: DateInput | null | undefined): void => {
+  const calendar = input?._flatpickr
+  if (calendar?.isOpen) calendar.changeMonth(0)
 }
 
 // Focusing a date field opens its calendar, which would cover what is under the field.
