@@ -54,6 +54,7 @@ import {
   CLIENT_LOOKUP_UNAVAILABLE_MESSAGE,
   clientDisplayName,
   averageLogVolumeFieldError,
+  clientLocationKey,
   clientLookupNumbersMatch,
   clientLocationLabel,
   isAgentApplicant,
@@ -83,6 +84,7 @@ import {
 } from '@/service/search-options-service'
 import { submitProvincialApplicationCreate } from '@/service/create-submit-service'
 import {
+  fetchApplicationClientContactName,
   fetchApplicationClientData,
   fetchApplicationClientLocations,
   type ApplicationClientData,
@@ -389,6 +391,7 @@ const withAgentChoice = (
         ...next,
         ownerClientNumber: '',
         ownerClientLocationCode: '',
+        ownerContactName: '',
         agentClientNumber: submitterClientNumber,
         agentClientLocationCode: submitterLocationCode,
       }
@@ -396,6 +399,7 @@ const withAgentChoice = (
         ...next,
         ownerClientNumber: submitterClientNumber,
         ownerClientLocationCode: submitterLocationCode,
+        ownerContactName: '',
       }
 }
 
@@ -507,6 +511,16 @@ const ProvincialApplicationCreatePage = () => {
   const draftBaselineRef = useRef(form)
   const currentFormRef = useRef(form)
   currentFormRef.current = form
+  // The client location each contact name was typed for, or a create link gave it for. The
+  // location's contact replaces it only once another location is chosen.
+  const contactNameTypedForRef = useRef({
+    owner: form.ownerContactName
+      ? clientLocationKey(form.ownerClientNumber, form.ownerClientLocationCode)
+      : '',
+    agent: form.agentContactName
+      ? clientLocationKey(form.agentClientNumber, form.agentClientLocationCode)
+      : '',
+  })
   const [formEdited, setFormEdited] = useState(false)
   // Values the page fills in itself belong to the starting draft, even after the user starts editing.
   const applyLoadedFormValues = useCallback(
@@ -1130,6 +1144,83 @@ const ProvincialApplicationCreatePage = () => {
     form.agentClientLocationCode,
     form.applicantTypeCode,
     updateClientLookupFailure,
+  ])
+
+  // Best effort: a failed lookup leaves the name as it is.
+  useEffect(() => {
+    const ownerClientNumber = ownerClientNumberForLookup.trim()
+    const ownerClientLocationCode = form.ownerClientLocationCode.trim()
+    const lookupKey = clientLocationKey(ownerClientNumber, ownerClientLocationCode)
+    const nameTypedForLocation = () => contactNameTypedForRef.current.owner === lookupKey
+    if (!lookupKey || nameTypedForLocation()) {
+      return
+    }
+
+    let isActive = true
+    void fetchApplicationClientContactName(ownerClientNumber, ownerClientLocationCode, 'owner', {
+      counterpartyClientNumber: ownerLookupCounterparty,
+    })
+      .then((locationContactName) => {
+        if (!isActive || nameTypedForLocation()) {
+          return
+        }
+
+        contactNameTypedForRef.current.owner = ''
+        applyLoadedFormValues((current) =>
+          clientLookupNumbersMatch(current.ownerClientNumber, ownerClientNumber) &&
+          current.ownerClientLocationCode.trim() === ownerClientLocationCode &&
+          current.ownerContactName !== locationContactName
+            ? { ...current, ownerContactName: locationContactName }
+            : current,
+        )
+      })
+      .catch(() => undefined)
+
+    return () => {
+      isActive = false
+    }
+  }, [
+    applyLoadedFormValues,
+    form.ownerClientLocationCode,
+    ownerClientNumberForLookup,
+    ownerLookupCounterparty,
+  ])
+
+  useEffect(() => {
+    const agentClientNumber = agentClientNumberForLookup.trim()
+    const agentClientLocationCode = form.agentClientLocationCode.trim()
+    const lookupKey = clientLocationKey(agentClientNumber, agentClientLocationCode)
+    const nameTypedForLocation = () => contactNameTypedForRef.current.agent === lookupKey
+    if (!isAgentApplicant(form.applicantTypeCode) || !lookupKey || nameTypedForLocation()) {
+      return
+    }
+
+    let isActive = true
+    void fetchApplicationClientContactName(agentClientNumber, agentClientLocationCode, 'agent')
+      .then((locationContactName) => {
+        if (!isActive || nameTypedForLocation()) {
+          return
+        }
+
+        contactNameTypedForRef.current.agent = ''
+        applyLoadedFormValues((current) =>
+          clientLookupNumbersMatch(current.agentClientNumber, agentClientNumber) &&
+          current.agentClientLocationCode.trim() === agentClientLocationCode &&
+          current.agentContactName !== locationContactName
+            ? { ...current, agentContactName: locationContactName }
+            : current,
+        )
+      })
+      .catch(() => undefined)
+
+    return () => {
+      isActive = false
+    }
+  }, [
+    agentClientNumberForLookup,
+    applyLoadedFormValues,
+    form.agentClientLocationCode,
+    form.applicantTypeCode,
   ])
 
   useEffect(() => {
@@ -1881,6 +1972,10 @@ const ProvincialApplicationCreatePage = () => {
                         onBlur={() => markFieldTouched('ownerContactName')}
                         onChange={(event) => {
                           markFormEdited()
+                          contactNameTypedForRef.current.owner = clientLocationKey(
+                            form.ownerClientNumber,
+                            form.ownerClientLocationCode,
+                          )
                           setForm((current) => ({
                             ...current,
                             ownerContactName: event.target.value,
@@ -2006,6 +2101,7 @@ const ProvincialApplicationCreatePage = () => {
                           setAgentClientLocations([])
                           setAgentClientData(null)
                         }
+                        contactNameTypedForRef.current = { owner: '', agent: '' }
                         setForm((current) =>
                           withAgentChoice(
                             current,
@@ -2040,6 +2136,10 @@ const ProvincialApplicationCreatePage = () => {
                             onBlur={() => markFieldTouched('agentContactName')}
                             onChange={(event) => {
                               markFormEdited()
+                              contactNameTypedForRef.current.agent = clientLocationKey(
+                                form.agentClientNumber,
+                                form.agentClientLocationCode,
+                              )
                               setForm((current) => ({
                                 ...current,
                                 agentContactName: event.target.value,

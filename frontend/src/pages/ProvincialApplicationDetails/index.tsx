@@ -119,6 +119,7 @@ import {
   type ApplicationReviewStatusUpdateResult,
 } from '@/service/application-review-search-service'
 import {
+  fetchApplicationClientContactName,
   fetchApplicationClientData,
   fetchApplicationClientLocations,
   type ApplicationClientData,
@@ -143,6 +144,7 @@ import { nonNegativeWholeNumberFieldError } from '@/pages/shared/application-ter
 import {
   CLIENT_LOOKUP_UNAVAILABLE_MESSAGE,
   averageLogVolumeFieldError,
+  clientLocationKey,
   clientLookupNumbersMatch,
   clientDisplayName,
   clientLocationLabel,
@@ -999,6 +1001,9 @@ const ProvincialApplicationDetailsPage = () => {
   currentDetailRef.current = detail
   const currentSummaryFormRef = useRef<ApplicationSummaryFormState | null>(null)
   currentSummaryFormRef.current = summaryForm
+  // The client location each contact name was saved or typed for. The location's contact replaces
+  // it only once another location is chosen in the Applicant editor.
+  const contactNameTypedForRef = useRef({ owner: '', agent: '' })
 
   useEffect(() => {
     if (!createdApplicationNumber) {
@@ -2225,6 +2230,109 @@ const ProvincialApplicationDetailsPage = () => {
     summaryAgentClientLocationCode,
     summaryAgentClientNumberForLookup,
     updateClientLookupFailure,
+  ])
+
+  // Best effort, only in the Applicant editor: a failed lookup leaves the name as it is.
+  useEffect(() => {
+    const lookupKey = clientLocationKey(
+      summaryOwnerClientNumberForLookup,
+      summaryOwnerClientLocationCode,
+    )
+    const nameTypedForLocation = () => contactNameTypedForRef.current.owner === lookupKey
+    if (!isEditingOwnerDetails) {
+      contactNameTypedForRef.current.owner = currentSummaryFormRef.current?.ownerContactName.trim()
+        ? lookupKey
+        : ''
+      return
+    }
+    if (canChangeAgentOnly || !lookupKey || nameTypedForLocation()) {
+      return
+    }
+
+    let isActive = true
+    void fetchApplicationClientContactName(
+      summaryOwnerClientNumberForLookup,
+      summaryOwnerClientLocationCode,
+      'owner',
+      { applicationNumber: applicationNumber ?? '' },
+    )
+      .then((locationContactName) => {
+        if (!isActive || nameTypedForLocation()) {
+          return
+        }
+
+        contactNameTypedForRef.current.owner = ''
+        setSummaryForm((current) =>
+          current &&
+          clientLookupNumbersMatch(current.ownerClientNumber, summaryOwnerClientNumberForLookup) &&
+          current.ownerClientLocationCode.trim() === summaryOwnerClientLocationCode &&
+          current.ownerContactName !== locationContactName
+            ? { ...current, ownerContactName: locationContactName }
+            : current,
+        )
+      })
+      .catch(() => undefined)
+
+    return () => {
+      isActive = false
+    }
+  }, [
+    applicationNumber,
+    canChangeAgentOnly,
+    isEditingOwnerDetails,
+    summaryOwnerClientLocationCode,
+    summaryOwnerClientNumberForLookup,
+  ])
+
+  useEffect(() => {
+    const lookupKey = clientLocationKey(
+      summaryAgentClientNumberForLookup,
+      summaryAgentClientLocationCode,
+    )
+    const nameTypedForLocation = () => contactNameTypedForRef.current.agent === lookupKey
+    if (!isEditingOwnerDetails) {
+      contactNameTypedForRef.current.agent = currentSummaryFormRef.current?.agentContactName.trim()
+        ? lookupKey
+        : ''
+      return
+    }
+    if (!lookupKey || nameTypedForLocation()) {
+      return
+    }
+
+    let isActive = true
+    void fetchApplicationClientContactName(
+      summaryAgentClientNumberForLookup,
+      summaryAgentClientLocationCode,
+      'agent',
+      clientLookupContext(applicationNumber ?? '', agentLookupCounterparty),
+    )
+      .then((locationContactName) => {
+        if (!isActive || nameTypedForLocation()) {
+          return
+        }
+
+        contactNameTypedForRef.current.agent = ''
+        setSummaryForm((current) =>
+          current &&
+          clientLookupNumbersMatch(current.agentClientNumber, summaryAgentClientNumberForLookup) &&
+          current.agentClientLocationCode.trim() === summaryAgentClientLocationCode &&
+          current.agentContactName !== locationContactName
+            ? { ...current, agentContactName: locationContactName }
+            : current,
+        )
+      })
+      .catch(() => undefined)
+
+    return () => {
+      isActive = false
+    }
+  }, [
+    agentLookupCounterparty,
+    applicationNumber,
+    isEditingOwnerDetails,
+    summaryAgentClientLocationCode,
+    summaryAgentClientNumberForLookup,
   ])
 
   useEffect(() => {
@@ -4394,9 +4502,13 @@ const ProvincialApplicationDetailsPage = () => {
                                       )}
                                       invalidText={visibleSummaryFieldError('ownerContactName')}
                                       disabled={isSavingSummary}
-                                      onChange={(event) =>
+                                      onChange={(event) => {
+                                        contactNameTypedForRef.current.owner = clientLocationKey(
+                                          summaryForm.ownerClientNumber,
+                                          summaryForm.ownerClientLocationCode,
+                                        )
                                         onSummaryFormChange('ownerContactName', event.target.value)
-                                      }
+                                      }}
                                     />
                                   </RecordFieldCell>
                                 )}
@@ -4498,12 +4610,17 @@ const ProvincialApplicationDetailsPage = () => {
                                           )}
                                           invalidText={visibleSummaryFieldError('agentContactName')}
                                           disabled={isSavingSummary}
-                                          onChange={(event) =>
+                                          onChange={(event) => {
+                                            contactNameTypedForRef.current.agent =
+                                              clientLocationKey(
+                                                summaryForm.agentClientNumber,
+                                                summaryForm.agentClientLocationCode,
+                                              )
                                             onSummaryFormChange(
                                               'agentContactName',
                                               event.target.value,
                                             )
-                                          }
+                                          }}
                                         />
                                       </RecordFieldCell>
                                     )}
