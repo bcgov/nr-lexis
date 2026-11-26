@@ -112,7 +112,8 @@ need every region the exemption covers.
 - **Expiry date**: while the exemption is **New**, or for a Blanket OIC
   while it is New or Active.
 - **Approval volume (m³)** and **Conditions**: until the exemption is
-  cancelled or expired.
+  cancelled or expired. A Blanket OIC saved with an approval volume of 0
+  opens for editing with **9999999.9**.
 
 A **New** Ministerial exemption can't be made Active here. It has to be
 approved. **Expired** is never chosen by hand.

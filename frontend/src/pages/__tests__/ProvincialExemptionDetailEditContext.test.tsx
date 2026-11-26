@@ -1312,6 +1312,58 @@ describe('Provincial exemption edit context', () => {
     )
   })
 
+  it.each([
+    { typeCode: 'B', approvedVolume: 0, opensWith: '9999999.9' },
+    { typeCode: 'B', approvedVolume: 500, opensWith: '500.0' },
+    { typeCode: 'O', approvedVolume: 0, opensWith: '0.0' },
+  ])(
+    'opens a type $typeCode exemption with approval volume $approvedVolume at $opensWith',
+    async ({ typeCode, approvedVolume, opensWith }) => {
+      vi.mocked(fetchProvincialExemptionDetail).mockResolvedValue({
+        ...exemptionDetail,
+        exemptionTypeCode: typeCode,
+        blanketOic: typeCode === 'B',
+        approvedVolume,
+      })
+      vi.mocked(fetchExemptionEditContext).mockResolvedValue({
+        rateOverrideEnabled: false,
+        fixedFeeRate: '',
+        regionNumbers: ['1903'],
+        locked: false,
+        lockMessage: '',
+      })
+      vi.mocked(updateExemption).mockResolvedValue({
+        success: true,
+        message: 'The exemption was updated successfully.',
+        exemptionNumber: 'BOIC-205',
+        errors: [],
+        warnings: [],
+      })
+
+      render(
+        <MemoryRouter initialEntries={['/provincial/exemption/BOIC-205']}>
+          <Routes>
+            <Route
+              path="/provincial/exemption/:exemptionNumber"
+              element={<ProvincialExemptionDetailsPage />}
+            />
+          </Routes>
+        </MemoryRouter>,
+      )
+
+      await userEvent.click(await screen.findByRole('button', { name: 'Edit exemption details' }))
+      expect(screen.getByLabelText('Approval volume (m³)')).toHaveValue(opensWith)
+      if (opensWith !== '9999999.9') return
+      await userEvent.click(screen.getByRole('button', { name: 'Save changes' }))
+
+      await waitFor(() =>
+        expect(vi.mocked(updateExemption)).toHaveBeenCalledWith(
+          expect.objectContaining({ approvedVolume: '9999999.9' }),
+        ),
+      )
+    },
+  )
+
   it('rejects approval volume with three decimals when updating an exemption', async () => {
     vi.mocked(fetchProvincialExemptionDetail).mockResolvedValue({
       ...exemptionDetail,

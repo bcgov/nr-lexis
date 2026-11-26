@@ -121,6 +121,7 @@ import { sanitizeNotificationText } from '@/utils/notification-messages'
 import { firstStringField, isRecord } from '@/utils/record'
 import { displayValueText, formatPhoneNumber } from '@/utils/text'
 import { displayVolume, formatVolumeInput } from '@/utils/volume'
+import { BLANKET_OIC_MAX_VOLUME } from '@/constants/exemption'
 import IsoDatePicker from '../../components/IsoDatePicker'
 import SearchableSelect from '../../components/SearchableSelect'
 import RegionMultiSelect from '@/components/RegionMultiSelect'
@@ -1797,7 +1798,16 @@ const ProvincialExemptionDetailsPage = () => {
 
   const startEditingSection = (section: ExemptionEditSection) =>
     sections.startEditing(section, () => {
-      if (currentDetail) setEditForm(toEditForm(currentDetail, editContext))
+      if (currentDetail) {
+        const form = toEditForm(currentDetail, editContext)
+        // A Blanket OIC saved with no approval volume opens with the maximum, as legacy did.
+        const fillMaxVolume =
+          section === 'summary' &&
+          canEditExemptionFields &&
+          form.exemptionTypeCode === 'B' &&
+          currentDetail.approvedVolume === 0
+        setEditForm(fillMaxVolume ? { ...form, approvedVolume: BLANKET_OIC_MAX_VOLUME } : form)
+      }
       resetFieldErrors()
       setSaveAttempted(false)
       // A new edit replaces the notice from the last section save.

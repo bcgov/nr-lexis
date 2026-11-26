@@ -62,6 +62,7 @@ import { fieldErrorText } from '@/utils/field-error'
 import { requiredLabel } from '@/utils/required-label'
 import { focusFirstInvalidFieldAfterRender } from '@/utils/focus'
 import RequiredFieldsLegend from '@/components/RequiredFieldsLegend'
+import { BLANKET_OIC_MAX_VOLUME } from '@/constants/exemption'
 
 type ProvincialExemptionCreateForm = {
   exemptionNumber: string
@@ -117,7 +118,6 @@ const INITIAL_FORM: ProvincialExemptionCreateForm = {
   otherConditions: '',
 }
 
-const BLANKET_OIC_MAX_VOLUME = '9999999.9'
 const OIC_TYPES = new Set(['O', 'B'])
 const ASCII_PATTERN = /^[\u0000-\u007f]*$/
 const SAVE_FAILED_MESSAGE =
