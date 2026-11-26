@@ -3328,7 +3328,13 @@ const ProvincialPermitDetailsPage = () => {
   // Leaving Receipt number with a new receipt issues a permit that has applications today, as
   // legacy's change event did.
   const fillIssueDateFromReceipt = (): void => {
-    if (!permitTablesAvailable || associatedPermitApplications.length === 0) return
+    if (
+      invoiceMaterialLocked ||
+      !permitTablesAvailable ||
+      associatedPermitApplications.length === 0
+    ) {
+      return
+    }
     const savedReceipt = detailValue(detail?.receiptNumber).trim()
     setPermitForm((current) => {
       const receipt = current?.permitReceiptNo.trim() ?? ''
