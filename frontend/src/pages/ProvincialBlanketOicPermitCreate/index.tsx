@@ -192,6 +192,7 @@ const BlanketOicPermitCreateContent = ({
           exemptionNumber={detail.exemptionNumber}
           approvedExemptionVolume={detail.approvedVolume}
           exemptionVolumeRemaining={detail.remainingVolume}
+          exemptionExpiryDate={detail.expiryDate}
           regionOptions={regionOptions}
           defaultRegionNumbers={editContext.regionNumbers}
           onCancel={onCancel}

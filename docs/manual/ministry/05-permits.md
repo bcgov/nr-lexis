@@ -55,8 +55,10 @@ permit**.
   volume is more than the exemption's balance remaining.
 - **Blanket OIC**: select **Continue** and fill in the **Apply for new
   permit** form. Staff choose the owner with the **Client** search and can
-  set the submit, issued and expiry dates. Packages and scale are added on
-  the saved permit's **Package and scale** tab.
+  set the submit, issued and expiry dates. A blank **Expiry date** fills in
+  as 180 days after the issued date, or the exemption's expiry date if that
+  comes first. Packages and scale are added on the saved permit's
+  **Package and scale** tab.
 
 A permit can't be deleted once it is created.
 
@@ -139,7 +141,8 @@ prepaid fee receipt.
 
 1. On the **Permit** tab, select **Edit permit details**.
 2. Set **Status** to **Complete**.
-3. Enter the **Issued date** and check the **Expiry date**. A Ministerial
+3. Enter the **Issued date** and check the **Expiry date**. A blank
+   **Expiry date** fills in as 180 days after the issued date. A Ministerial
    permit can't expire after its exemption.
 4. Select **Save changes**. If LEXIS names another tab, complete its
    required fields and save again. If the permit still needs an
