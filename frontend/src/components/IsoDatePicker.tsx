@@ -47,6 +47,7 @@ type IsoDatePickerProps = {
   /** The earliest day the calendar offers, as YYYY-MM-DD. A typed earlier date is kept as typed. */
   minDate?: string
   onBlur?: () => void
+  onFocus?: () => void
   onChange: (value: string) => void
 }
 
@@ -61,6 +62,7 @@ export default function IsoDatePicker({
   readOnly = false,
   minDate,
   onBlur,
+  onFocus,
   onChange,
 }: IsoDatePickerProps) {
   // Text Flatpickr can't select: a partial or impossible date, or a day before minDate.
@@ -134,6 +136,7 @@ export default function IsoDatePicker({
         invalidText={fieldErrorText(invalidText)}
         aria-required={required || undefined}
         disabled={disabled}
+        onFocus={onFocus}
         onBlur={(event) => {
           const input = event.currentTarget
           const latestInputValue = latestInputValueRef.current

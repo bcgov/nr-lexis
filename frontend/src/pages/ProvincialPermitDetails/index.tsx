@@ -210,7 +210,7 @@ import {
 } from '@/service/shipping-reference-service'
 import { withoutActionError, type ActionResult } from '@/utils/action-result'
 import { fieldErrorText, fieldErrorTexts } from '@/utils/field-error'
-import { formatPermitNumber, formatPermitStatus } from '@/utils/permit'
+import { defaultPermitExpiryDate, formatPermitNumber, formatPermitStatus } from '@/utils/permit'
 import { formatPackageNumberLabel, isValidEmail, normalizeTrimmedText } from '@/utils/text'
 
 import './ProvincialPermitDetails.scss'
@@ -3302,6 +3302,19 @@ const ProvincialPermitDetailsPage = () => {
     })
   }
 
+  // Legacy capped at the exemption expiry only when creating; a saved permit gets the full 180 days.
+  const fillBlankPermitExpiryDate = (): void => {
+    setPermitForm((current) => {
+      if (!current) return current
+      const permitExpiryDate = defaultPermitExpiryDate({
+        issueDate: current.permitIssueDate,
+        submitDate: current.permitSubmitDate,
+        expiryDate: current.permitExpiryDate,
+      })
+      return permitExpiryDate ? { ...current, permitExpiryDate } : current
+    })
+  }
+
   const resetPermitClientLookup = (kind: PermitClientKind): void => {
     const requestRef = kind === 'owner' ? ownerClientLookupRequestRef : agentClientLookupRequestRef
     requestRef.current += 1
@@ -6069,7 +6082,11 @@ const ProvincialPermitDetailsPage = () => {
       invalid={!!permitFieldError(field)}
       invalidText={permitFieldError(field)}
       disabled={isDisabled}
-      onChange={(value) => setPermitFormField(field, value)}
+      onFocus={field === 'permitExpiryDate' ? fillBlankPermitExpiryDate : undefined}
+      onChange={(value) => {
+        setPermitFormField(field, value)
+        if (field === 'permitIssueDate') fillBlankPermitExpiryDate()
+      }}
     />
   )
 
