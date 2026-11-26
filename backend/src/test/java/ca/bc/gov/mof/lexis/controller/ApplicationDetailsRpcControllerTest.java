@@ -3046,12 +3046,15 @@ class ApplicationDetailsRpcControllerTest {
   }
 
   @Test
-  void getContactsForLocationLegacyShouldFallbackToClientContacts() {
+  void getContactsForLocationLegacyShouldFallbackToTheFirstClientContact() {
     when(clientLookupServiceProvider.getIfAvailable()).thenReturn(clientLookupService);
     when(serviceProvider.getIfAvailable()).thenReturn(service);
     when(service.getApplicationClientSnapshot(1000456L)).thenReturn(Optional.empty());
     when(clientLookupService.getContactsForLocation("11111", "02"))
-        .thenReturn(List.of(new ClientLookupService.ClientContact("Fallback Contact", "22")));
+        .thenReturn(
+            List.of(
+                new ClientLookupService.ClientContact("Fallback Contact", "22"),
+                new ClientLookupService.ClientContact("Second Contact", "23")));
     when(clientLookupService.getClientData("11111", "02")).thenReturn(Optional.empty());
 
     ResponseEntity<List<ApplicationDetailsRpcController.ApplicationClientContactResponseDto>>
@@ -3063,6 +3066,26 @@ class ApplicationDetailsRpcControllerTest {
     assertThat(response.getBody().get(0).contactName()).isEqualTo("Fallback Contact");
     assertThat(response.getBody().get(0).contactId()).isEqualTo("22");
     verify(clientLookupService).getContactsForLocation("11111", "02");
+  }
+
+  @Test
+  void getContactsForLocationShouldGiveAScopedSubmitterOnlyTheirCounterpartysFirstContact() {
+    when(clientLookupServiceProvider.getIfAvailable()).thenReturn(clientLookupService);
+    when(clientLookupService.getContactsForLocation("00099999", "01"))
+        .thenReturn(
+            List.of(
+                new ClientLookupService.ClientContact("Owner Contact", "31"),
+                new ClientLookupService.ClientContact("Second Contact", "32")));
+    when(clientLookupService.getClientData("00099999", "01")).thenReturn(Optional.empty());
+
+    ResponseEntity<List<ApplicationDetailsRpcController.ApplicationClientContactResponseDto>>
+        response = controller.getContactsForLocation("00099999", "01", null, "owner", "77881");
+
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+    assertThat(response.getBody())
+        .extracting(ApplicationDetailsRpcController.ApplicationClientContactResponseDto::contactName)
+        .containsExactly("Owner Contact");
+    verify(provincialAuthorizationService).canCreateForClient(null, "00099999", "00077881");
   }
 
   @Test

@@ -1057,6 +1057,14 @@ const ROUTES: ManualRoute[] = [
   },
   {
     method: 'GET',
+    path: /^\/lexis\/rpc\/application-details\/contacts-for-location$/,
+    respond: (r) =>
+      CLIENTS[r.query.get('clientNumber') ?? '']
+        ? [{ contactName: 'Jordan Sample', contactId: '1' }]
+        : [{ contactName: 'No contacts on file for this location', contactId: '0' }],
+  },
+  {
+    method: 'GET',
     path: /^\/lexis\/applications\/(\d+)$/,
     respond: (_r, m) => applicationFor(m[1])?.detail,
   },
