@@ -38,10 +38,6 @@ the issued permit.
 | **Provincial › Summary** | See **My permits** and, with **Display fees**, **My fees**. |
 | **Provincial › Exemption search** | Open the exemption to start a new permit. |
 
-**Permit search** lists a permit only once it has scale. To find a permit
-you have just started, use **My permits** on the Summary page or the
-exemption's **Permits** tab.
-
 A permit record has these tabs: **Permit**, **Applicant**, **Shipping**,
 **Package and scale**, **Documents**, **Fees** and, once the permit has been invoiced,
 **GBMS**.
