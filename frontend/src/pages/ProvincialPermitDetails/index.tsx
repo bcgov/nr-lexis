@@ -3321,16 +3321,21 @@ const ProvincialPermitDetailsPage = () => {
       if (field === 'permitSubmitDate' && !detail?.blanketOic) {
         return { ...current, permitSubmitDate: value, permitRequestDate: value }
       }
-      if (
-        field === 'permitReceiptNo' &&
-        value.trim() &&
-        !current.permitIssueDate.trim() &&
-        associatedPermitApplications.length > 0
-      ) {
-        // Entering a receipt issues a permit that has applications today, as legacy did.
-        return withPermitIssueDate({ ...current, permitReceiptNo: value }, formatBusinessIsoDate())
-      }
       return { ...current, [field]: value }
+    })
+  }
+
+  // Leaving Receipt number with a new receipt issues a permit that has applications today, as
+  // legacy's change event did.
+  const fillIssueDateFromReceipt = (): void => {
+    if (!permitTablesAvailable || associatedPermitApplications.length === 0) return
+    const savedReceipt = detailValue(detail?.receiptNumber).trim()
+    setPermitForm((current) => {
+      const receipt = current?.permitReceiptNo.trim() ?? ''
+      if (!current || !receipt || receipt === savedReceipt || current.permitIssueDate.trim()) {
+        return current
+      }
+      return withPermitIssueDate(current, formatBusinessIsoDate())
     })
   }
 
@@ -6099,6 +6104,7 @@ const ProvincialPermitDetailsPage = () => {
       invalid={!!permitFieldError(field)}
       invalidText={permitFieldError(field)}
       onChange={(event) => setPermitFormField(field, event.target.value)}
+      onBlur={field === 'permitReceiptNo' ? fillIssueDateFromReceipt : undefined}
       disabled={isDisabled}
       maxLength={maxLength}
     />
@@ -7108,7 +7114,10 @@ const ProvincialPermitDetailsPage = () => {
                     renderPermitTextInput(
                       'permitReceiptNo',
                       'Receipt number',
-                      receiptNumberLocked || !canReviewPermits,
+                      receiptNumberLocked ||
+                        !canReviewPermits ||
+                        // Entering a receipt can issue the permit, so wait for its applications.
+                        (!permitTablesAvailable && !permitTablesErrorMessage),
                       50,
                     )
                   ) : (
