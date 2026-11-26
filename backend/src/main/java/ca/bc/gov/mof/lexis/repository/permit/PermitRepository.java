@@ -69,6 +69,7 @@ public class PermitRepository extends OracleRepositorySupport {
       """;
   // INTENTIONAL_LEGACY_DIVERGENCE(CANONICAL_SEARCH_RESULTS): UNION the direct and linked
   // access branches so page rows and counts share one candidate per permit.
+  // Only linked-application access needs a scale; owner and agent permits match without one.
   private static final String ACCESSIBLE_PERMITS_CTE =
       """
       WITH ACCESSIBLE_PERMITS AS (
@@ -230,12 +231,6 @@ public class PermitRepository extends OracleRepositorySupport {
 
     if (criteria.regionNumbers() != null && !criteria.regionNumbers().isEmpty()) {
       where.addInEqualsNumberOrNoResults("EPD.ORG_UNIT_NO", criteria.regionNumbers());
-    }
-    if (criteria.requireScalePermit()) {
-      where.addRaw(
-          " AND EXISTS (SELECT 1 FROM EXPORT_SCALE_DETAIL ESD_REQUIRED "
-              + "WHERE ESD_REQUIRED.EXPORT_PERMIT_DETAIL_NUMBER = "
-              + "EPD.EXPORT_PERMIT_DETAIL_NUMBER)");
     }
 
     return where.build(includeOrderBy ? buildSearchOrder(criteria.sortField()) : "");

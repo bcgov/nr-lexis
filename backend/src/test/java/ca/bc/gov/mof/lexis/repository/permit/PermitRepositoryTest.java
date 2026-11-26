@@ -182,7 +182,6 @@ class PermitRepositoryTest {
             "INV-1",
             "00055667",
             "00077881",
-            true,
             List.of(1904L),
             "dateIssued ASC",
             0,
@@ -194,7 +193,6 @@ class PermitRepositoryTest {
         .contains("TO_CHAR(EPD.EXPORT_PERMIT_DETAIL_NUMBER)")
         .contains("EXISTS (SELECT 1 FROM EXPORT_SALES_INVOICE ESI")
         .contains("EPD.ORG_UNIT_NO IN (?)")
-        .contains("EXISTS (SELECT 1 FROM EXPORT_SCALE_DETAIL ESD_REQUIRED")
         .contains(
             "ORDER BY EPD.EXPORT_PERMIT_ISSUE_DATE ASC, EPD.EXPORT_PERMIT_DETAIL_NUMBER ASC")
         .doesNotContain(":1");
@@ -319,7 +317,6 @@ class PermitRepositoryTest {
             "00099999",
             "00088888",
             "00012345",
-            true,
             List.of(),
             null,
             0,
@@ -334,7 +331,7 @@ class PermitRepositoryTest {
     assertThat(searchSql)
         .contains("EPD.CLIENT_NUMBER LIKE")
         .contains("EPD.AGENT_NUMBER LIKE")
-        .contains("EXISTS (SELECT 1 FROM EXPORT_SCALE_DETAIL ESD_REQUIRED")
+        .doesNotContain("EXPORT_SCALE_DETAIL ESD_REQUIRED")
         .doesNotContain("EP_ACCESS");
     assertThat(repository.pageSelectSql())
         .contains("WITH ACCESSIBLE_PERMITS AS")
@@ -388,7 +385,6 @@ class PermitRepositoryTest {
             null,
             null,
             "00012345",
-            false,
             List.of(),
             null,
             0,
