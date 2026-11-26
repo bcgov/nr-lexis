@@ -3298,6 +3298,23 @@ const ProvincialPermitDetailsPage = () => {
     return fieldErrorText(permitFieldErrors[field])
   }
 
+  const withPermitIssueDate = (current: PermitDetailForm, issueDate: string): PermitDetailForm => {
+    const savedExpiryDate = detailValue(detail?.expiryDate)
+    const keepsSavedExpiry = !!savedExpiryDate && current.permitExpiryDate === savedExpiryDate
+    return {
+      ...current,
+      permitIssueDate: issueDate,
+      permitExpiryDate: keepsSavedExpiry
+        ? current.permitExpiryDate
+        : permitExpiryDateAfterIssueDateChange({
+            previousIssueDate: current.permitIssueDate,
+            issueDate,
+            submitDate: current.permitSubmitDate,
+            expiryDate: current.permitExpiryDate,
+          }),
+    }
+  }
+
   const setPermitFormField = (field: PermitDetailFormField, value: string): void => {
     setPermitForm((current) => {
       if (!current) return current
@@ -3311,7 +3328,7 @@ const ProvincialPermitDetailsPage = () => {
         associatedPermitApplications.length > 0
       ) {
         // Entering a receipt issues a permit that has applications today, as legacy did.
-        return { ...current, permitReceiptNo: value, permitIssueDate: formatBusinessIsoDate() }
+        return withPermitIssueDate({ ...current, permitReceiptNo: value }, formatBusinessIsoDate())
       }
       return { ...current, [field]: value }
     })
@@ -3331,23 +3348,7 @@ const ProvincialPermitDetailsPage = () => {
   }
 
   const setPermitIssueDate = (issueDate: string): void => {
-    setPermitForm((current) => {
-      if (!current) return current
-      const savedExpiryDate = detailValue(detail?.expiryDate)
-      const keepsSavedExpiry = !!savedExpiryDate && current.permitExpiryDate === savedExpiryDate
-      return {
-        ...current,
-        permitIssueDate: issueDate,
-        permitExpiryDate: keepsSavedExpiry
-          ? current.permitExpiryDate
-          : permitExpiryDateAfterIssueDateChange({
-              previousIssueDate: current.permitIssueDate,
-              issueDate,
-              submitDate: current.permitSubmitDate,
-              expiryDate: current.permitExpiryDate,
-            }),
-      }
-    })
+    setPermitForm((current) => (current ? withPermitIssueDate(current, issueDate) : current))
   }
 
   const resetPermitClientLookup = (kind: PermitClientKind): void => {

@@ -70,6 +70,7 @@ import {
 } from '@/service/provincial-application-items-service'
 import { fetchShippingReferenceOptions } from '@/service/shipping-reference-service'
 import { formatBusinessIsoDate } from '@/utils/date'
+import { defaultPermitExpiryDate } from '@/utils/permit'
 import { triggerBrowserDownload } from '@/utils/download'
 import { openDocumentPreview } from '@/utils/document-preview'
 import { submitAdminUpload, validateAdminUpload } from '@/service/admin-upload-service'
@@ -725,10 +726,26 @@ describe('Provincial Permit Detail Action Smoke', () => {
   })
 
   it.each([
-    { case: 'fills a blank Issued date with today', issueDate: null, withApplication: true },
-    { case: 'keeps an Issued date already set', issueDate: '2026-05-01', withApplication: true },
-  ])('entering a receipt number $case', async ({ issueDate, withApplication }) => {
-    configureMinisterialActivePermit({ issueDate, receiptNumber: null })
+    {
+      case: 'fills blank Issued and Expiry dates',
+      issueDate: null,
+      expiryDate: null,
+      withApplication: true,
+    },
+    {
+      case: 'fills a blank Issued date and keeps a saved Expiry date',
+      issueDate: null,
+      expiryDate: '2026-06-01',
+      withApplication: true,
+    },
+    {
+      case: 'keeps an Issued date already set',
+      issueDate: '2026-05-01',
+      expiryDate: '2026-06-01',
+      withApplication: true,
+    },
+  ])('entering a receipt number $case', async ({ issueDate, expiryDate, withApplication }) => {
+    configureMinisterialActivePermit({ issueDate, expiryDate, receiptNumber: null })
     mockedFetchProvincialPermitDetailTabs.mockResolvedValue(
       withApplication ? ministerialTabsWith('101103') : tabsResult,
     )
@@ -746,11 +763,19 @@ describe('Provincial Permit Detail Action Smoke', () => {
     await userEvent.type(screen.getByLabelText('Receipt number'), 'R-2026-11-26')
     await userEvent.click(screen.getByRole('button', { name: 'Save changes' }))
 
+    const expectedIssueDate = issueDate ?? formatBusinessIsoDate()
     await waitFor(() =>
       expect(mockedUpdatePermitDetail).toHaveBeenCalledWith(
         expect.objectContaining({
           permitReceiptNo: 'R-2026-11-26',
-          permitIssueDate: issueDate ?? formatBusinessIsoDate(),
+          permitIssueDate: expectedIssueDate,
+          permitExpiryDate:
+            expiryDate ??
+            defaultPermitExpiryDate({
+              issueDate: expectedIssueDate,
+              submitDate: permitDetail.applicationDate ?? '',
+              expiryDate: '',
+            }),
         }),
       ),
     )
