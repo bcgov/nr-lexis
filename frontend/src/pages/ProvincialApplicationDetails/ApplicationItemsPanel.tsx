@@ -471,7 +471,8 @@ const toPackageForm = (
 ): PackageFormState => ({
   packageNumber: selectedPackageNumber,
   newPackageNumber: selectedPackageNumber,
-  volume: legacyPackageAmount(packageDetails.volume),
+  // Volumes keep their stored decimals; only length and diameter round as legacy did.
+  volume: packageDetails.volume,
   scaledVolume: String(packageDetails.scaledVolume),
   averageLength: legacyPackageAmount(packageDetails.length),
   averageDiameter: legacyPackageAmount(packageDetails.diameter),

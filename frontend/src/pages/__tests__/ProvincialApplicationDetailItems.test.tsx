@@ -969,13 +969,38 @@ describe.sequential('Provincial Application Detail Actions - items', () => {
     await waitFor(() => expect(launcherButton).toHaveFocus())
   })
 
-  it('shows and saves stored package amounts at one decimal', async () => {
+  it.each([
+    { volume: '12.5', length: '4.25', diameter: '1.36', shown: ['12.5', '4.2', '1.4'] },
+    { volume: '12.25', length: '4.36', diameter: '1.35', shown: ['12.25', '4.4', '1.4'] },
+  ])(
+    'keeps package volume $volume and shows length $length and diameter $diameter at one decimal',
+    async ({ volume, length, diameter, shown }) => {
+      const packageDetails = await mockedFetchApplicationPackageDetails('PKG-1')
+      mockedFetchApplicationPackageDetails.mockResolvedValue({
+        ...packageDetails,
+        volume,
+        length,
+        diameter,
+      })
+      renderApplicationItems()
+      await selectApplicationDetailTab('Package and scale')
+
+      await userEvent.click(await screen.findByRole('button', { name: 'Edit package' }))
+      const comments = await screen.findByLabelText('Comments')
+      const drawer = within(comments.closest('.application-items-drawer') as HTMLElement)
+      expect(drawer.getByLabelText('Volume (m³)')).toHaveValue(shown[0])
+      expect(drawer.getByLabelText('Average length (m)')).toHaveValue(shown[1])
+      expect(drawer.getByLabelText('Average top diameter (rads)')).toHaveValue(shown[2])
+    },
+  )
+
+  it('saves package length and diameter at one decimal', async () => {
     const packageDetails = await mockedFetchApplicationPackageDetails('PKG-1')
     mockedFetchApplicationPackageDetails.mockResolvedValue({
       ...packageDetails,
-      volume: '12.25',
-      length: '4.36',
-      diameter: '1.35',
+      volume: '12.5',
+      length: '4.25',
+      diameter: '1.36',
     })
     renderApplicationItems()
     await selectApplicationDetailTab('Package and scale')
@@ -983,17 +1008,14 @@ describe.sequential('Provincial Application Detail Actions - items', () => {
     await userEvent.click(await screen.findByRole('button', { name: 'Edit package' }))
     const comments = await screen.findByLabelText('Comments')
     const drawer = within(comments.closest('.application-items-drawer') as HTMLElement)
-    expect(drawer.getByLabelText('Volume (m³)')).toHaveValue('12.2')
-    expect(drawer.getByLabelText('Average length (m)')).toHaveValue('4.4')
-    expect(drawer.getByLabelText('Average top diameter (rads)')).toHaveValue('1.4')
     fireEvent.change(comments, { target: { value: 'test-2026-11-26' } })
     await userEvent.click(drawer.getByRole('button', { name: 'Save package' }))
 
     await waitFor(() =>
       expect(mockedUpdateApplicationPackage).toHaveBeenCalledWith(
         expect.objectContaining({
-          volume: '12.2',
-          averageLength: '4.4',
+          volume: '12.5',
+          averageLength: '4.2',
           averageDiameter: '1.4',
           comments: 'test-2026-11-26',
         }),
