@@ -1,7 +1,12 @@
 import { DatePicker, DatePickerInput } from '@carbon/react'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { isValidIsoDate, isoDateRangeEndError } from '@/pages/shared/create-form-utils'
-import { closeDateCalendar, focusDateCalendarDay, type DateInput } from '@/utils/focus'
+import {
+  closeDateCalendar,
+  focusDateCalendarDay,
+  refreshOpenCalendarMonthName,
+  type DateInput,
+} from '@/utils/focus'
 import { parseIsoDate } from './IsoDatePicker'
 
 type IsoDateRangePickerProps = {
@@ -123,6 +128,12 @@ export default function IsoDateRangePicker({
   }, [fromId, toId])
 
   useEffect(() => () => removeCalendarListenersRef.current?.(), [])
+
+  useEffect(() => {
+    refreshOpenCalendarMonthName(
+      rangeRef.current?.querySelector<DateInput>(`#${CSS.escape(fromId)}`),
+    )
+  }, [fromId, calendarValues])
 
   const update = (values: [string, string]) => {
     if (values.every((value, index) => value === latestValuesRef.current[index])) return

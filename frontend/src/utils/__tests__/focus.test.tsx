@@ -129,6 +129,7 @@ describe('focusDateCalendarDay', () => {
       isOpen: false,
       open: () => undefined,
       close: () => undefined,
+      changeMonth: () => undefined,
       calendarContainer,
     }
 
