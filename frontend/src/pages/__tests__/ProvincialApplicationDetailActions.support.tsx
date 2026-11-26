@@ -10,6 +10,7 @@ import {
   updateApplicationReviewStatus,
 } from '@/service/application-review-search-service'
 import {
+  fetchApplicationClientContactName,
   fetchApplicationClientData,
   fetchApplicationClientLocations,
 } from '@/service/application-client-lookup-service'
@@ -71,6 +72,7 @@ vi.mock('@/service/application-review-search-service', () => ({
 }))
 
 vi.mock('@/service/application-client-lookup-service', () => ({
+  fetchApplicationClientContactName: vi.fn(),
   fetchApplicationClientData: vi.fn(),
   fetchApplicationClientLocations: vi.fn(),
 }))
@@ -171,6 +173,7 @@ const mockedUseAuth = vi.mocked(useAuth)
 const mockedApproveApplicationReview = vi.mocked(approveApplicationReview)
 const mockedSendApplicationReviewStatusEmail = vi.mocked(sendApplicationReviewStatusEmail)
 const mockedUpdateApplicationReviewStatus = vi.mocked(updateApplicationReviewStatus)
+const mockedFetchApplicationClientContactName = vi.mocked(fetchApplicationClientContactName)
 const mockedFetchApplicationClientData = vi.mocked(fetchApplicationClientData)
 const mockedFetchApplicationClientLocations = vi.mocked(fetchApplicationClientLocations)
 const mockedFetchProvincialApplicationDetail = vi.mocked(fetchProvincialApplicationDetail)
@@ -524,6 +527,7 @@ export const setupApplicationDetailTests = (): void => {
       },
     ])
   })
+  mockedFetchApplicationClientContactName.mockResolvedValue('')
   mockedFetchApplicationClientData.mockImplementation((clientNumber) => {
     if (clientNumber === '00033344') {
       return Promise.resolve({
@@ -699,6 +703,7 @@ export {
   mockedCheckApplicationVolumeUsage,
   mockedDeleteApplicationPackage,
   mockedDeleteApplicationScale,
+  mockedFetchApplicationClientContactName,
   mockedFetchApplicationClientData,
   mockedFetchApplicationClientLocations,
   mockedFetchApplicationDocuments,

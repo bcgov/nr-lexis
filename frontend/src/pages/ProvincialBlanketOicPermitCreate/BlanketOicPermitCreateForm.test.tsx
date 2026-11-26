@@ -65,7 +65,7 @@ const clientDetails = (clientNumber: string, locationCode: string) => ({
   notfound: '',
 })
 
-const renderForm = () => {
+const renderForm = ({ exemptionExpiryDate }: { exemptionExpiryDate?: string } = {}) => {
   const onCreated = vi.fn()
   const router = createMemoryRouter(
     [
@@ -74,6 +74,7 @@ const renderForm = () => {
         element: (
           <BlanketOicPermitCreateForm
             exemptionNumber="TEST13E2"
+            exemptionExpiryDate={exemptionExpiryDate}
             regionOptions={[
               { id: '1909', text: 'South Coast Natural Resource Region' },
               { id: '1910', text: 'Coast Mountains Natural Resource Region' },
@@ -356,6 +357,36 @@ describe('BlanketOicPermitCreateForm', () => {
 
     expect(screen.getByText('Date must be YYYY-MM-DD')).toBeInTheDocument()
     expect(screen.queryByText(/must use YYYY-MM-DD/)).not.toBeInTheDocument()
+  })
+
+  it('fills a blank expiry with the exemption expiry when it comes before 180 days after the issued date', async () => {
+    const user = userEvent.setup()
+    renderForm({ exemptionExpiryDate: '2099-03-31' })
+
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Save permit' })).toBeEnabled())
+    await user.type(screen.getByLabelText('Issued date'), '2099-01-10')
+
+    expect(screen.getByLabelText('Expiry date')).toHaveValue('2099-03-31')
+  })
+
+  it('moves a filled expiry when the issued date is corrected, and keeps an entered one', async () => {
+    const user = userEvent.setup()
+    renderForm()
+
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Save permit' })).toBeEnabled())
+    const issueDate = screen.getByLabelText('Issued date')
+    const expiryDate = screen.getByLabelText('Expiry date')
+    await user.type(issueDate, '2099-01-10')
+    expect(expiryDate).toHaveValue('2099-07-09')
+    await user.clear(issueDate)
+    await user.type(issueDate, '2099-01-11')
+    expect(expiryDate).toHaveValue('2099-07-10')
+
+    await user.clear(expiryDate)
+    await user.type(expiryDate, '2099-05-01')
+    await user.clear(issueDate)
+    await user.type(issueDate, '2099-01-12')
+    expect(expiryDate).toHaveValue('2099-05-01')
   })
 
   it('opens Shipping and focuses the error summary when Other port of export is the only missing field', async () => {

@@ -43,6 +43,7 @@ vi.mock('@/service/create-submit-service', () => ({
 }))
 
 vi.mock('@/service/application-client-lookup-service', () => ({
+  fetchApplicationClientContactName: vi.fn().mockResolvedValue(''),
   fetchApplicationClientLocations: vi.fn(),
 }))
 

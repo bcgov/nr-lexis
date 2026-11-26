@@ -113,6 +113,8 @@ fills in, with these differences:
 
 - **Client** is a search. Type at least three characters of the name,
   acronym or client number.
+- **Contact name** fills in with the contact on file for the chosen **Client
+  location**, and can be changed.
 - Tick **I'm an agent** to add **Agent information** for a different client.
 - Choose the harvest **Region** before entering the **Advertising details**.
   It determines the species and end uses available. Enter **Average log

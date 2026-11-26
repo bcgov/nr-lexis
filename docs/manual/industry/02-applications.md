@@ -34,8 +34,9 @@ make offers on it.
    **Application** and **Package and scale** tabs. The other tabs open once the
    application is saved.
 2. On the **Applicant** tab, **Client** is your organization. Choose the
-   **Client location** and enter the **Contact name**. The location's
-   address, phone and email show underneath.
+   **Client location**. **Contact name** fills in with the location's contact
+   on file; change it if needed. The location's address, phone and email
+   show underneath.
 3. On the **Application** tab, enter:
    - **Region**: the region where the logs were harvested;
    - **Product type**, which starts on harvested timber;
@@ -73,10 +74,11 @@ If you are an agent acting for the owner of the timber, tick **I'm an
 agent** on the **Applicant** tab.
 
 - Your organization moves to **Agent information** as the **Agent client**.
-  Choose the **Agent location** and enter the agent's **Contact name**.
+  Choose the **Agent location**. The agent's **Contact name** fills in from
+  it and can be changed.
 - **Client** becomes a search. Type at least three characters of the
   owner's name, acronym or client number and choose the owner, then its
-  **Client location** and **Contact name**.
+  **Client location**. The owner's **Contact name** fills in the same way.
 
 The owner and the agent must be different clients.
 

@@ -211,7 +211,12 @@ import {
 import { withoutActionError, type ActionResult } from '@/utils/action-result'
 import { formatBusinessIsoDate } from '@/utils/date'
 import { fieldErrorText, fieldErrorTexts } from '@/utils/field-error'
-import { formatPermitNumber, formatPermitStatus } from '@/utils/permit'
+import {
+  defaultPermitExpiryDate,
+  formatPermitNumber,
+  formatPermitStatus,
+  permitExpiryDateAfterIssueDateChange,
+} from '@/utils/permit'
 import { formatPackageNumberLabel, isValidEmail, normalizeTrimmedText } from '@/utils/text'
 
 import './ProvincialPermitDetails.scss'
@@ -3312,6 +3317,39 @@ const ProvincialPermitDetailsPage = () => {
     })
   }
 
+  // Legacy capped at the exemption expiry only when creating; a saved permit gets the full 180 days.
+  const fillBlankPermitExpiryDate = (): void => {
+    setPermitForm((current) => {
+      if (!current) return current
+      const permitExpiryDate = defaultPermitExpiryDate({
+        issueDate: current.permitIssueDate,
+        submitDate: current.permitSubmitDate,
+        expiryDate: current.permitExpiryDate,
+      })
+      return permitExpiryDate ? { ...current, permitExpiryDate } : current
+    })
+  }
+
+  const setPermitIssueDate = (issueDate: string): void => {
+    setPermitForm((current) => {
+      if (!current) return current
+      const savedExpiryDate = detailValue(detail?.expiryDate)
+      const keepsSavedExpiry = !!savedExpiryDate && current.permitExpiryDate === savedExpiryDate
+      return {
+        ...current,
+        permitIssueDate: issueDate,
+        permitExpiryDate: keepsSavedExpiry
+          ? current.permitExpiryDate
+          : permitExpiryDateAfterIssueDateChange({
+              previousIssueDate: current.permitIssueDate,
+              issueDate,
+              submitDate: current.permitSubmitDate,
+              expiryDate: current.permitExpiryDate,
+            }),
+      }
+    })
+  }
+
   const resetPermitClientLookup = (kind: PermitClientKind): void => {
     const requestRef = kind === 'owner' ? ownerClientLookupRequestRef : agentClientLookupRequestRef
     requestRef.current += 1
@@ -6079,7 +6117,10 @@ const ProvincialPermitDetailsPage = () => {
       invalid={!!permitFieldError(field)}
       invalidText={permitFieldError(field)}
       disabled={isDisabled}
-      onChange={(value) => setPermitFormField(field, value)}
+      onFocus={field === 'permitExpiryDate' ? fillBlankPermitExpiryDate : undefined}
+      onChange={(value) =>
+        field === 'permitIssueDate' ? setPermitIssueDate(value) : setPermitFormField(field, value)
+      }
     />
   )
 

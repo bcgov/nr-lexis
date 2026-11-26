@@ -25,6 +25,14 @@ const comparableClientNumber = (value: string): string => {
 export const clientLookupNumbersMatch = (left: string, right: string): boolean =>
   comparableClientNumber(left) === comparableClientNumber(right)
 
+/** A client location as one comparable key, blank until both parts are chosen. */
+export const clientLocationKey = (clientNumber: string, locationCode: string): string => {
+  const normalizedLocationCode = locationCode.trim()
+  return clientNumber.trim() && normalizedLocationCode
+    ? `${comparableClientNumber(clientNumber)}|${normalizedLocationCode}`
+    : ''
+}
+
 export const isSelectableClientLocation = (location: ApplicationClientLocation): boolean =>
   location.locationCode !== '0'
 

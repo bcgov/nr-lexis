@@ -1,18 +1,21 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import {
+  fetchApplicationClientContactName,
   fetchApplicationClientData,
   fetchApplicationClientLocations,
   fetchExemptionClientData,
   fetchExemptionClientLocations,
 } from '@/service/application-client-lookup-service'
 
-const { getCachedDataMock } = vi.hoisted(() => ({
+const { getCachedDataMock, getMock } = vi.hoisted(() => ({
   getCachedDataMock: vi.fn(),
+  getMock: vi.fn(),
 }))
 
 vi.mock('@/service/api-service', () => ({
   default: {
     getCachedData: getCachedDataMock,
+    getAxiosInstance: () => ({ get: getMock }),
   },
 }))
 
@@ -332,6 +335,57 @@ describe('application-client-lookup-service', () => {
 
     getCachedDataMock.mockResolvedValueOnce({})
     await expect(fetchApplicationClientData('00011111', '01')).rejects.toThrow(
+      'empty or malformed response',
+    )
+  })
+
+  it('returns the first contact on file for a client location', async () => {
+    getMock.mockResolvedValue({
+      data: [
+        { contactName: 'JOHN SMITH', contactId: '12' },
+        { contactName: 'JANE DOE', contactId: '13' },
+      ],
+    })
+
+    const contactName = await fetchApplicationClientContactName(' 00099999 ', ' 01 ', 'owner', {
+      applicationNumber: ' 46583 ',
+      counterpartyClientNumber: '00077881',
+    })
+
+    expect(getMock).toHaveBeenCalledWith('/lexis/rpc/application-details/contacts-for-location', {
+      params: {
+        applicantType: 'owner',
+        applicationNumber: '46583',
+        clientLocationCode: '01',
+        clientNumber: '00099999',
+        counterpartyClientNumber: '00077881',
+      },
+    })
+    expect(getCachedDataMock).not.toHaveBeenCalled()
+    expect(contactName).toBe('JOHN SMITH')
+  })
+
+  it('returns a blank contact name when the location has no contacts on file', async () => {
+    getMock.mockResolvedValue({
+      data: [{ contactName: 'No contacts on file for this location', contactId: '0' }],
+    })
+
+    await expect(fetchApplicationClientContactName('00011111', '01', 'agent')).resolves.toBe('')
+    expect(getMock).toHaveBeenCalledWith('/lexis/rpc/application-details/contacts-for-location', {
+      params: { applicantType: 'agent', clientLocationCode: '01', clientNumber: '00011111' },
+    })
+  })
+
+  it('does not look up contacts without a client number and location code', async () => {
+    await expect(fetchApplicationClientContactName('00011111', ' ', 'owner')).resolves.toBe('')
+    await expect(fetchApplicationClientContactName(' ', '01', 'owner')).resolves.toBe('')
+    expect(getMock).not.toHaveBeenCalled()
+  })
+
+  it('rejects an empty or malformed contact response', async () => {
+    getMock.mockResolvedValue({ data: '' })
+
+    await expect(fetchApplicationClientContactName('00011111', '01', 'owner')).rejects.toThrow(
       'empty or malformed response',
     )
   })
