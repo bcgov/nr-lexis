@@ -1490,9 +1490,9 @@ const ProvincialPermitDetailsPage = () => {
     const frame = requestAnimationFrame(() => reviewRequestOutcomeRef.current?.focus())
     return () => cancelAnimationFrame(frame)
   }, [reviewRequestOutcome])
+  // The review request's outcome stays until it is dismissed, replaced or the permit changes.
   const clearActionNotifications = useCallback(() => {
     setActionResult(null)
-    setReviewRequestOutcome(null)
     setPermitApprovalEmailErrorMessage('')
   }, [])
   const [isRemovingDocumentId, setIsRemovingDocumentId] = useState<string | null>(null)
@@ -5937,7 +5937,6 @@ const ProvincialPermitDetailsPage = () => {
       const onSamePermit = beginPermitRouteWork()
       const scaleFilledBeforeSave =
         !!tabsData && permitScaleFillsPackages(tabsData, !!detail?.blanketOic)
-      setReviewRequestOutcome(null)
       const saved = await save()
       if (saved && onSamePermit()) setPermitReviewCheck({ scaleFilledBeforeSave })
       return saved

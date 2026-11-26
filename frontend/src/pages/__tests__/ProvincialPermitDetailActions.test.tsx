@@ -13301,6 +13301,54 @@ describe('Provincial Permit Detail Action Smoke', () => {
     expect(screen.queryByText('Review request not sent')).toBeNull()
   })
 
+  it('keeps the review request sent notice through a later save', async () => {
+    configureReadyBlanketOicSubmitterPermit()
+    mockedSendPermitReviewRequestEmail.mockResolvedValue({
+      success: true,
+      message: '',
+      permitRequestDate: '',
+    })
+
+    const dialog = await openPermitReviewRequestDialog()
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Send request' }))
+    expect(await screen.findByText('The regional office has been notified.')).toBeVisible()
+    await saveShippingUnchanged()
+
+    await waitFor(() =>
+      expect(
+        screen.queryByRole('button', { name: /^Save (changes|shipping)$/ }),
+      ).not.toBeInTheDocument(),
+    )
+    expect(screen.getByText('The regional office has been notified.')).toBeVisible()
+    expect(screen.queryByRole('button', { name: 'Send review request' })).toBeNull()
+  })
+
+  it('looks up the review request recipients once when the notice is selected twice', async () => {
+    configureReadyBlanketOicSubmitterPermit()
+    let resolveDefaults: (
+      defaults: Awaited<ReturnType<typeof fetchPermitReviewRequestEmailDefaults>>,
+    ) => void = () => undefined
+    mockedFetchPermitReviewRequestEmailDefaults.mockReturnValueOnce(
+      new Promise((resolve) => {
+        resolveDefaults = resolve
+      }),
+    )
+    renderPermitDetails()
+
+    const sendButton = await screen.findByRole('button', { name: 'Send review request' })
+    await userEvent.click(sendButton)
+    await userEvent.click(sendButton)
+    await act(async () =>
+      resolveDefaults({
+        regionalEmailAddress: 'region@example.test',
+        copyToEmailAddress: 'agent@example.test',
+      }),
+    )
+
+    expect(await screen.findByRole('dialog', { name: reviewDialogName })).toBeInTheDocument()
+    expect(mockedFetchPermitReviewRequestEmailDefaults).toHaveBeenCalledTimes(1)
+  })
+
   it("closes the review request without a warning when the client chooses Don't send", async () => {
     configureReadyBlanketOicSubmitterPermit()
 
@@ -13434,10 +13482,12 @@ describe('Provincial Permit Detail Action Smoke', () => {
       await screen.findByRole('heading', { name: 'Associated applications' })
     ).closest('.cds--tile') as HTMLElement
     expect(screen.queryByRole('button', { name: 'Send review request' })).toBeNull()
-    await chooseComboBoxOption(
-      within(applicationsTile).getByRole('combobox', { name: 'Available application' }),
-      '1000457',
-    )
+    const availableApplications = within(applicationsTile).getByRole('combobox', {
+      name: 'Available application',
+    })
+    await userEvent.click(availableApplications)
+    await waitFor(() => expect(mockedFetchAvailablePermitApplications).toHaveBeenCalled())
+    await chooseComboBoxOption(availableApplications, '1000457')
     const addApplicationButton = within(applicationsTile).getByRole('button', {
       name: 'Add application',
     })
