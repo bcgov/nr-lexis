@@ -178,6 +178,7 @@ package and add or delete its scale lines.
 |---|---|
 | Package volume | The packages together can't be more than the application volume. |
 | Scale volume | The scale lines together can't be more than their package's volume. |
+| Package amounts | Volume, average length and average top diameter show to one decimal place, and **Edit package** saves them that way. |
 | Timber mark | Must be valid for the application's region. |
 | Scale lines | A package can hold one line for each combination of timber mark, species and grade. To correct a line, delete it and add it again. |
 

@@ -969,6 +969,38 @@ describe.sequential('Provincial Application Detail Actions - items', () => {
     await waitFor(() => expect(launcherButton).toHaveFocus())
   })
 
+  it('shows and saves stored package amounts at one decimal', async () => {
+    const packageDetails = await mockedFetchApplicationPackageDetails('PKG-1')
+    mockedFetchApplicationPackageDetails.mockResolvedValue({
+      ...packageDetails,
+      volume: '12.25',
+      length: '4.36',
+      diameter: '1.35',
+    })
+    renderApplicationItems()
+    await selectApplicationDetailTab('Package and scale')
+
+    await userEvent.click(await screen.findByRole('button', { name: 'Edit package' }))
+    const comments = await screen.findByLabelText('Comments')
+    const drawer = within(comments.closest('.application-items-drawer') as HTMLElement)
+    expect(drawer.getByLabelText('Volume (m³)')).toHaveValue('12.2')
+    expect(drawer.getByLabelText('Average length (m)')).toHaveValue('4.4')
+    expect(drawer.getByLabelText('Average top diameter (rads)')).toHaveValue('1.4')
+    fireEvent.change(comments, { target: { value: 'test-2026-11-26' } })
+    await userEvent.click(drawer.getByRole('button', { name: 'Save package' }))
+
+    await waitFor(() =>
+      expect(mockedUpdateApplicationPackage).toHaveBeenCalledWith(
+        expect.objectContaining({
+          volume: '12.2',
+          averageLength: '4.4',
+          averageDiameter: '1.4',
+          comments: 'test-2026-11-26',
+        }),
+      ),
+    )
+  })
+
   it('returns focus to Edit package when Escape closes the drawer', async () => {
     render(
       <MemoryRouter initialEntries={['/provincial/application/321?tab=items']}>
