@@ -209,6 +209,7 @@ import {
   type ShippingReferenceOptions,
 } from '@/service/shipping-reference-service'
 import { withoutActionError, type ActionResult } from '@/utils/action-result'
+import { formatBusinessIsoDate } from '@/utils/date'
 import { fieldErrorText, fieldErrorTexts } from '@/utils/field-error'
 import { formatPermitNumber, formatPermitStatus } from '@/utils/permit'
 import { formatPackageNumberLabel, isValidEmail, normalizeTrimmedText } from '@/utils/text'
@@ -3297,6 +3298,15 @@ const ProvincialPermitDetailsPage = () => {
       if (!current) return current
       if (field === 'permitSubmitDate' && !detail?.blanketOic) {
         return { ...current, permitSubmitDate: value, permitRequestDate: value }
+      }
+      if (
+        field === 'permitReceiptNo' &&
+        value.trim() &&
+        !current.permitIssueDate.trim() &&
+        associatedPermitApplications.length > 0
+      ) {
+        // Entering a receipt issues a permit that has applications today, as legacy did.
+        return { ...current, permitReceiptNo: value, permitIssueDate: formatBusinessIsoDate() }
       }
       return { ...current, [field]: value }
     })

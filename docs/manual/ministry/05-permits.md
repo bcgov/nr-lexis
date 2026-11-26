@@ -131,7 +131,8 @@ To replace the calculated total, select **Edit fee override**, set
 **Active**.
 
 For an interior permit, select **Edit receipt number** to record the
-prepaid fee receipt.
+prepaid fee receipt. If the permit has an application and no **Issued
+date** yet, entering the receipt number sets the **Issued date** to today.
 <!-- /roles -->
 
 <!-- roles: administrator, application-approver -->
