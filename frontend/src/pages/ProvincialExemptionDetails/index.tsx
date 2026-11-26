@@ -1434,6 +1434,15 @@ const ProvincialExemptionDetailsPage = () => {
   }
 
   // Each section saves only its own fields, so only those fields can block its Save.
+  // A Blanket OIC saved with no approval volume takes the maximum on its next save, as legacy did.
+  const zeroBlanketOicVolume = currentDetail?.approvedVolume === 0
+  const keepsZeroBlanketOicVolume = useCallback(
+    (form: ExemptionEditForm) =>
+      zeroBlanketOicVolume &&
+      form.exemptionTypeCode === 'B' &&
+      form.approvedVolume === formatVolumeInput(0),
+    [zeroBlanketOicVolume],
+  )
   const sectionFieldErrors = useMemo((): FieldErrors<ExemptionEditField> => {
     if (!editForm) return {}
     if (editingSection === 'fees') {
@@ -1489,7 +1498,9 @@ const ProvincialExemptionDetailsPage = () => {
       errors.expiryDate = 'Expiry date must be after the approval date.'
     }
     const approvedVolume = Number(editForm.approvedVolume)
-    if (!editForm.approvedVolume.trim()) {
+    if (keepsZeroBlanketOicVolume(editForm)) {
+      // Saved as the maximum.
+    } else if (!editForm.approvedVolume.trim()) {
       errors.approvedVolume = 'Approval volume is required.'
     } else if (
       !Number.isFinite(approvedVolume) ||
@@ -1524,6 +1535,7 @@ const ProvincialExemptionDetailsPage = () => {
     editingSection,
     exemptionStatusOptions,
     exemptionTypeOptions,
+    keepsZeroBlanketOicVolume,
     persistedStatusCode,
     reactivatesCancelledOic,
     regionOptions,
@@ -1644,7 +1656,7 @@ const ProvincialExemptionDetailsPage = () => {
     setSaving(true)
     setActionResult(null)
     // A Fees save changes only the fee fields; every other value is sent as loaded.
-    const submittedForm: ExemptionEditForm =
+    const sectionForm: ExemptionEditForm =
       editingSection === 'fees'
         ? {
             ...toEditForm(detail, editContext),
@@ -1652,6 +1664,9 @@ const ProvincialExemptionDetailsPage = () => {
             feeRate: editForm.feeRate,
           }
         : editForm
+    const submittedForm = keepsZeroBlanketOicVolume(sectionForm)
+      ? { ...sectionForm, approvedVolume: BLANKET_OIC_MAX_VOLUME }
+      : sectionForm
     let refreshingAfterSave = false
     try {
       const nextExemptionNumber =
@@ -1795,20 +1810,12 @@ const ProvincialExemptionDetailsPage = () => {
     canEditSummaryFields,
     currentTypeCode,
     editingSection,
+    keepsZeroBlanketOicVolume,
   ])
 
   const startEditingSection = (section: ExemptionEditSection) =>
     sections.startEditing(section, () => {
-      if (currentDetail) {
-        const form = toEditForm(currentDetail, editContext)
-        // A Blanket OIC saved with no approval volume opens with the maximum, as legacy did.
-        const fillMaxVolume =
-          section === 'summary' &&
-          canEditExemptionFields &&
-          form.exemptionTypeCode === 'B' &&
-          currentDetail.approvedVolume === 0
-        setEditForm(fillMaxVolume ? { ...form, approvedVolume: BLANKET_OIC_MAX_VOLUME } : form)
-      }
+      if (currentDetail) setEditForm(toEditForm(currentDetail, editContext))
       resetFieldErrors()
       setSaveAttempted(false)
       // A new edit replaces the notice from the last section save.
