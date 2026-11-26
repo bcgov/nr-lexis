@@ -969,34 +969,14 @@ describe.sequential('Provincial Application Detail Actions - items', () => {
     await waitFor(() => expect(launcherButton).toHaveFocus())
   })
 
-  it.each([
-    { volume: '12.5', length: '4.25', diameter: '1.36', shown: ['12.5', '4.2', '1.4'] },
-    { volume: '12.25', length: '4.36', diameter: '1.35', shown: ['12.25', '4.4', '1.4'] },
-  ])(
-    'keeps package volume $volume and shows length $length and diameter $diameter at one decimal',
-    async ({ volume, length, diameter, shown }) => {
-      const packageDetails = await mockedFetchApplicationPackageDetails('PKG-1')
-      mockedFetchApplicationPackageDetails.mockResolvedValue({
-        ...packageDetails,
-        volume,
-        length,
-        diameter,
-      })
-      renderApplicationItems()
-      await selectApplicationDetailTab('Package and scale')
-
-      await userEvent.click(await screen.findByRole('button', { name: 'Edit package' }))
-      const comments = await screen.findByLabelText('Comments')
-      const drawer = within(comments.closest('.application-items-drawer') as HTMLElement)
-      expect(drawer.getByLabelText('Volume (m³)')).toHaveValue(shown[0])
-      expect(drawer.getByLabelText('Average length (m)')).toHaveValue(shown[1])
-      expect(drawer.getByLabelText('Average top diameter (rads)')).toHaveValue(shown[2])
-    },
-  )
-
-  it('saves a comment-only edit of a package whose stored volume has two decimals', async () => {
+  it('saves a comment-only edit with the stored package amounts unchanged', async () => {
     const packageDetails = await mockedFetchApplicationPackageDetails('PKG-1')
-    mockedFetchApplicationPackageDetails.mockResolvedValue({ ...packageDetails, volume: '12.25' })
+    mockedFetchApplicationPackageDetails.mockResolvedValue({
+      ...packageDetails,
+      volume: '12.25',
+      length: '4.25',
+      diameter: '99.99',
+    })
     renderApplicationItems()
     await selectApplicationDetailTab('Package and scale')
 
@@ -1008,7 +988,12 @@ describe.sequential('Provincial Application Detail Actions - items', () => {
 
     await waitFor(() =>
       expect(mockedUpdateApplicationPackage).toHaveBeenCalledWith(
-        expect.objectContaining({ volume: '12.25', comments: 'test-2026-11-26' }),
+        expect.objectContaining({
+          volume: '12.25',
+          averageLength: '4.25',
+          averageDiameter: '99.99',
+          comments: 'test-2026-11-26',
+        }),
       ),
     )
   })
@@ -1025,35 +1010,6 @@ describe.sequential('Provincial Application Detail Actions - items', () => {
 
     expect(await drawer.findByText(/must have no more than one decimal place/)).toBeInTheDocument()
     expect(mockedUpdateApplicationPackage).not.toHaveBeenCalled()
-  })
-
-  it('saves package length and diameter at one decimal', async () => {
-    const packageDetails = await mockedFetchApplicationPackageDetails('PKG-1')
-    mockedFetchApplicationPackageDetails.mockResolvedValue({
-      ...packageDetails,
-      volume: '12.5',
-      length: '4.25',
-      diameter: '1.36',
-    })
-    renderApplicationItems()
-    await selectApplicationDetailTab('Package and scale')
-
-    await userEvent.click(await screen.findByRole('button', { name: 'Edit package' }))
-    const comments = await screen.findByLabelText('Comments')
-    const drawer = within(comments.closest('.application-items-drawer') as HTMLElement)
-    fireEvent.change(comments, { target: { value: 'test-2026-11-26' } })
-    await userEvent.click(drawer.getByRole('button', { name: 'Save package' }))
-
-    await waitFor(() =>
-      expect(mockedUpdateApplicationPackage).toHaveBeenCalledWith(
-        expect.objectContaining({
-          volume: '12.5',
-          averageLength: '4.2',
-          averageDiameter: '1.4',
-          comments: 'test-2026-11-26',
-        }),
-      ),
-    )
   })
 
   it('returns focus to Edit package when Escape closes the drawer', async () => {

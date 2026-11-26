@@ -451,17 +451,6 @@ const packageSelectionReducer = (
   }
 }
 
-/** A stored package amount at one decimal, rounded as legacy showed and re-saved it. */
-const legacyPackageAmount = (value: string): string => {
-  const amount = Number(value)
-  if (!value.trim() || !Number.isFinite(amount)) return value
-  // Legacy's Java formatting rounded an exact .x5 tie to even, where toFixed rounds it up.
-  const exactTie = Number.isInteger(amount * 4) && !Number.isInteger(amount * 2)
-  if (!exactTie) return amount.toFixed(1)
-  const lowerTenths = Math.floor(amount * 10)
-  return ((lowerTenths % 2 === 0 ? lowerTenths : lowerTenths + 1) / 10).toFixed(1)
-}
-
 const toPackageForm = (
   productTypeCode: string | null | undefined,
   applicationGrowthTypeCode: string | undefined,
@@ -471,11 +460,10 @@ const toPackageForm = (
 ): PackageFormState => ({
   packageNumber: selectedPackageNumber,
   newPackageNumber: selectedPackageNumber,
-  // Volumes keep their stored decimals; only length and diameter round as legacy did.
   volume: packageDetails.volume,
   scaledVolume: String(packageDetails.scaledVolume),
-  averageLength: legacyPackageAmount(packageDetails.length),
-  averageDiameter: legacyPackageAmount(packageDetails.diameter),
+  averageLength: packageDetails.length,
+  averageDiameter: packageDetails.diameter,
   status: packageDetails.status,
   comments: packageDetails.comments,
   reprocessed: packageDetails.reprocessed || 'N',
@@ -2189,7 +2177,7 @@ function ProvincialApplicationItemsPanel({
                   aria-required="true"
                   helperText={
                     selectedPackageRemainingScaleVolume === null
-                      ? null
+                      ? undefined
                       : scaleVolumeLimitText(selectedPackageRemainingScaleVolume)
                   }
                   value={scaleForm.volume}
