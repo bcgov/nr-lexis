@@ -1551,6 +1551,10 @@ describe('Create Page Core Flows', () => {
 
   // Initializing the owner and agent lookup state is interaction-heavy under coverage.
   it('clears the stale agent location but keeps the typed contact name when the client is cleared', async () => {
+    mockedFetchApplicationClientLocations.mockResolvedValue([
+      { locationCode: '00', locationName: '00', selected: false },
+      { locationCode: '12', locationName: '12 - AGENT LOCATION', selected: false },
+    ])
     render(
       <MemoryRouter
         initialEntries={[
@@ -1859,6 +1863,10 @@ describe('Create Page Core Flows', () => {
         counterpartyClientNumber: '00077881',
       }),
     )
+    // The owner's contact went with the submitter's client when they became the agent.
+    const ownerContactName = screen.getAllByRole('textbox', { name: 'Contact name' })[0]
+    expect(ownerContactName).toHaveValue('')
+    fireEvent.change(ownerContactName, { target: { value: 'Owner Contact' } })
     fireEvent.change(within(agentInformation).getByRole('textbox', { name: 'Contact name' }), {
       target: { value: 'Agent Contact' },
     })
@@ -2365,6 +2373,94 @@ describe('Create Page Core Flows', () => {
     await waitFor(() => expect(ownerNameInput).toHaveValue('MAIN LOCATION CONTACT'))
     fireEvent.change(ownerNameInput, { target: { value: 'Typed Contact' } })
     expect(ownerNameInput).toHaveValue('Typed Contact')
+  })
+
+  it('clears a filled contact name when the new location has no contact on file', async () => {
+    mockedUseAuth.mockReturnValue(
+      createTestAuthContext({
+        capabilities: createTestCapabilities({
+          principal: 'bceid\\submitter',
+          roles: ['PROVINCIAL_SUBMITTER_00077881'],
+          forestClientNumber: '00077881',
+          orgUnitNo: '1910',
+        }),
+        canPerform: (action: string) =>
+          action !== '/changeApplicantType' && action !== '/applicationsReview',
+      }),
+    )
+    mockedFetchApplicationClientContactName.mockImplementation(
+      async (_clientNumber, locationCode) => (locationCode === '00' ? 'HEAD OFFICE CONTACT' : ''),
+    )
+
+    render(
+      <MemoryRouter initialEntries={['/provincial/application/create']}>
+        <Routes>
+          <Route
+            path="/provincial/application/create"
+            element={<ProvincialApplicationCreatePage />}
+          />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    await selectApplicationCreateTab('Applicant')
+    const ownerNameInput = await screen.findByRole('textbox', { name: 'Contact name' })
+    await waitFor(() => expect(ownerNameInput).toHaveValue('HEAD OFFICE CONTACT'))
+
+    await chooseComboBoxOption(
+      screen.getByRole('combobox', { name: 'Client location' }),
+      '01 - MAIN LOCATION',
+    )
+    await waitFor(() => expect(ownerNameInput).toHaveValue(''))
+  })
+
+  it('keeps a contact name given by a create link', async () => {
+    mockedFetchApplicationClientContactName.mockResolvedValue('HEAD OFFICE CONTACT')
+
+    render(
+      <MemoryRouter
+        initialEntries={[
+          '/provincial/application/create?ownerClientNumber=00011111&ownerClientLocationCode=00&ownerContactName=Linked%20Contact',
+        ]}
+      >
+        <Routes>
+          <Route
+            path="/provincial/application/create"
+            element={<ProvincialApplicationCreatePage />}
+          />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    await selectApplicationCreateTab('Applicant')
+    expect(
+      await screen.findByRole('region', { name: 'Applicant client details' }),
+    ).toBeInTheDocument()
+    expect(screen.getByRole('textbox', { name: 'Contact name' })).toHaveValue('Linked Contact')
+    expect(mockedFetchApplicationClientContactName).not.toHaveBeenCalled()
+  })
+
+  it("moves a submitter's contact name to the agent when they become the agent", async () => {
+    mockedFetchApplicationClientContactName.mockImplementation(async (clientNumber) =>
+      clientNumber === '00077881' ? 'SUBMITTER CONTACT' : '',
+    )
+    renderSubmitterApplicationCreate()
+
+    await selectApplicationCreateTab('Applicant')
+    await waitFor(() =>
+      expect(screen.getByRole('textbox', { name: 'Contact name' })).toHaveValue(
+        'SUBMITTER CONTACT',
+      ),
+    )
+
+    await userEvent.click(screen.getByRole('checkbox', { name: "I'm an agent" }))
+    const agentInformation = screen.getByRole('region', { name: 'Agent information' })
+    await waitFor(() =>
+      expect(within(agentInformation).getByRole('textbox', { name: 'Contact name' })).toHaveValue(
+        'SUBMITTER CONTACT',
+      ),
+    )
+    expect(screen.getAllByRole('textbox', { name: 'Contact name' })[0]).toHaveValue('')
   })
 
   it('keeps the client details when the contact lookup fails', async () => {

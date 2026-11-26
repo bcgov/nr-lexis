@@ -1142,21 +1142,28 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
     expect(ownerControls.queryByLabelText('Applicant type')).not.toBeInTheDocument()
     expect(ownerControls.getByLabelText("I'm an agent")).toBeChecked()
     const ownerContactName = ownerControls.getAllByRole('textbox', { name: 'Contact name' })[0]
+    // The saved contact stays with the saved location until another location is chosen.
+    expect(ownerContactName).toHaveValue(applicationSummarySnapshot.ownerContactName)
+    expect(mockedFetchApplicationClientContactName).not.toHaveBeenCalledWith(
+      '00011122',
+      '00',
+      'owner',
+      expect.anything(),
+    )
+
+    await chooseComboBoxOption(
+      ownerControls.getByRole('combobox', { name: 'Client location' }),
+      '02 - Owner Alternate Location',
+    )
     await waitFor(() =>
       expect(mockedFetchApplicationClientContactName).toHaveBeenCalledWith(
         '00011122',
-        '00',
+        '02',
         'owner',
         {
           applicationNumber: '321',
         },
       ),
-    )
-    expect(ownerContactName).toHaveValue(applicationSummarySnapshot.ownerContactName)
-
-    await chooseComboBoxOption(
-      ownerControls.getByRole('combobox', { name: 'Client location' }),
-      '02 - Owner Alternate Location',
     )
     await waitFor(() => expect(ownerContactName).toHaveValue('ALTERNATE LOCATION CONTACT'))
     expect(ownerContactName).toBeEnabled()

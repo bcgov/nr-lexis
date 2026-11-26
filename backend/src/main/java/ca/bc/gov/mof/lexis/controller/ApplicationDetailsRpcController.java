@@ -1006,14 +1006,13 @@ public class ApplicationDetailsRpcController {
     }
     List<ClientLookupService.ClientContact> contacts =
         resolveApplicationContacts(clientLookupService, clientNumber, clientLocationCode, applicantType, snapshot);
-    // A counterparty lookup gets only the name the form fills in, not the location's contact list.
-    long contactLimit = trimToNull(counterpartyClientNumber) == null ? Long.MAX_VALUE : 1;
     ClientLookupService.ClientData data =
         clientLookupService.getClientData(clientNumber, clientLocationCode).orElse(null);
 
     List<ApplicationClientContactResponseDto> response =
         contacts.stream()
-            .limit(contactLimit)
+            // The form fills in one name, as legacy does, so no other contacts are sent.
+            .limit(1)
             .map(contact -> toClientContactResponse(contact, data))
             .toList();
     return ResponseEntity.ok(response);

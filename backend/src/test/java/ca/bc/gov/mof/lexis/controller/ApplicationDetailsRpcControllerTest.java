@@ -3046,12 +3046,15 @@ class ApplicationDetailsRpcControllerTest {
   }
 
   @Test
-  void getContactsForLocationLegacyShouldFallbackToClientContacts() {
+  void getContactsForLocationLegacyShouldFallbackToTheFirstClientContact() {
     when(clientLookupServiceProvider.getIfAvailable()).thenReturn(clientLookupService);
     when(serviceProvider.getIfAvailable()).thenReturn(service);
     when(service.getApplicationClientSnapshot(1000456L)).thenReturn(Optional.empty());
     when(clientLookupService.getContactsForLocation("11111", "02"))
-        .thenReturn(List.of(new ClientLookupService.ClientContact("Fallback Contact", "22")));
+        .thenReturn(
+            List.of(
+                new ClientLookupService.ClientContact("Fallback Contact", "22"),
+                new ClientLookupService.ClientContact("Second Contact", "23")));
     when(clientLookupService.getClientData("11111", "02")).thenReturn(Optional.empty());
 
     ResponseEntity<List<ApplicationDetailsRpcController.ApplicationClientContactResponseDto>>
