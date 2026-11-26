@@ -1930,6 +1930,7 @@ public class OraclePermitDetailsRpcService implements PermitDetailsRpcService {
       overrideComment =
           mergeSubmittedText(request.overrideComment(), current.overrideComment());
     } else {
+      // INTENTIONAL_LEGACY_DIVERGENCE(PERMIT_OVERRIDE_COMMENT_KEPT)
       overrideFee = firstNonNull(overrideFee, enabledOverrideFee(current.overrideFee()));
       overrideComment =
           mergeSubmittedText(request.overrideComment(), current.overrideComment());
