@@ -1,9 +1,8 @@
 # 2. Applications
 
 Applications for exemption arrive from industry users, on screen or by file
-upload, and from the federal export system. Staff review them for the
-Advertising List on their list date, and can enter or correct an application
-for a client.
+upload. Staff review them for the Advertising List on their list date, and
+can enter or correct an application for a client.
 
 | Role | Can |
 |---|---|
@@ -40,7 +39,7 @@ for a client.
 ### Review applications for the Advertising List
 
 1. **Provincial › Application review**. The queue opens with every New
-   application in your regions, provincial and federal, 100 to a page.
+   application in your regions, 100 to a page.
 2. Narrow it with **Application number**, **Product type**, **Region**,
    or the received date or list date range, and select **Search**.
 3. Select the number in the **Application** column to check an application,

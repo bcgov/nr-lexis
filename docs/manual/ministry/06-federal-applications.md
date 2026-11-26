@@ -1,11 +1,10 @@
 # 6. Federal applications <!-- roles: administrator, application-approver, read-only -->
 
 <!-- roles: administrator, application-approver -->
-Federal applications are not entered in LEXIS. The federal export system
-(NEXCOL) submits them, and they appear in LEXIS as records you can read,
-remark on and, in a few cases, reject or withdraw. They are approved for
-advertising from **Provincial › Application review**, together with
-provincial applications (see [Applications](02-applications.md)).
+Federal applications are not entered or reviewed in LEXIS. They are
+reviewed and approved in the federal export system (NEXCOL) and arrive in
+LEXIS already **Approved**, as records you can read, remark on and, in a
+few cases, reject or withdraw.
 <!-- /roles -->
 
 <!-- roles: read-only -->
@@ -69,9 +68,7 @@ application is **Approved** and today is on or before its **List date**.
    characters).
 3. Select **Update status**.
 
-The status changes on the record straight away. An application that is not
-yet approved is approved, rejected or withdrawn from **Provincial ›
-Application review** instead.
+The status changes on the record straight away.
 
 ### If someone else changed the application
 
