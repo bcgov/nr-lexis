@@ -26,6 +26,7 @@ import {
   mockedFetchApplicationClientLocations,
   mockedFetchApplicationPermits,
   mockedFetchApplicationDocuments,
+  mockedFetchApplicationEndUsesForSpeciesRegion,
   mockedFetchApplicationSpecies,
   mockedFetchApplicationSummarySnapshot,
   mockedFetchProvincialApplicationDetail,
@@ -3125,6 +3126,52 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
     await userEvent.click(species)
     await userEvent.click(await itemDetails.findByRole('option', { name: /FI/ }))
     expect(species).toHaveAccessibleName(/Total items selected: 1/)
+  })
+
+  it('clears an end use that a species change rules out, also on a return to the saved species', async () => {
+    mockedFetchApplicationSummarySnapshot.mockResolvedValueOnce({
+      ...applicationSummarySnapshot,
+      speciesCodes: ['FI', 'CE'],
+    })
+    mockedFetchApplicationSpecies.mockResolvedValueOnce([
+      { species: 'FI', endUse: 'LU', endUseDescription: 'Lumber' },
+      { species: 'CE', endUse: 'LU', endUseDescription: 'Lumber' },
+    ])
+    mockedFetchApplicationEndUsesForSpeciesRegion.mockImplementation(async (_region, species) =>
+      species.length > 1
+        ? [{ code: 'LU', description: 'Lumber' }]
+        : [{ code: 'PE', description: 'Peeler' }],
+    )
+
+    render(
+      <MemoryRouter initialEntries={['/provincial/application/321']}>
+        <Routes>
+          <Route
+            path="/provincial/application/:applicationNumber"
+            element={<ProvincialApplicationDetailsPage />}
+          />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    const itemDetails = within(await selectApplicationItemDetailsTile())
+    const endUse = getSummaryComboBox(itemDetails, 'End use')
+    await waitFor(() => expect(endUse).toHaveValue('Lumber'))
+    const species = itemDetails.getByRole('combobox', { name: /^Species list/ })
+    await userEvent.click(species)
+    await userEvent.click(await itemDetails.findByRole('option', { name: /CE/ }))
+
+    await waitFor(() => expect(getSummaryComboBox(itemDetails, 'End use')).toHaveValue(''))
+    await userEvent.click(getSummaryComboBox(itemDetails, 'End use'))
+    await userEvent.click(await itemDetails.findByRole('option', { name: /Peeler/ }))
+    await waitFor(() => expect(getSummaryComboBox(itemDetails, 'End use')).toHaveValue('Peeler'))
+    await userEvent.click(species)
+    await userEvent.click(await itemDetails.findByRole('option', { name: /CE/ }))
+
+    await waitFor(() => expect(getSummaryComboBox(itemDetails, 'End use')).toHaveValue(''))
+    await userEvent.click(itemDetails.getByRole('button', { name: 'Save changes' }))
+    expect(await itemDetails.findByText('End use is required')).toBeVisible()
+    expect(mockedUpdateApplicationSummary).not.toHaveBeenCalled()
   })
 
   it('requires at least one selected species before saving application item details', async () => {

@@ -229,6 +229,7 @@ public class PermitRepository extends OracleRepositorySupport {
           accessClientNumber);
     }
 
+    // INTENTIONAL_LEGACY_DIVERGENCE(HISTORICAL_ORG_UNIT_SEARCH_VISIBILITY)
     if (criteria.regionNumbers() != null && !criteria.regionNumbers().isEmpty()) {
       where.addInEqualsNumberOrNoResults("EPD.ORG_UNIT_NO", criteria.regionNumbers());
     }

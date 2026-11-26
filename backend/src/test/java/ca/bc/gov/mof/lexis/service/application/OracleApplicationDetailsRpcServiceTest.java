@@ -2970,6 +2970,39 @@ class OracleApplicationDetailsRpcServiceTest {
     }
   }
 
+  @ParameterizedTest
+  @CsvSource({"12.25,12.25,true", "12.0,12.25,false"})
+  void updatePackageShouldAcceptAStoredTwoDecimalVolumeOnlyWhenUnchanged(
+      double storedVolume, double requestedVolume, boolean expectedValid) {
+    when(repository.findPackageMutationByPackageNumber("PKG-903"))
+        .thenReturn(
+            Optional.of(
+                packageMutationRow(
+                    "PKG-903", storedVolume, Instant.parse("2026-05-01T12:00:00Z"))));
+    when(repository.findApplicationUpdateRecord(1000456L))
+        .thenReturn(Optional.of(applicationUpdateRecordWithOicIndicator("N")));
+    when(repository.findScaleDetailsByPackageNumber("PKG-903")).thenReturn(List.of());
+    if (expectedValid) {
+      when(repository.updatePackage(any())).thenReturn(true);
+    }
+
+    ApplicationDetailsRpcService.PackagePersistenceResult response =
+        service.updatePackage(
+            new ApplicationDetailsRpcService.PackageMutationRequest(
+                "PKG-903", null, 1000456L, requestedVolume, 5.0d, 3.0d, "ACT",
+                "test-2026-11-26", "N", "S", "H", null, List.of()),
+            "idir\\jsmith");
+
+    assertThat(response.valid()).isEqualTo(expectedValid);
+    if (expectedValid) {
+      verify(repository).updatePackage(any());
+    } else {
+      assertThat(response.errors())
+          .containsExactly("The package volume must have no more than one decimal place.");
+      verify(repository, never()).updatePackage(any());
+    }
+  }
+
   @Test
   void hiddenBlanketOicPackageUpdateShouldRejectCommentsOracleCannotStore() {
     Instant entryTimestamp = Instant.parse("2026-05-01T12:00:00Z");

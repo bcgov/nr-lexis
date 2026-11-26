@@ -1499,6 +1499,7 @@ const ProvincialExemptionDetailsPage = () => {
       errors.approvedVolume =
         'Approval volume must be greater than 0, at most 9,999,999.99, and have at most two decimal places.'
     }
+    // INTENTIONAL_LEGACY_DIVERGENCE(EXEMPTION_CONDITIONS_TYPED_LENGTH)
     if (editForm.otherConditions.length > 250) {
       errors.otherConditions = 'Conditions must contain at most 250 characters.'
     } else if (!ASCII_PATTERN.test(editForm.otherConditions.trim())) {

@@ -69,6 +69,8 @@ import {
   fetchApplicationEndUsesForSpeciesRegion,
 } from '@/service/provincial-application-items-service'
 import { fetchShippingReferenceOptions } from '@/service/shipping-reference-service'
+import { formatBusinessIsoDate } from '@/utils/date'
+import { defaultPermitExpiryDate } from '@/utils/permit'
 import { triggerBrowserDownload } from '@/utils/download'
 import { openDocumentPreview } from '@/utils/document-preview'
 import { submitAdminUpload, validateAdminUpload } from '@/service/admin-upload-service'
@@ -720,6 +722,173 @@ describe('Provincial Permit Detail Action Smoke', () => {
     expect(screen.queryByText('Permit details saved.')).not.toBeInTheDocument()
     await waitFor(() =>
       expect(screen.getByRole('button', { name: 'Edit receipt number' })).toHaveFocus(),
+    )
+  })
+
+  it.each([
+    {
+      case: 'fills blank Issued and Expiry dates',
+      issueDate: null,
+      expiryDate: null,
+      withApplication: true,
+    },
+    {
+      case: 'fills a blank Issued date and keeps a saved Expiry date',
+      issueDate: null,
+      expiryDate: '2026-06-01',
+      withApplication: true,
+    },
+    {
+      case: 'keeps an Issued date already set',
+      issueDate: '2026-05-01',
+      expiryDate: '2026-06-01',
+      withApplication: true,
+    },
+  ])('entering a receipt number $case', async ({ issueDate, expiryDate, withApplication }) => {
+    configureMinisterialActivePermit({ issueDate, expiryDate, receiptNumber: null })
+    mockedFetchProvincialPermitDetailTabs.mockResolvedValue(
+      withApplication ? ministerialTabsWith('101103') : tabsResult,
+    )
+    mockedFetchPermitFeeOverrideContext.mockResolvedValue({
+      overrideEnabled: false,
+      overrideFee: '',
+      overrideComment: '',
+      locked: false,
+      lockMessage: '',
+      interior: true,
+    })
+    renderPermitDetails()
+    await selectPermitDetailTab('Fees')
+    await userEvent.click(await screen.findByRole('button', { name: 'Edit receipt number' }))
+    await userEvent.type(screen.getByLabelText('Receipt number'), 'R-2026-11-26')
+    await userEvent.click(screen.getByRole('button', { name: 'Save changes' }))
+
+    const expectedIssueDate = issueDate ?? formatBusinessIsoDate()
+    await waitFor(() =>
+      expect(mockedUpdatePermitDetail).toHaveBeenCalledWith(
+        expect.objectContaining({
+          permitReceiptNo: 'R-2026-11-26',
+          permitIssueDate: expectedIssueDate,
+          permitExpiryDate:
+            expiryDate ??
+            defaultPermitExpiryDate({
+              issueDate: expectedIssueDate,
+              submitDate: permitDetail.applicationDate ?? '',
+              expiryDate: '',
+            }),
+        }),
+      ),
+    )
+  })
+
+  it('leaves a blank Issued date when a receipt is entered on a permit with no applications', async () => {
+    mockedFetchProvincialPermitDetail.mockResolvedValue({
+      ...permitDetail,
+      permitStatusCode: 'ACT',
+      permitStatusDescription: 'Active',
+      issueDate: null,
+      receiptNumber: null,
+    })
+    mockedFetchProvincialPermitDetailTabs.mockResolvedValue(tabsResult)
+    mockedFetchPermitFeeOverrideContext.mockResolvedValue({
+      overrideEnabled: false,
+      overrideFee: '',
+      overrideComment: '',
+      locked: false,
+      lockMessage: '',
+      interior: true,
+    })
+    renderPermitDetails()
+    await selectPermitDetailTab('Fees')
+    await userEvent.click(await screen.findByRole('button', { name: 'Edit permit' }))
+    await userEvent.type(screen.getByLabelText('Receipt number'), 'R-2026-11-26')
+
+    await selectPermitDetailTab('Permit')
+    expect(screen.getByLabelText('Issued date')).toHaveValue('')
+  })
+
+  it('leaves the locked Issued date of a Payment pending permit when its receipt is entered', async () => {
+    configureMinisterialActivePermit({
+      permitStatusCode: 'PPD',
+      permitStatusDescription: 'Payment pending',
+      issueDate: null,
+      receiptNumber: null,
+    })
+    mockedFetchProvincialPermitDetailTabs.mockResolvedValue(ministerialTabsWith('101103'))
+    mockedFetchPermitFeeOverrideContext.mockResolvedValue({
+      overrideEnabled: false,
+      overrideFee: '',
+      overrideComment: '',
+      locked: false,
+      lockMessage: '',
+      interior: true,
+    })
+    renderPermitDetails()
+    await selectPermitDetailTab('Fees')
+    await userEvent.click(await screen.findByRole('button', { name: 'Edit receipt number' }))
+    await waitFor(() => expect(screen.getByLabelText('Receipt number')).toBeEnabled())
+    await userEvent.type(screen.getByLabelText('Receipt number'), 'R-2026-11-26')
+    await userEvent.tab()
+
+    await selectPermitDetailTab('Permit')
+    expect(screen.getByLabelText('Issued date')).toHaveValue('')
+  })
+
+  it('leaves the Issued date blank when a receipt is typed and erased before leaving the field', async () => {
+    configureMinisterialActivePermit({ issueDate: null, expiryDate: null, receiptNumber: null })
+    mockedFetchProvincialPermitDetailTabs.mockResolvedValue(ministerialTabsWith('101103'))
+    mockedFetchPermitFeeOverrideContext.mockResolvedValue({
+      overrideEnabled: false,
+      overrideFee: '',
+      overrideComment: '',
+      locked: false,
+      lockMessage: '',
+      interior: true,
+    })
+    renderPermitDetails()
+    await selectPermitDetailTab('Fees')
+    await userEvent.click(await screen.findByRole('button', { name: 'Edit receipt number' }))
+    await userEvent.type(screen.getByLabelText('Receipt number'), 'R-2026-11-26')
+    await userEvent.clear(screen.getByLabelText('Receipt number'))
+
+    await selectPermitDetailTab('Permit')
+    expect(screen.getByLabelText('Issued date')).toHaveValue('')
+    expect(screen.getByLabelText('Expiry date')).toHaveValue('')
+  })
+
+  it('takes a receipt only once the permit applications have loaded', async () => {
+    configureMinisterialActivePermit({ issueDate: null, expiryDate: null, receiptNumber: null })
+    let resolveTabs: (tabs: ProvincialPermitDetailTabsData) => void = () => undefined
+    mockedFetchProvincialPermitDetailTabs.mockReturnValue(
+      new Promise((resolve) => {
+        resolveTabs = resolve
+      }),
+    )
+    mockedFetchPermitFeeOverrideContext.mockResolvedValue({
+      overrideEnabled: false,
+      overrideFee: '',
+      overrideComment: '',
+      locked: false,
+      lockMessage: '',
+      interior: true,
+    })
+    renderPermitDetails()
+    await selectPermitDetailTab('Fees')
+    await userEvent.click(await screen.findByRole('button', { name: 'Edit receipt number' }))
+    expect(screen.getByLabelText('Receipt number')).toBeDisabled()
+
+    await act(async () => resolveTabs(ministerialTabsWith('101103')))
+    await waitFor(() => expect(screen.getByLabelText('Receipt number')).toBeEnabled())
+    await userEvent.type(screen.getByLabelText('Receipt number'), 'R-2026-11-26')
+    await userEvent.click(screen.getByRole('button', { name: 'Save changes' }))
+
+    await waitFor(() =>
+      expect(mockedUpdatePermitDetail).toHaveBeenCalledWith(
+        expect.objectContaining({
+          permitReceiptNo: 'R-2026-11-26',
+          permitIssueDate: formatBusinessIsoDate(),
+        }),
+      ),
     )
   })
 

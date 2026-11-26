@@ -211,6 +211,7 @@ import {
   type ShippingReferenceOptions,
 } from '@/service/shipping-reference-service'
 import { withoutActionError, type ActionResult } from '@/utils/action-result'
+import { formatBusinessIsoDate } from '@/utils/date'
 import { fieldErrorText, fieldErrorTexts } from '@/utils/field-error'
 import {
   defaultPermitExpiryDate,
@@ -3327,6 +3328,23 @@ const ProvincialPermitDetailsPage = () => {
     return fieldErrorText(permitFieldErrors[field])
   }
 
+  const withPermitIssueDate = (current: PermitDetailForm, issueDate: string): PermitDetailForm => {
+    const savedExpiryDate = detailValue(detail?.expiryDate)
+    const keepsSavedExpiry = !!savedExpiryDate && current.permitExpiryDate === savedExpiryDate
+    return {
+      ...current,
+      permitIssueDate: issueDate,
+      permitExpiryDate: keepsSavedExpiry
+        ? current.permitExpiryDate
+        : permitExpiryDateAfterIssueDateChange({
+            previousIssueDate: current.permitIssueDate,
+            issueDate,
+            submitDate: current.permitSubmitDate,
+            expiryDate: current.permitExpiryDate,
+          }),
+    }
+  }
+
   const setPermitFormField = (field: PermitDetailFormField, value: string): void => {
     setPermitForm((current) => {
       if (!current) return current
@@ -3334,6 +3352,26 @@ const ProvincialPermitDetailsPage = () => {
         return { ...current, permitSubmitDate: value, permitRequestDate: value }
       }
       return { ...current, [field]: value }
+    })
+  }
+
+  // Leaving Receipt number with a new receipt issues a permit that has applications today, as
+  // legacy's change event did.
+  const fillIssueDateFromReceipt = (): void => {
+    if (
+      invoiceMaterialLocked ||
+      !permitTablesAvailable ||
+      associatedPermitApplications.length === 0
+    ) {
+      return
+    }
+    const savedReceipt = detailValue(detail?.receiptNumber).trim()
+    setPermitForm((current) => {
+      const receipt = current?.permitReceiptNo.trim() ?? ''
+      if (!current || !receipt || receipt === savedReceipt || current.permitIssueDate.trim()) {
+        return current
+      }
+      return withPermitIssueDate(current, formatBusinessIsoDate())
     })
   }
 
@@ -3351,23 +3389,7 @@ const ProvincialPermitDetailsPage = () => {
   }
 
   const setPermitIssueDate = (issueDate: string): void => {
-    setPermitForm((current) => {
-      if (!current) return current
-      const savedExpiryDate = detailValue(detail?.expiryDate)
-      const keepsSavedExpiry = !!savedExpiryDate && current.permitExpiryDate === savedExpiryDate
-      return {
-        ...current,
-        permitIssueDate: issueDate,
-        permitExpiryDate: keepsSavedExpiry
-          ? current.permitExpiryDate
-          : permitExpiryDateAfterIssueDateChange({
-              previousIssueDate: current.permitIssueDate,
-              issueDate,
-              submitDate: current.permitSubmitDate,
-              expiryDate: current.permitExpiryDate,
-            }),
-      }
-    })
+    setPermitForm((current) => (current ? withPermitIssueDate(current, issueDate) : current))
   }
 
   const resetPermitClientLookup = (kind: PermitClientKind): void => {
@@ -6130,6 +6152,7 @@ const ProvincialPermitDetailsPage = () => {
       invalid={!!permitFieldError(field)}
       invalidText={permitFieldError(field)}
       onChange={(event) => setPermitFormField(field, event.target.value)}
+      onBlur={field === 'permitReceiptNo' ? fillIssueDateFromReceipt : undefined}
       disabled={isDisabled}
       maxLength={maxLength}
     />
@@ -7139,7 +7162,10 @@ const ProvincialPermitDetailsPage = () => {
                     renderPermitTextInput(
                       'permitReceiptNo',
                       'Receipt number',
-                      receiptNumberLocked || !canReviewPermits,
+                      receiptNumberLocked ||
+                        !canReviewPermits ||
+                        // Entering a receipt can issue the permit, so wait for its applications.
+                        (!permitTablesAvailable && !permitTablesErrorMessage),
                       50,
                     )
                   ) : (
