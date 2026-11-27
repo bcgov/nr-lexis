@@ -25,6 +25,9 @@ type AppNotificationProps = Omit<
   revealKey?: unknown
   /** Move focus to feedback after a caller's explicit validation attempt. */
   focusOnReveal?: boolean
+  /** A button at the end of the notice that acts on it. */
+  actionButtonLabel?: string
+  onActionButtonClick?: () => void
 }
 
 /** Persistent feedback in the page, form, or dialog that owns the action. */
@@ -38,6 +41,8 @@ export function AppNotification({
   role = 'status',
   revealKey,
   focusOnReveal = false,
+  actionButtonLabel,
+  onActionButtonClick,
   children,
   ...notificationProps
 }: AppNotificationProps) {
@@ -88,13 +93,15 @@ export function AppNotification({
 
   return (
     <div className="app-notification-container" ref={notificationRef}>
-      {children || (title != null && titleText === undefined) ? (
+      {children || actionButtonLabel || (title != null && titleText === undefined) ? (
         // Carbon's inline notification rejects interactive content such as record links, so
         // Keep rich feedback as a status region without Carbon's automatic focus handling.
         <FeatureFlags enableFocusWrapWithoutSentinels>
           <ActionableNotification
             tabIndex={focusOnReveal ? -1 : undefined}
             inline
+            actionButtonLabel={actionButtonLabel}
+            onActionButtonClick={onActionButtonClick}
             hasFocus={false}
             closeOnEscape={false}
             className={['app-inline-notification', className].filter(Boolean).join(' ')}

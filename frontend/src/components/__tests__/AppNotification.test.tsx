@@ -59,6 +59,32 @@ describe('AppNotification', () => {
     expect(screen.getByRole('button', { name: 'close notification' })).toBeInTheDocument()
   })
 
+  it('gives a notice with an action button the page notice styling without moving focus', () => {
+    const onAction = vi.fn()
+    const { container } = render(
+      <AppNotification
+        kind="info"
+        title="Review request"
+        subtitle="Send it when ready."
+        actionButtonLabel="Send review request"
+        onActionButtonClick={onAction}
+      />,
+    )
+
+    const notice = container.querySelector('.app-inline-notification')
+    expect(notice).toHaveClass(
+      'cds--actionable-notification',
+      'cds--actionable-notification--hide-close-button',
+    )
+    expect(notice).toHaveAttribute('role', 'status')
+    const action = within(notice as HTMLElement).getByRole('button', {
+      name: 'Send review request',
+    })
+    expect(action).not.toHaveFocus()
+    fireEvent.click(action)
+    expect(onAction).toHaveBeenCalledTimes(1)
+  })
+
   it('keeps success feedback until the caller dismisses or replaces it', () => {
     vi.useFakeTimers()
     const onClose = vi.fn()

@@ -13398,11 +13398,11 @@ describe('Provincial Permit Detail Action Smoke', () => {
     })
     renderPermitDetails()
 
-    expect(
-      await screen.findByText(
-        'When your permit request is complete, send it to the regional office for review. You only need to send it once.',
-      ),
-    ).toBeVisible()
+    const notice = await screen.findByText(
+      'When your permit request is complete, send it to the regional office for review. You only need to send it once.',
+    )
+    expect(notice).toBeVisible()
+    expect(notice.closest('.cds--actionable-notification')).toHaveClass('app-inline-notification')
     expect(mockedFetchPermitReviewRequestEmailDefaults).not.toHaveBeenCalled()
     await userEvent.click(screen.getByRole('button', { name: 'Send review request' }))
     const dialog = await screen.findByRole('dialog', { name: reviewDialogName })
