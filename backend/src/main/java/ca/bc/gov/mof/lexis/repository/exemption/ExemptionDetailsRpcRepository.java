@@ -22,6 +22,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.context.annotation.Profile;
 import org.springframework.dao.DataAccessException;
@@ -72,6 +73,22 @@ public class ExemptionDetailsRpcRepository extends OracleRepositorySupport {
         ON AFCO.CLIENT_NUMBER = EEA.AGENT_CLIENT_NUMBER
       WHERE EEA.EXEMPTION_NUMBER = ?
       ORDER BY EEA.APPLICATION_NUMBER
+      """;
+  // The exemption's applications that LEXIS.FIND_PERMIT_DET_BY_APP lists a permit for, in one read.
+  private static final String FIND_APPLICATIONS_WITH_PERMITS_BY_EXEMPTION =
+      """
+      SELECT DISTINCT EEA.APPLICATION_NUMBER
+      FROM EXPORT_EXEMPTION_APPLICATION EEA
+      INNER JOIN EXPORT_PACKAGE EP
+        ON EP.APPLICATION_NUMBER = EEA.APPLICATION_NUMBER
+      INNER JOIN EXPORT_SCALE_DETAIL ESD
+        ON ESD.PACKAGE_NUMBER = EP.PACKAGE_NUMBER
+      INNER JOIN EXPORT_PERMIT_DETAIL EPD
+        ON EPD.EXPORT_PERMIT_DETAIL_NUMBER = ESD.EXPORT_PERMIT_DETAIL_NUMBER
+       AND EPD.EXEMPTION_NUMBER = EEA.EXEMPTION_NUMBER
+      INNER JOIN EXPORT_PERMIT_STATUS_CODE EPSC
+        ON EPSC.EXPORT_PERMIT_STATUS_CODE = EPD.EXPORT_PERMIT_STATUS_CODE
+      WHERE EEA.EXEMPTION_NUMBER = ?
       """;
   private static final String FIND_PERMITS_BY_EXEMPTION =
       LEXIS_GROUP_5_PACKAGE + "FIND_PERMIT_DET_BY_EXMP(?,?)";
@@ -194,6 +211,19 @@ public class ExemptionDetailsRpcRepository extends OracleRepositorySupport {
     }
     return queryDirectRequired(
         FIND_APPLICATIONS_BY_EXEMPTION, this::mapApplicationSummaryRow, normalized);
+  }
+
+  /** The exemption's applications that have a permit row, as the per-application cursor finds it. */
+  public Set<Long> findApplicationNumbersWithPermitsByExemptionNumber(String exemptionNumber) {
+    String normalized = trim(exemptionNumber);
+    if (normalized == null) {
+      return Set.of();
+    }
+    return Set.copyOf(
+        queryDirectRequired(
+            FIND_APPLICATIONS_WITH_PERMITS_BY_EXEMPTION,
+            rs -> getLong(rs, "APPLICATION_NUMBER"),
+            normalized));
   }
 
   public List<PermitSummaryRow> findPermitsByExemptionNumber(String exemptionNumber) {

@@ -26,6 +26,7 @@ import java.time.LocalDate;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.stream.Stream;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -704,18 +705,8 @@ class OracleExemptionDetailsRpcServiceTest {
                 new ExemptionDetailsRpcRepository.ApplicationSummaryRow(
                     1000462L, 16.0d, 16.0d, "00077881", "P", "S", "REJ")));
     when(repository.findExemptionRecord("EX-205")).thenReturn(Optional.of(exemption("ACT")));
-    when(repository.findPermitsByApplicationNumberRequired(1000456L)).thenReturn(List.of());
-    when(repository.findPermitsByApplicationNumberRequired(1000459L)).thenReturn(List.of());
-    when(repository.findPermitsByApplicationNumberRequired(1000461L))
-        .thenReturn(
-            List.of(new ExemptionDetailsRpcRepository.ApplicationPermitRow(7000125L, "EX-205")));
-    when(repository.findPermitsByApplicationNumberRequired(1000457L))
-        .thenReturn(
-            List.of(new ExemptionDetailsRpcRepository.ApplicationPermitRow(7000123L, "EX-205")));
-    when(repository.findPermitsByApplicationNumberRequired(1000458L)).thenReturn(List.of());
-    when(repository.findPermitsByApplicationNumberRequired(1000460L))
-        .thenReturn(
-            List.of(new ExemptionDetailsRpcRepository.ApplicationPermitRow(7000124L, "EX-205")));
+    when(repository.findApplicationNumbersWithPermitsByExemptionNumber("EX-205"))
+        .thenReturn(Set.of(1000457L, 1000460L, 1000461L));
 
     ExemptionDetailsRpcService.ExemptionApplicationsResponse response =
         service.getApplications("EX-205", true, ignored -> true);
@@ -732,7 +723,8 @@ class OracleExemptionDetailsRpcServiceTest {
             tuple(1000460L, false),
             tuple(1000461L, false),
             tuple(1000462L, false));
-    verify(repository, never()).findPermitsByApplicationNumberRequired(1000462L);
+    verify(repository).findApplicationNumbersWithPermitsByExemptionNumber("EX-205");
+    verify(repository, never()).findPermitsByApplicationNumberRequired(any());
   }
 
   @ParameterizedTest
@@ -745,7 +737,8 @@ class OracleExemptionDetailsRpcServiceTest {
                 new ExemptionDetailsRpcRepository.ApplicationSummaryRow(
                     1000458L, 12.0d, 12.0d, "00077881", "P", "S", "APP")));
     when(repository.findExemptionRecord("EX-205")).thenReturn(Optional.of(exemption(status)));
-    when(repository.findPermitsByApplicationNumberRequired(1000458L)).thenReturn(List.of());
+    when(repository.findApplicationNumbersWithPermitsByExemptionNumber("EX-205"))
+        .thenReturn(Set.of());
 
     ExemptionDetailsRpcService.ExemptionApplicationsResponse response =
         service.getApplications("EX-205", true, ignored -> true);
@@ -767,7 +760,8 @@ class OracleExemptionDetailsRpcServiceTest {
                     1000456L, 95.0d, 95.0d, "00077881", "P", "S", "EXE")));
     when(repository.findExemptionRecord("EX-205")).thenReturn(Optional.of(exemption(status)));
     if (removable) {
-      when(repository.findPermitsByApplicationNumberRequired(1000456L)).thenReturn(List.of());
+      when(repository.findApplicationNumbersWithPermitsByExemptionNumber("EX-205"))
+          .thenReturn(Set.of());
     }
 
     ExemptionDetailsRpcService.ExemptionApplicationsResponse response =
@@ -778,7 +772,7 @@ class OracleExemptionDetailsRpcServiceTest {
         .extracting(ExemptionDetailsRpcService.ApplicationItem::removable)
         .isEqualTo(removable);
     if (!removable) {
-      verify(repository, never()).findPermitsByApplicationNumberRequired(any());
+      verify(repository, never()).findApplicationNumbersWithPermitsByExemptionNumber(any());
     }
   }
 
@@ -808,7 +802,6 @@ class OracleExemptionDetailsRpcServiceTest {
                     "Exempted")));
     when(repository.findExemptionRecord("EX-205"))
         .thenReturn(Optional.of(exemption(exemptionStatus)));
-    when(repository.findPermitsByApplicationNumberRequired(1000456L)).thenReturn(List.of());
 
     ExemptionDetailsRpcService.ExemptionApplicationsResponse response =
         service.getApplications("EX-205", true, ignored -> true);

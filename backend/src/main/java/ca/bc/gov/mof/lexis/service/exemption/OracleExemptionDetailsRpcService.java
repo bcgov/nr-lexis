@@ -115,6 +115,13 @@ public class OracleExemptionDetailsRpcService implements ExemptionDetailsRpcServ
                 .map(ExemptionDetailsRpcRepository.ExemptionRecord::exemptionStatusCode)
                 .orElse(null);
 
+    Set<Long> applicationsWithPermits =
+        canRemoveApplications(exemptionStatus)
+                && rows.stream()
+                    .anyMatch(row -> isAllowedRemovalSourceStatus(row.applicationStatusCode()))
+            ? repository.findApplicationNumbersWithPermitsByExemptionNumber(exemptionNumber)
+            : Set.of();
+
     List<ApplicationItem> applications = new ArrayList<>();
     String previousOwnerClientNumber = null;
     boolean blanketOic = false;
@@ -161,7 +168,7 @@ public class OracleExemptionDetailsRpcService implements ExemptionDetailsRpcServ
               row.agentContactName(),
               row.ownerCompanyName(),
               row.agentCompanyName(),
-              isRemovableFromExemption(exemptionStatus, row),
+              isRemovableFromExemption(exemptionStatus, row, applicationsWithPermits),
               LexisApplicationRepository.displayStatus(
                   row.applicationStatusCode(), row.statusDescription(), exemptionStatus)));
     }
@@ -2033,17 +2040,21 @@ public class OracleExemptionDetailsRpcService implements ExemptionDetailsRpcServ
         || APPLICATION_STATUS_PERMITTED.equals(normalizedApplicationStatus);
   }
 
+  private boolean canRemoveApplications(String exemptionStatus) {
+    String normalizedExemptionStatus = normalizeCode(exemptionStatus);
+    return normalizedExemptionStatus != null
+        && !EXEMPTION_STATUS_EXPIRED.equals(normalizedExemptionStatus)
+        && !EXEMPTION_STATUS_CANCELLED.equals(normalizedExemptionStatus);
+  }
+
   /** Applies the rules of {@link #removeApplicationFromExemption} to a listed application. */
   private boolean isRemovableFromExemption(
-      String exemptionStatus, ExemptionDetailsRpcRepository.ApplicationSummaryRow row) {
-    String normalizedExemptionStatus = normalizeCode(exemptionStatus);
-    if (normalizedExemptionStatus == null
-        || EXEMPTION_STATUS_EXPIRED.equals(normalizedExemptionStatus)
-        || EXEMPTION_STATUS_CANCELLED.equals(normalizedExemptionStatus)
-        || !isAllowedRemovalSourceStatus(row.applicationStatusCode())) {
-      return false;
-    }
-    return repository.findPermitsByApplicationNumberRequired(row.applicationNumber()).isEmpty();
+      String exemptionStatus,
+      ExemptionDetailsRpcRepository.ApplicationSummaryRow row,
+      Set<Long> applicationsWithPermits) {
+    return canRemoveApplications(exemptionStatus)
+        && isAllowedRemovalSourceStatus(row.applicationStatusCode())
+        && !applicationsWithPermits.contains(row.applicationNumber());
   }
 
   private String initialExemptionStatus(String exemptionTypeCode) {

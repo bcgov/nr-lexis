@@ -534,6 +534,28 @@ class ExemptionDetailsRpcRepositoryTest {
   }
 
   @Test
+  void applicationsWithPermitsShouldBeReadForTheWholeExemptionInOneQuery() throws Exception {
+    JdbcTemplate jdbcTemplate = mock(JdbcTemplate.class);
+    ResultSet row = mock(ResultSet.class);
+    when(row.getLong("APPLICATION_NUMBER")).thenReturn(108653L);
+    stubDirectRow(jdbcTemplate, row, "26-8759");
+    ExemptionDetailsRpcRepository repository = new ExemptionDetailsRpcRepository(jdbcTemplate);
+
+    assertThat(repository.findApplicationNumbersWithPermitsByExemptionNumber(" 26-8759 "))
+        .containsExactly(108653L);
+    assertThat(repository.findApplicationNumbersWithPermitsByExemptionNumber(" ")).isEmpty();
+
+    String sql = capturedDirectSql(jdbcTemplate, "26-8759");
+    assertThat(sql)
+        .contains("WHERE EEA.EXEMPTION_NUMBER = ?")
+        .contains("ON EP.APPLICATION_NUMBER = EEA.APPLICATION_NUMBER")
+        .contains("ON ESD.PACKAGE_NUMBER = EP.PACKAGE_NUMBER")
+        .contains("AND EPD.EXEMPTION_NUMBER = EEA.EXEMPTION_NUMBER")
+        .contains("INNER JOIN EXPORT_PERMIT_STATUS_CODE EPSC");
+    verify(jdbcTemplate, never()).execute(any(String.class), any(CallableStatementCallback.class));
+  }
+
+  @Test
   @SuppressWarnings("unchecked")
   void changedLookupsShouldPropagateOracleFailure() {
     JdbcTemplate jdbcTemplate = mock(JdbcTemplate.class);
@@ -545,6 +567,8 @@ class ExemptionDetailsRpcRepositoryTest {
     assertOracleFailure(() -> repository.findApplicationLinkRecord(108653L));
     assertOracleFailure(() -> repository.findExemptionRecord("26-8759"));
     assertOracleFailure(() -> repository.existsByExemptionNumber("26-8759"));
+    assertOracleFailure(
+        () -> repository.findApplicationNumbersWithPermitsByExemptionNumber("26-8759"));
   }
 
   @Test
