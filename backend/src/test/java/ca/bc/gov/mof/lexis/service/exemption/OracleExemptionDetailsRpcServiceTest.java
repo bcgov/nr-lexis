@@ -7,6 +7,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.Mockito.CALLS_REAL_METHODS;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.atLeastOnce;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
@@ -725,6 +726,22 @@ class OracleExemptionDetailsRpcServiceTest {
             tuple(1000462L, false));
     verify(repository).findApplicationNumbersWithPermitsByExemptionNumber("EX-205");
     verify(repository, never()).findPermitsByApplicationNumberRequired(any());
+  }
+
+  @Test
+  void getApplicationsShouldNotReadPermitsWhenNoVisibleApplicationCouldBeRemoved() {
+    when(repository.findApplicationSummariesByExemptionNumber("EX-205"))
+        .thenReturn(
+            List.of(
+                new ExemptionDetailsRpcRepository.ApplicationSummaryRow(
+                    1000456L, 95.0d, 95.0d, "00077881", "P", "S", "EXE")));
+    when(repository.findExemptionRecord("EX-205")).thenReturn(Optional.of(exemption("ACT")));
+
+    ExemptionDetailsRpcService.ExemptionApplicationsResponse response =
+        service.getApplications("EX-205", true, ignored -> false);
+
+    assertThat(response.applications()).isEmpty();
+    verify(repository, never()).findApplicationNumbersWithPermitsByExemptionNumber(any());
   }
 
   @ParameterizedTest
@@ -3730,6 +3747,31 @@ class OracleExemptionDetailsRpcServiceTest {
         .publish(
             new WorkflowEmailEvent.ExemptionApproval(
                 "EX-205", "1000456\n1000457", "edited@example.com", RegionalMailRoute.RSI));
+    verify(repository, never()).findApplicationLinkRecord(1000457L);
+  }
+
+  @Test
+  void sendExemptionApprovalEmailShouldRouteByTheLowestNumberedApplicationInAnyRowOrder() {
+    when(repository.findExemptionRecord("EX-205"))
+        .thenReturn(Optional.of(exemption("ACT")));
+    when(repository.findApplicationSummariesByExemptionNumber("EX-205"))
+        .thenReturn(
+            List.of(
+                new ExemptionDetailsRpcRepository.ApplicationSummaryRow(
+                    1000457L, 50.0d, 50.0d, "00077881", "P", "S"),
+                new ExemptionDetailsRpcRepository.ApplicationSummaryRow(
+                    1000456L, 95.0d, 95.0d, "00077881", "P", "S")));
+    when(repository.findApplicationLinkRecord(1000456L))
+        .thenReturn(
+            Optional.of(
+                applicationWithIdentity(
+                    1000456L, "00077881", "00", null, null, "EXE", "EX-205", 1834L)));
+
+    ExemptionDetailsRpcService.ExemptionApprovalEmailResult response =
+        service.sendExemptionApprovalEmail("EX-205", "edited@example.com");
+
+    assertThat(response.success()).isTrue();
+    verify(repository, atLeastOnce()).findApplicationLinkRecord(1000456L);
     verify(repository, never()).findApplicationLinkRecord(1000457L);
   }
 

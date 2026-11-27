@@ -211,15 +211,11 @@ public class ExemptionDetailsRpcRepository extends OracleRepositorySupport {
     if (normalized == null) {
       return Optional.empty();
     }
-    return jdbcTemplate
-        .query(
+    return queryDirectSingleRequired(
             FIND_EXEMPTION_TYPE_BY_NUMBER,
-            (rs, rowNumber) ->
-                trim(getString(rs, "EXPORT_EXEMPTION_TYPE_CODE")),
+            rs -> trim(getString(rs, "EXPORT_EXEMPTION_TYPE_CODE")),
             normalized)
-        .stream()
-        .findFirst()
-        .filter(value -> value != null && !value.isBlank());
+        .filter(value -> !value.isBlank());
   }
 
   public boolean existsByExemptionNumber(String exemptionNumber) {
@@ -237,9 +233,7 @@ public class ExemptionDetailsRpcRepository extends OracleRepositorySupport {
     if (normalized == null) {
       return Optional.empty();
     }
-    return queryDirectRequired(EXEMPTION_BY_NUMBER, this::mapExemptionRecord, normalized)
-        .stream()
-        .findFirst();
+    return queryDirectSingleRequired(EXEMPTION_BY_NUMBER, this::mapExemptionRecord, normalized);
   }
 
   public List<String> findAllExpiringExemptionNumbers() {
@@ -286,10 +280,8 @@ public class ExemptionDetailsRpcRepository extends OracleRepositorySupport {
     if (applicationNumber == null || applicationNumber < 1) {
       return Optional.empty();
     }
-    return queryDirectRequired(
-            APPLICATION_BY_NUMBER, this::mapApplicationLinkRecord, applicationNumber)
-        .stream()
-        .findFirst();
+    return queryDirectSingleRequired(
+        APPLICATION_BY_NUMBER, this::mapApplicationLinkRecord, applicationNumber);
   }
 
   public boolean hasActiveValidOffers(Long applicationNumber) {

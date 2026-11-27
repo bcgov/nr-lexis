@@ -383,7 +383,8 @@ class PermitRpcRepositoryTest {
         .contains("WHERE P.PACKAGE_NUMBER IN (")
         .contains("TARGET_SCALE.EXPORT_PERMIT_DETAIL_NUMBER = ?")
         .contains("UNASSIGNED_SCALE.EXPORT_PERMIT_DETAIL_NUMBER IS NULL")
-        .contains("SIBLING_PACKAGE.APPLICATION_NUMBER = ASSOCIATED_PACKAGE.APPLICATION_NUMBER")
+        .contains("WHERE SIBLING_PACKAGE.APPLICATION_NUMBER IN (")
+        .doesNotContain("JOIN EXPORT_PACKAGE SIBLING_PACKAGE")
         .contains("ASSOCIATED_SCALE.EXPORT_PERMIT_DETAIL_NUMBER = ?")
         .contains("ORDER BY P.PACKAGE_NUMBER")
         .doesNotContain(" OR (EXISTS");
@@ -1209,6 +1210,20 @@ class PermitRpcRepositoryTest {
         .hasMessageContaining("invalid application relationship")
         .hasMessageContaining("exemption EX-700");
     verify(jdbcTemplate, never()).execute(anyString(), any(CallableStatementCallback.class));
+  }
+
+  @Test
+  @SuppressWarnings("unchecked")
+  void exemptionTypeAndExpiryShouldBeEmptyWhenTheExemptionRowHasNoValue() throws Exception {
+    when(jdbcTemplate.query(eq(EXEMPTION_BY_NUMBER), any(RowMapper.class), eq("EX-NEW")))
+        .thenAnswer(
+            invocation ->
+                java.util.Arrays.asList(
+                    ((RowMapper<Object>) invocation.getArgument(1)).mapRow(resultSet, 0)));
+    PermitRpcRepository repository = new PermitRpcRepository(jdbcTemplate);
+
+    assertThat(repository.findExemptionTypeCode("EX-NEW")).isEmpty();
+    assertThat(repository.findExemptionExpiryDate("EX-NEW")).isEmpty();
   }
 
   @Test

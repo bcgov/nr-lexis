@@ -116,12 +116,12 @@ public class PermitRpcRepository extends OracleRepositorySupport {
           + "SELECT TARGET_SCALE.PACKAGE_NUMBER FROM EXPORT_SCALE_DETAIL TARGET_SCALE "
           + "WHERE TARGET_SCALE.EXPORT_PERMIT_DETAIL_NUMBER = ? "
           + "UNION ALL "
-          + "SELECT SIBLING_PACKAGE.PACKAGE_NUMBER FROM EXPORT_SCALE_DETAIL ASSOCIATED_SCALE "
+          + "SELECT SIBLING_PACKAGE.PACKAGE_NUMBER FROM EXPORT_PACKAGE SIBLING_PACKAGE "
+          + "WHERE SIBLING_PACKAGE.APPLICATION_NUMBER IN ("
+          + "SELECT ASSOCIATED_PACKAGE.APPLICATION_NUMBER FROM EXPORT_SCALE_DETAIL ASSOCIATED_SCALE "
           + "JOIN EXPORT_PACKAGE ASSOCIATED_PACKAGE "
           + "ON ASSOCIATED_PACKAGE.PACKAGE_NUMBER = ASSOCIATED_SCALE.PACKAGE_NUMBER "
-          + "JOIN EXPORT_PACKAGE SIBLING_PACKAGE "
-          + "ON SIBLING_PACKAGE.APPLICATION_NUMBER = ASSOCIATED_PACKAGE.APPLICATION_NUMBER "
-          + "WHERE ASSOCIATED_SCALE.EXPORT_PERMIT_DETAIL_NUMBER = ? "
+          + "WHERE ASSOCIATED_SCALE.EXPORT_PERMIT_DETAIL_NUMBER = ?) "
           + "AND EXISTS ("
           + "SELECT 1 FROM EXPORT_SCALE_DETAIL UNASSIGNED_SCALE "
           + "WHERE UNASSIGNED_SCALE.PACKAGE_NUMBER = SIBLING_PACKAGE.PACKAGE_NUMBER "
@@ -1637,13 +1637,9 @@ public class PermitRpcRepository extends OracleRepositorySupport {
       return Optional.empty();
     }
 
-    return queryDirectRequired(
-            EXEMPTION_BY_NUMBER,
-            rs -> trim(rs.getString("EXPORT_EXEMPTION_TYPE_CODE")),
-            normalized)
-        .stream()
-        .findFirst()
-        .filter(value -> value != null && !value.isBlank());
+    return queryDirectSingleRequired(
+            EXEMPTION_BY_NUMBER, rs -> trim(rs.getString("EXPORT_EXEMPTION_TYPE_CODE")), normalized)
+        .filter(value -> !value.isBlank());
   }
 
   public Optional<LocalDate> findExemptionExpiryDate(String exemptionNumber) {
@@ -1652,9 +1648,8 @@ public class PermitRpcRepository extends OracleRepositorySupport {
       return Optional.empty();
     }
 
-    return queryDirectRequired(EXEMPTION_BY_NUMBER, rs -> getLocalDate(rs, "EXPIRY_DATE"), normalized)
-        .stream()
-        .findFirst();
+    return queryDirectSingleRequired(
+        EXEMPTION_BY_NUMBER, rs -> getLocalDate(rs, "EXPIRY_DATE"), normalized);
   }
 
   public Optional<PackageInfoRow> findPackageInfoByPackageNumber(String packageNumber) {
@@ -1706,27 +1701,25 @@ public class PermitRpcRepository extends OracleRepositorySupport {
       return Optional.empty();
     }
 
-    return queryDirectRequired(
-            APPLICATION_BY_NUMBER,
-            rs ->
-                new ApplicationInfoRow(
-                    getLong(rs, "APPLICATION_NUMBER"),
-                    getString(rs, "EXEMPTION_NUMBER"),
-                    getLong(rs, "ORG_UNIT_NO"),
-                    getString(rs, "REGION"),
-                    getString(rs, "EXPORT_PRODUCT_TYPE_CODE"),
-                    getString(rs, "EXPORT_GROWTH_TYPE_CODE"),
-                    // The application row has no END_USE_SORT. The service derives it from the
-                    // authoritative application end-use relationships when it is needed.
-                    null,
-                    getString(rs, "OWNER_CLIENT_NUMBER"),
-                    getString(rs, "OWNER_CLIENT_LOCATION_CODE"),
-                    getString(rs, "AGENT_CLIENT_NUMBER"),
-                    getString(rs, "AGENT_CLIENT_LOCATION_CODE"),
-                    getString(rs, "OIC_INDICATOR")),
-            applicationNumber)
-        .stream()
-        .findFirst();
+    return queryDirectSingleRequired(
+        APPLICATION_BY_NUMBER,
+        rs ->
+            new ApplicationInfoRow(
+                getLong(rs, "APPLICATION_NUMBER"),
+                getString(rs, "EXEMPTION_NUMBER"),
+                getLong(rs, "ORG_UNIT_NO"),
+                getString(rs, "REGION"),
+                getString(rs, "EXPORT_PRODUCT_TYPE_CODE"),
+                getString(rs, "EXPORT_GROWTH_TYPE_CODE"),
+                // The application row has no END_USE_SORT. The service derives it from the
+                // authoritative application end-use relationships when it is needed.
+                null,
+                getString(rs, "OWNER_CLIENT_NUMBER"),
+                getString(rs, "OWNER_CLIENT_LOCATION_CODE"),
+                getString(rs, "AGENT_CLIENT_NUMBER"),
+                getString(rs, "AGENT_CLIENT_LOCATION_CODE"),
+                getString(rs, "OIC_INDICATOR")),
+        applicationNumber);
   }
 
   public Optional<String> findApplicationStatusCodeByNumber(Long applicationNumber) {
@@ -1734,12 +1727,10 @@ public class PermitRpcRepository extends OracleRepositorySupport {
       return Optional.empty();
     }
 
-    return queryDirectRequired(
-            APPLICATION_BY_NUMBER,
-            rs -> getString(rs, "EXPORT_APPLICATION_STATUS_CODE"),
-            applicationNumber)
-        .stream()
-        .findFirst();
+    return queryDirectSingleRequired(
+        APPLICATION_BY_NUMBER,
+        rs -> getString(rs, "EXPORT_APPLICATION_STATUS_CODE"),
+        applicationNumber);
   }
 
   public List<EndUsePairRow> findEndUsesByApplicationNumber(Long applicationNumber) {
