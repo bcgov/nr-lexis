@@ -58,6 +58,8 @@ public class ExemptionDetailsRpcRepository extends OracleRepositorySupport {
         ON EPSC.EXPORT_PERMIT_STATUS_CODE = EPD.EXPORT_PERMIT_STATUS_CODE
       WHERE EEA.EXEMPTION_NUMBER = ?
       """;
+  private static final String FIND_APPLICATIONS_BY_EXEMPTION =
+      LEXIS_GROUP_5_PACKAGE + "FIND_APPLICATION_BY_EXEMPTION(?,?)";
   private static final String FIND_PERMITS_BY_EXEMPTION =
       LEXIS_GROUP_5_PACKAGE + "FIND_PERMIT_DET_BY_EXMP(?,?)";
   // The deployed FIND_PERMIT_DET_BY_EXMP cursor has no ORG_UNIT_NO, so regions are read directly
@@ -158,6 +160,19 @@ public class ExemptionDetailsRpcRepository extends OracleRepositorySupport {
     }
     return queryDirectRequired(
         APPLICATIONS_BY_EXEMPTION, this::mapApplicationSummaryRow, normalized);
+  }
+
+  /** The unordered legacy cursor's application order; legacy took its first row as the owner. */
+  public List<Long> findLegacyApplicationOrder(String exemptionNumber) {
+    String normalized = trim(exemptionNumber);
+    if (normalized == null) {
+      return List.of();
+    }
+    return queryCursorProcedureRequired(
+        FIND_APPLICATIONS_BY_EXEMPTION,
+        cs -> cs.setString(1, normalized),
+        2,
+        rs -> getLong(rs, "APPLICATION_NUMBER"));
   }
 
   /** The exemption's applications that have a permit row, as the per-application cursor finds it. */

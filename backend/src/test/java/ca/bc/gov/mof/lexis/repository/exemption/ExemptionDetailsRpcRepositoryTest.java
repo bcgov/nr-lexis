@@ -604,6 +604,30 @@ class ExemptionDetailsRpcRepositoryTest {
     verify(cursor, never()).getLong("ORG_UNIT_NO");
   }
 
+  @Test
+  @SuppressWarnings({"rawtypes", "unchecked"})
+  void legacyApplicationOrderShouldKeepTheCursorsRowOrder() throws Exception {
+    JdbcTemplate jdbcTemplate = mock(JdbcTemplate.class);
+    CallableStatement statement = mock(CallableStatement.class);
+    ResultSet cursor = mock(ResultSet.class);
+    when(cursor.next()).thenReturn(true, true, false);
+    when(cursor.getLong("APPLICATION_NUMBER")).thenReturn(290L, 190L);
+    when(cursor.wasNull()).thenReturn(false);
+    when(
+            jdbcTemplate.execute(
+                eq("{ call LEXIS_GROUP_5.FIND_APPLICATION_BY_EXEMPTION(?,?) }"),
+                any(CallableStatementCallback.class)))
+        .thenAnswer(
+            invocation ->
+                ((CallableStatementCallback) invocation.getArgument(1))
+                    .doInCallableStatement(statement));
+    when(statement.getObject(2)).thenReturn(cursor);
+    ExemptionDetailsRpcRepository repository = new ExemptionDetailsRpcRepository(jdbcTemplate);
+
+    assertThat(repository.findLegacyApplicationOrder(" EX-205 ")).containsExactly(290L, 190L);
+    verify(statement).setString(1, "EX-205");
+  }
+
   private static ResultSet applicationLinkCursor(long applicationNumber, double applicationVolume)
       throws SQLException {
     ResultSet cursor = mock(ResultSet.class);

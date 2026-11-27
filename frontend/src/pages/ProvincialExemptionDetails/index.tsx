@@ -700,7 +700,9 @@ const ProvincialExemptionDetailsPage = () => {
   const clientContextHasAgent = isAgentApplicant(clientContextApplication?.applicantTypeCode ?? '')
   const linkedApplicationNumber = clientContextApplication?.applicationNumber.trim() ?? ''
   const exemptionOwnerClientNumber = clientContextApplication?.ownerClientNumber.trim() ?? ''
-  const exemptionClientNumber = detail?.ownerClientNumber?.trim() || exemptionOwnerClientNumber
+  // Add application checks the owner of the first listed application, as legacy did.
+  const exemptionClientNumber =
+    exemptionOwnerClientNumber || detail?.ownerClientNumber?.trim() || ''
   const exemptionAgentClientNumber = clientContextApplication?.agentClientNumber.trim() ?? ''
   const ownerClientLocationCode = clientContextApplication?.ownerClientLocationCode.trim() ?? ''
   const agentClientLocationCode = clientContextApplication?.agentClientLocationCode.trim() ?? ''

@@ -6,6 +6,7 @@ import static org.assertj.core.api.Assertions.tuple;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.Mockito.CALLS_REAL_METHODS;
+import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.atLeastOnce;
 import static org.mockito.Mockito.never;
@@ -3751,28 +3752,91 @@ class OracleExemptionDetailsRpcServiceTest {
   }
 
   @Test
-  void sendExemptionApprovalEmailShouldRouteByTheLowestNumberedApplicationInAnyRowOrder() {
+  void sendExemptionApprovalEmailShouldRouteByTheLegacyCursorsFirstApplication() {
     when(repository.findExemptionRecord("EX-205"))
         .thenReturn(Optional.of(exemption("ACT")));
     when(repository.findApplicationSummariesByExemptionNumber("EX-205"))
         .thenReturn(
             List.of(
                 new ExemptionDetailsRpcRepository.ApplicationSummaryRow(
-                    1000457L, 50.0d, 50.0d, "00077881", "P", "S"),
+                    1000456L, 95.0d, 95.0d, "00077881", "P", "S"),
                 new ExemptionDetailsRpcRepository.ApplicationSummaryRow(
-                    1000456L, 95.0d, 95.0d, "00077881", "P", "S")));
-    when(repository.findApplicationLinkRecord(1000456L))
+                    1000457L, 50.0d, 50.0d, "00077881", "P", "S")));
+    when(repository.findLegacyApplicationOrder("EX-205")).thenReturn(List.of(1000457L, 1000456L));
+    when(repository.findApplicationLinkRecord(1000457L))
         .thenReturn(
             Optional.of(
                 applicationWithIdentity(
-                    1000456L, "00077881", "00", null, null, "EXE", "EX-205", 1834L)));
+                    1000457L, "00077881", "00", null, null, "EXE", "EX-205", 1834L)));
 
     ExemptionDetailsRpcService.ExemptionApprovalEmailResult response =
         service.sendExemptionApprovalEmail("EX-205", "edited@example.com");
 
     assertThat(response.success()).isTrue();
-    verify(repository, atLeastOnce()).findApplicationLinkRecord(1000456L);
-    verify(repository, never()).findApplicationLinkRecord(1000457L);
+    verify(repository, atLeastOnce()).findApplicationLinkRecord(1000457L);
+    verify(repository, never()).findApplicationLinkRecord(1000456L);
+  }
+
+  @Test
+  void getApplicationsShouldListInLegacyCursorOrderWhenTheApplicantContactsDiffer() {
+    when(repository.findApplicationSummariesByExemptionNumber("EX-205"))
+        .thenReturn(
+            List.of(
+                applicationSummary(1000190L, "00011122"),
+                applicationSummary(1000290L, "00055566")));
+    when(repository.findLegacyApplicationOrder("EX-205")).thenReturn(List.of(1000290L, 1000190L));
+
+    ExemptionDetailsRpcService.ExemptionApplicationsResponse response =
+        service.getApplications("EX-205", true, ignored -> true);
+
+    assertThat(response.applications())
+        .extracting("applicationNumber")
+        .containsExactly(1000290L, 1000190L);
+  }
+
+  @Test
+  void getApplicationsShouldNotAskTheLegacyCursorWhenTheApplicantContactsMatch() {
+    when(repository.findApplicationSummariesByExemptionNumber("EX-205"))
+        .thenReturn(
+            List.of(
+                applicationSummary(1000190L, "00055566"),
+                applicationSummary(1000290L, "00055566")));
+
+    ExemptionDetailsRpcService.ExemptionApplicationsResponse response =
+        service.getApplications("EX-205", true, ignored -> true);
+
+    assertThat(response.applications())
+        .extracting("applicationNumber")
+        .containsExactly(1000190L, 1000290L);
+    verify(repository, never()).findLegacyApplicationOrder(any());
+  }
+
+  @ParameterizedTest
+  @CsvSource({"1000290, true", "1000190, false"})
+  void addApplicationToExemptionShouldCompareTheOwnerOfTheLegacyCursorsFirstApplication(
+      long legacyFirstApplicationNumber, boolean accepted) {
+    ExemptionDetailsRpcRepository.ApplicationLinkRecord candidate =
+        applicationWithIdentity(1000333L, "00055566", "00", null, null, "APP", null);
+    when(repository.findExemptionRecord("EX-205"))
+        .thenReturn(Optional.of(exemption("NEW")));
+    when(repository.findApplicationLinkRecord(1000333L)).thenReturn(Optional.of(candidate));
+    when(repository.findApplicationSummariesByExemptionNumber("EX-205"))
+        .thenReturn(
+            List.of(
+                applicationSummary(1000190L, "00011122"),
+                applicationSummary(1000290L, "00055566")));
+    when(repository.findLegacyApplicationOrder("EX-205"))
+        .thenReturn(
+            legacyFirstApplicationNumber == 1000290L
+                ? List.of(1000290L, 1000190L)
+                : List.of(1000190L, 1000290L));
+    lenient().when(repository.updateApplicationExemption(any())).thenReturn(true);
+
+    ExemptionDetailsRpcService.ApplicationExemptionLinkResult response =
+        service.addApplicationToExemption(1000333L, "EX-205", "idir\\jsmith", true);
+
+    assertThat(response.success()).isEqualTo(accepted);
+    verify(repository, accepted ? times(1) : never()).updateApplicationExemption(any());
   }
 
   @Test
