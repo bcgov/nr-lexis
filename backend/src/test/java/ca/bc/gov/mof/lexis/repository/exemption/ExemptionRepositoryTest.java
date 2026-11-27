@@ -363,7 +363,8 @@ class ExemptionRepositoryTest {
         .doesNotContain("EEA.APPLICATION_NUMBER")
         .doesNotContain("EEA_MATCH.OWNER_CLIENT_NUMBER")
         .contains("EE.EXEMPTION_NUMBER")
-        .contains("ES.ADVERTISING_DATE")
+        .contains("ES_MATCH.ADVERTISING_DATE >= ? AND ES_MATCH.ADVERTISING_DATE <= ?)")
+        .doesNotContain("ES.ADVERTISING_DATE")
         .contains("EEA_REGION.ORG_UNIT_NO IN (?)")
         .contains("OEO_REGION.ORG_UNIT_NO IN (?)")
         .contains("ORDER BY EE.EXEMPTION_NUMBER DESC")
@@ -387,14 +388,14 @@ class ExemptionRepositoryTest {
         .containsExactly(
             "900123",
             "PKG-1",
+            java.sql.Date.valueOf("2026-02-01"),
+            java.sql.Date.valueOf("2026-02-28"),
             "EX-1",
             "B",
             "NEW",
             "00077881",
             "00055667",
             "00055667",
-            java.sql.Date.valueOf("2026-02-01"),
-            java.sql.Date.valueOf("2026-02-28"),
             1904L,
             1904L);
   }
@@ -412,6 +413,68 @@ class ExemptionRepositoryTest {
         .doesNotContain("OEO_REGION.ORG_UNIT_NO")
         .doesNotContain("TO_NUMBER(0)");
     assertThat(repository.bindValues()).isEmpty();
+  }
+
+  @Test
+  void regionalStaffListDateSearchShouldPageExemptionsFirstAndMatchRegionsAsSets() {
+    TestExemptionRepository repository =
+        new TestExemptionRepository(List.of(exemptionResult("EX-1")));
+
+    repository.search(
+        new ExemptionSearchCriteria(
+            null, null, null, null, null, null, null,
+            LocalDate.of(2026, 11, 12), LocalDate.of(2026, 11, 12), List.of(1909L, 1910L),
+            false, false, false, null, 0, 25, List.of(1909L, 1910L)));
+
+    String regionSet =
+        "SELECT EEA_REGION.EXEMPTION_NUMBER FROM EXPORT_EXEMPTION_APPLICATION EEA_REGION "
+            + "WHERE EEA_REGION.OIC_INDICATOR = 'N' AND EEA_REGION.ORG_UNIT_NO IN (?, ?) "
+            + "UNION ALL SELECT OEO_REGION.EXEMPTION_NUMBER FROM OIC_EXEMPTION_ORG_UNIT OEO_REGION "
+            + "WHERE OEO_REGION.ORG_UNIT_NO IN (?, ?))";
+    assertThat(repository.whereSql())
+        .contains(" AND EE.EXEMPTION_NUMBER IN (" + regionSet)
+        .contains(
+            " AND EE.EXEMPTION_NUMBER IN (SELECT EE_TYPE.EXEMPTION_NUMBER FROM EXPORT_EXEMPTION "
+                + "EE_TYPE WHERE EE_TYPE.EXPORT_EXEMPTION_TYPE_CODE = 'M' UNION ALL "
+                + regionSet)
+        .doesNotContain("EEA_REGION.EXEMPTION_NUMBER = EE.EXEMPTION_NUMBER")
+        .doesNotContain("OEO_REGION.EXEMPTION_NUMBER = EE.EXEMPTION_NUMBER")
+        .doesNotContain(" OR ");
+    assertThat(repository.countSelectSql())
+        .isEqualTo("SELECT COUNT(*) FROM EXPORT_EXEMPTION EE");
+    assertThat(repository.pageSelectSql())
+        .startsWith("WITH PAGE_EXEMPTIONS AS")
+        .contains("INNER JOIN PAGE_EXEMPTIONS PE_CANON");
+    assertThat(repository.bindValues())
+        .containsExactly(
+            java.sql.Date.valueOf("2026-11-12"),
+            java.sql.Date.valueOf("2026-11-12"),
+            1909L, 1910L, 1909L, 1910L,
+            1909L, 1910L, 1909L, 1910L);
+    assertThat(repository.countBindValues).isEqualTo(repository.bindValues());
+  }
+
+  @Test
+  void regionFiltersWithoutRegionsShouldKeepOnlyTheirAlsoMatchedType() {
+    TestExemptionRepository staff = new TestExemptionRepository();
+    staff.search(
+        new ExemptionSearchCriteria(
+            null, null, null, null, null, null, null, null, null, List.of(0L),
+            false, false, false, null, 0, 10, List.of()));
+    assertThat(staff.whereSql())
+        .contains(" AND 1=0")
+        .contains(" AND EE.EXPORT_EXEMPTION_TYPE_CODE = 'M'")
+        .doesNotContain("EEA_REGION");
+    assertThat(staff.bindValues()).isEmpty();
+
+    TestExemptionRepository industry = new TestExemptionRepository();
+    industry.search(
+        new ExemptionSearchCriteria(
+            null, null, null, null, null, "00012345", null, null, null, List.of(0L),
+            true, false, true, null, 0, 10));
+    assertThat(industry.whereSql())
+        .contains(" AND EE.EXPORT_EXEMPTION_TYPE_CODE = 'B'")
+        .doesNotContain("EEA_REGION");
   }
 
   @Test
@@ -808,7 +871,7 @@ class ExemptionRepositoryTest {
   }
 
   @Test
-  void countShouldMatchAnyLinkedApplicationNumberAndTheCanonicalListDate() {
+  void countShouldMatchApplicationNumberAndListDateOnTheSameLinkedApplication() {
     TestExemptionRepository repository = new TestExemptionRepository();
 
     repository.count(
@@ -827,15 +890,19 @@ class ExemptionRepositoryTest {
             10));
 
     assertThat(repository.whereSql())
-        .contains("TO_CHAR(EEA_MATCH.APPLICATION_NUMBER) LIKE '%' || ? || '%'")
+        .contains(
+            "TO_CHAR(EEA_MATCH.APPLICATION_NUMBER) LIKE '%' || ? || '%' "
+                + "AND EXISTS (SELECT 1 FROM EXPORT_SCHEDULE ES_MATCH "
+                + "WHERE ES_MATCH.EXPORT_SCHEDULE_ID = EEA_MATCH.EXPORT_SCHEDULE_ID "
+                + "AND ES_MATCH.ADVERTISING_DATE >= ?))")
+        .contains(" AND EE.EXPORT_EXEMPTION_TYPE_CODE NOT IN ('B', 'O')")
+        .doesNotContain("ES_MATCH.ADVERTISING_DATE <=")
         .doesNotContain("EEA.APPLICATION_NUMBER")
-        .contains("ES.ADVERTISING_DATE >= ?")
+        .doesNotContain("ES.ADVERTISING_DATE")
         .doesNotContain("CANON_EEA")
         .doesNotContain("GROUP BY", "ORDER BY EE.");
     assertThat(repository.countSelectSql())
-        .contains("CANONICAL_EXEMPTION_APPLICATION AS")
-        .contains("CANON_ES.ADVERTISING_DATE DESC NULLS LAST")
-        .contains("EEA.CANONICAL_RANK = 1");
+        .isEqualTo("SELECT COUNT(*) FROM EXPORT_EXEMPTION EE");
     assertThat(repository.bindValues())
         .containsExactly("900123", java.sql.Date.valueOf("2026-02-01"));
   }
