@@ -111,12 +111,22 @@ public class OracleExemptionDetailsRpcService implements ExemptionDetailsRpcServ
       String exemptionNumber,
       boolean canViewFederalApplications,
       Predicate<Long> applicationAccess) {
+    List<ExemptionDetailsRpcRepository.ApplicationSummaryRow> visibleRows =
+        repository.findApplicationSummariesByExemptionNumber(exemptionNumber).stream()
+            .filter(
+                row ->
+                    canViewFederalApplications
+                        || !JURISDICTION_FEDERAL.equalsIgnoreCase(row.jurisdictionCode()))
+            .filter(
+                row ->
+                    !RETIRED_INDIAN_RESERVE_JURISDICTION_CODE.equalsIgnoreCase(
+                        row.jurisdictionCode()))
+            .filter(row -> applicationAccess.test(row.applicationNumber()))
+            .toList();
     // The Applicant tab shows the contact of the first listed application.
     List<ExemptionDetailsRpcRepository.ApplicationSummaryRow> rows =
         inLegacyOrderWhereItDecides(
-            exemptionNumber,
-            repository.findApplicationSummariesByExemptionNumber(exemptionNumber),
-            OracleExemptionDetailsRpcService::applicantContact);
+            exemptionNumber, visibleRows, OracleExemptionDetailsRpcService::applicantContact);
     String exemptionStatus =
         rows.isEmpty()
             ? null
@@ -136,18 +146,6 @@ public class OracleExemptionDetailsRpcService implements ExemptionDetailsRpcServ
     boolean containsUnmanu = false;
 
     for (ExemptionDetailsRpcRepository.ApplicationSummaryRow row : rows) {
-      if (JURISDICTION_FEDERAL.equalsIgnoreCase(row.jurisdictionCode())
-          && !canViewFederalApplications) {
-        continue;
-      }
-      if (RETIRED_INDIAN_RESERVE_JURISDICTION_CODE.equalsIgnoreCase(
-          row.jurisdictionCode())) {
-        continue;
-      }
-      if (!applicationAccess.test(row.applicationNumber())) {
-        continue;
-      }
-
       if (blanketOic
           || (previousOwnerClientNumber != null
               && !previousOwnerClientNumber.equals(row.ownerClientNumber()))) {
@@ -658,10 +656,7 @@ public class OracleExemptionDetailsRpcService implements ExemptionDetailsRpcServ
 
     ExemptionDetailsRpcRepository.ApplicationLinkRecord application = candidate.get();
     List<ExemptionDetailsRpcRepository.ApplicationSummaryRow> assignedApplications =
-        inLegacyOrderWhereItDecides(
-            normalizedExemptionNumber,
-            repository.findApplicationSummariesByExemptionNumber(normalizedExemptionNumber),
-            row -> normalizeClientNumber(row.ownerClientNumber()));
+        repository.findApplicationSummariesByExemptionNumber(normalizedExemptionNumber);
     String exemptionTypeCode = targetExemption.get().exemptionTypeCode();
     boolean oicExemption = EXEMPTION_TYPE_OIC.equalsIgnoreCase(exemptionTypeCode);
 
@@ -673,7 +668,7 @@ public class OracleExemptionDetailsRpcService implements ExemptionDetailsRpcServ
       errors.add("Application has valid offers and cannot be added to an exemption.");
     } else if (!oicExemption && appNotPastListingDate(application)) {
       errors.add("Application listing date has not passed.");
-    } else if (!oicExemption && ownerClientMismatch(assignedApplications, application)) {
+    } else if (!oicExemption && ownerClientMismatch(normalizedExemptionNumber, assignedApplications, application)) {
       errors.add(
           "The application you entered cannot be assigned to this exemption due to the owner client number not matching the other applications.");
     } else if (!canViewFederalApplications && JURISDICTION_FEDERAL.equalsIgnoreCase(application.exportJurisdictionCode())) {
@@ -1149,13 +1144,20 @@ public class OracleExemptionDetailsRpcService implements ExemptionDetailsRpcServ
    * each other.
    */
   private boolean ownerClientMismatch(
+      String exemptionNumber,
       List<ExemptionDetailsRpcRepository.ApplicationSummaryRow> assignedApplications,
       ExemptionDetailsRpcRepository.ApplicationLinkRecord candidate) {
     if (assignedApplications == null || assignedApplications.isEmpty() || candidate == null) {
       return false;
     }
+    ExemptionDetailsRpcRepository.ApplicationSummaryRow firstApplication =
+        inLegacyOrderWhereItDecides(
+                exemptionNumber,
+                assignedApplications,
+                row -> normalizeClientNumber(row.ownerClientNumber()))
+            .get(0);
     return !Objects.equals(
-        normalizeClientNumber(assignedApplications.get(0).ownerClientNumber()),
+        normalizeClientNumber(firstApplication.ownerClientNumber()),
         normalizeClientNumber(candidate.ownerClientNumber()));
   }
 
