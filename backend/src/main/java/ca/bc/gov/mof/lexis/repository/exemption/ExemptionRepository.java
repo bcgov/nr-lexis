@@ -665,16 +665,15 @@ public class ExemptionRepository extends OracleRepositorySupport {
   /**
    * Two or more exemption-number sets in one IN, intersected. EXPORT_EXEMPTION_APPLICATION has no
    * EXEMPTION_NUMBER index, and with one IN per set Oracle pushed each exemption of one set into the
-   * other and scanned the table per exemption (minutes on PROD); INTERSECT reads each set once. The
-   * first set is not parenthesized: set operators apply left to right, so a first set that is a
-   * UNION ALL is complete before the first INTERSECT.
+   * other and scanned the table per exemption (minutes on PROD); INTERSECT reads each set once.
+   * Every set is parenthesized, so a set that is a UNION ALL doesn't depend on operator precedence.
    */
   private void addIntersectedSets(DirectSqlBuilder where, List<ExemptionSet> sets) {
     StringBuilder clause = new StringBuilder(" AND EE.EXEMPTION_NUMBER IN (");
     List<Object> bindValues = new ArrayList<>();
     for (int index = 0; index < sets.size(); index++) {
       ExemptionSet set = sets.get(index);
-      clause.append(index == 0 ? set.sql() : " INTERSECT (" + set.sql() + ")");
+      clause.append(index == 0 ? "" : " INTERSECT ").append('(').append(set.sql()).append(')');
       bindValues.addAll(set.bindValues());
     }
     where.addRawWithBinds(clause.append(")").toString(), bindValues.toArray());

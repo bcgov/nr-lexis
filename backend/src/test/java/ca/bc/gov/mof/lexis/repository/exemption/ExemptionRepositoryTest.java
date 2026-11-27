@@ -355,7 +355,7 @@ class ExemptionRepositoryTest {
 
     assertThat(repository.whereSql())
         .contains(
-            " AND EE.EXEMPTION_NUMBER IN (SELECT EEA_MATCH.EXEMPTION_NUMBER "
+            " AND EE.EXEMPTION_NUMBER IN ((SELECT EEA_MATCH.EXEMPTION_NUMBER "
                 + "FROM EXPORT_EXEMPTION_APPLICATION EEA_MATCH "
                 + "WHERE EEA_MATCH.EXEMPTION_NUMBER IS NOT NULL "
                 + "AND TO_CHAR(EEA_MATCH.APPLICATION_NUMBER) LIKE '%' || ? || '%' "
@@ -438,12 +438,12 @@ class ExemptionRepositoryTest {
     // once instead of probing one set per exemption of another.
     assertThat(repository.whereSql())
         .contains(
-            " AND EE.EXEMPTION_NUMBER IN (SELECT EEA_MATCH.EXEMPTION_NUMBER "
+            " AND EE.EXEMPTION_NUMBER IN ((SELECT EEA_MATCH.EXEMPTION_NUMBER "
                 + "FROM EXPORT_EXEMPTION_APPLICATION EEA_MATCH "
                 + "WHERE EEA_MATCH.EXEMPTION_NUMBER IS NOT NULL "
                 + "AND EXISTS (SELECT 1 FROM EXPORT_SCHEDULE ES_MATCH "
                 + "WHERE ES_MATCH.EXPORT_SCHEDULE_ID = EEA_MATCH.EXPORT_SCHEDULE_ID "
-                + "AND ES_MATCH.ADVERTISING_DATE >= ? AND ES_MATCH.ADVERTISING_DATE <= ?)"
+                + "AND ES_MATCH.ADVERTISING_DATE >= ? AND ES_MATCH.ADVERTISING_DATE <= ?))"
                 + " INTERSECT (" + regionSet
                 + " INTERSECT (SELECT EE_TYPE.EXEMPTION_NUMBER FROM EXPORT_EXEMPTION "
                 + "EE_TYPE WHERE EE_TYPE.EXPORT_EXEMPTION_TYPE_CODE = 'M' UNION ALL "
@@ -466,6 +466,26 @@ class ExemptionRepositoryTest {
             1909L, 1910L, 1909L, 1910L,
             1909L, 1910L, 1909L, 1910L);
     assertThat(repository.countBindValues).isEqualTo(repository.bindValues());
+  }
+
+  @Test
+  void aUnionSetFirstShouldBeParenthesizedBeforeTheIntersect() {
+    TestExemptionRepository repository =
+        new TestExemptionRepository(List.of(exemptionResult("EX-1")));
+
+    repository.search(
+        new ExemptionSearchCriteria(
+            null, null, null, null, null, null, null, null, null, List.of(1909L, 1910L),
+            false, false, false, null, 0, 25, List.of(1909L)));
+
+    // Chosen regions come first and are a UNION ALL; the role regions must still restrict them.
+    assertThat(repository.whereSql())
+        .contains(
+            " AND EE.EXEMPTION_NUMBER IN ((SELECT EEA_REGION.EXEMPTION_NUMBER "
+                + "FROM EXPORT_EXEMPTION_APPLICATION EEA_REGION "
+                + "WHERE EEA_REGION.OIC_INDICATOR = 'N' AND EEA_REGION.ORG_UNIT_NO IN (?, ?) "
+                + "UNION ALL SELECT OEO_REGION.EXEMPTION_NUMBER FROM OIC_EXEMPTION_ORG_UNIT "
+                + "OEO_REGION WHERE OEO_REGION.ORG_UNIT_NO IN (?, ?)) INTERSECT (");
   }
 
   @Test
