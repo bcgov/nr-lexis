@@ -1,6 +1,8 @@
 package ca.bc.gov.mof.lexis.repository.permit;
 
+import static ca.bc.gov.mof.lexis.repository.application.ApplicationRowQueries.APPLICATIONS_BY_EXEMPTION;
 import static ca.bc.gov.mof.lexis.repository.application.ApplicationRowQueries.APPLICATION_BY_NUMBER;
+import static ca.bc.gov.mof.lexis.repository.exemption.ExemptionRowQueries.EXEMPTION_BY_NUMBER;
 import static ca.bc.gov.mof.lexis.util.ValueUtils.coalesce;
 import static ca.bc.gov.mof.lexis.util.ValueUtils.firstNonNull;
 
@@ -295,8 +297,6 @@ public class PermitRpcRepository extends OracleRepositorySupport {
       LEXIS_GROUP_5_PACKAGE + "FIND_PACKAGES_BY_EXMP(?,?)";
   private static final String FIND_PACKAGE_BY_NUMBER =
       LEXIS_GROUP_5_PACKAGE + "FIND_PACKAGE_BY_NUMBER(?,?)";
-  private static final String FIND_APPLICATION_BY_EXEMPTION =
-      LEXIS_GROUP_5_PACKAGE + "FIND_APPLICATION_BY_EXEMPTION(?,?)";
   private static final String FIND_END_USE_BY_APP = LEXIS_GROUP_5_PACKAGE + "FIND_END_USE_BY_APP(?,?)";
   private static final String FIND_END_USE_BY_PACK = LEXIS_GROUP_5_PACKAGE + "FIND_END_USE_BY_PACK(?,?)";
   private static final String FIND_PERMIT_DETAIL_BY_ID =
@@ -305,8 +305,6 @@ public class PermitRpcRepository extends OracleRepositorySupport {
       "SELECT OVERRIDE_FEE, OVERRIDE_COMMENT, ORG_UNIT_NO "
           + "FROM EXPORT_PERMIT_DETAIL "
           + "WHERE EXPORT_PERMIT_DETAIL_NUMBER = ?";
-  private static final String FIND_EXEMPTION_BY_NUMBER =
-      LEXIS_GROUP_5_PACKAGE + "FIND_EXEMPTION_BY_NUMBER(?,?)";
   private static final String FIND_PERMIT_FILE_DETAILS =
       LEXIS_GROUP_5_PACKAGE + "FIND_PERMIT_FILE_DETAILS(?,?)";
   private static final String FIND_PERMIT_FILE_ATTACHMENT =
@@ -1100,11 +1098,10 @@ public class PermitRpcRepository extends OracleRepositorySupport {
     }
 
     List<Long> applicationNumbers =
-        queryCursorProcedureRequired(
-            FIND_APPLICATION_BY_EXEMPTION,
-            cs -> cs.setString(1, normalizedExemptionNumber),
-            2,
-            rs -> getLong(rs, "APPLICATION_NUMBER"));
+        queryDirectRequired(
+            APPLICATIONS_BY_EXEMPTION,
+            rs -> getLong(rs, "APPLICATION_NUMBER"),
+            normalizedExemptionNumber);
     return normalizeApplicationRelationships(
         applicationNumbers,
         strictRelationships,
@@ -1611,11 +1608,12 @@ public class PermitRpcRepository extends OracleRepositorySupport {
       return Optional.empty();
     }
 
-    return queryCursorSingleRequired(
-            FIND_EXEMPTION_BY_NUMBER,
-            cs -> cs.setString(1, normalized),
-            2,
-            rs -> trim(rs.getString("EXPORT_EXEMPTION_TYPE_CODE")))
+    return queryDirectRequired(
+            EXEMPTION_BY_NUMBER,
+            rs -> trim(rs.getString("EXPORT_EXEMPTION_TYPE_CODE")),
+            normalized)
+        .stream()
+        .findFirst()
         .filter(value -> value != null && !value.isBlank());
   }
 
@@ -1625,11 +1623,9 @@ public class PermitRpcRepository extends OracleRepositorySupport {
       return Optional.empty();
     }
 
-    return queryCursorSingleRequired(
-        FIND_EXEMPTION_BY_NUMBER,
-        cs -> cs.setString(1, normalized),
-        2,
-        rs -> getLocalDate(rs, "EXPIRY_DATE"));
+    return queryDirectRequired(EXEMPTION_BY_NUMBER, rs -> getLocalDate(rs, "EXPIRY_DATE"), normalized)
+        .stream()
+        .findFirst();
   }
 
   public Optional<PackageInfoRow> findPackageInfoByPackageNumber(String packageNumber) {

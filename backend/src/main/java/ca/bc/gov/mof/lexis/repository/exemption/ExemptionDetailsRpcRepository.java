@@ -1,6 +1,8 @@
 package ca.bc.gov.mof.lexis.repository.exemption;
 
+import static ca.bc.gov.mof.lexis.repository.application.ApplicationRowQueries.APPLICATIONS_BY_EXEMPTION;
 import static ca.bc.gov.mof.lexis.repository.application.ApplicationRowQueries.APPLICATION_BY_NUMBER;
+import static ca.bc.gov.mof.lexis.repository.exemption.ExemptionRowQueries.EXEMPTION_BY_NUMBER;
 import static ca.bc.gov.mof.lexis.util.ValueUtils.coalesce;
 import static ca.bc.gov.mof.lexis.util.ValueUtils.positiveOrNull;
 
@@ -40,40 +42,6 @@ import org.springframework.transaction.interceptor.TransactionAspectSupport;
 @Profile("oracle")
 public class ExemptionDetailsRpcRepository extends OracleRepositorySupport {
 
-  // The rows of LEXIS.FIND_APPLICATION_BY_EXEMPTION for the columns read here, without that
-  // cursor's package join and per-row approval date function, which scans the application audit.
-  private static final String FIND_APPLICATIONS_BY_EXEMPTION =
-      """
-      SELECT
-        EEA.APPLICATION_NUMBER,
-        EEA.EXEMPTION_APPLICATION_VOLUME,
-        EEA.OWNER_CLIENT_NUMBER,
-        EEA.AGENT_CLIENT_NUMBER,
-        EEA.OWNER_CLIENT_LOCATION_CODE,
-        EEA.AGENT_CLIENT_LOCATION_CODE,
-        EEA.EXPORT_APPLICANT_TYPE_CODE,
-        EEA.OWNER_CONTACT_NAME,
-        EEA.AGENT_CONTACT_NAME,
-        FCO.CLIENT_NAME AS OWNER_COMPANY_NAME,
-        AFCO.CLIENT_NAME AS AGENT_COMPANY_NAME,
-        EEA.EXPORT_JURISDICTION_CODE,
-        EEA.EXPORT_PRODUCT_TYPE_CODE,
-        EEA.EXPORT_APPLICATION_STATUS_CODE,
-        EASC.DESCRIPTION AS STATUS_DESCRIPTION
-      FROM EXPORT_EXEMPTION_APPLICATION EEA
-      INNER JOIN EXPORT_APPLICATION_STATUS_CODE EASC
-        ON EASC.EXPORT_APPLICATION_STATUS_CODE = EEA.EXPORT_APPLICATION_STATUS_CODE
-      INNER JOIN EXPORT_EXEMPTION_REASON_CODE EERC
-        ON EERC.EXPORT_EXEMPTION_REASON_CODE = EEA.EXPORT_EXEMPTION_REASON_CODE
-      INNER JOIN EXPORT_APPLICANT_TYPE_CODE EATC
-        ON EATC.EXPORT_APPLICANT_TYPE_CODE = EEA.EXPORT_APPLICANT_TYPE_CODE
-      LEFT JOIN THE.V_CLIENT_PUBLIC FCO
-        ON FCO.CLIENT_NUMBER = EEA.OWNER_CLIENT_NUMBER
-      LEFT JOIN THE.V_CLIENT_PUBLIC AFCO
-        ON AFCO.CLIENT_NUMBER = EEA.AGENT_CLIENT_NUMBER
-      WHERE EEA.EXEMPTION_NUMBER = ?
-      ORDER BY EEA.APPLICATION_NUMBER
-      """;
   // The exemption's applications that LEXIS.FIND_PERMIT_DET_BY_APP lists a permit for, in one read.
   private static final String FIND_APPLICATIONS_WITH_PERMITS_BY_EXEMPTION =
       """
@@ -99,27 +67,6 @@ public class ExemptionDetailsRpcRepository extends OracleRepositorySupport {
       SELECT EXPORT_PERMIT_DETAIL_NUMBER, ORG_UNIT_NO
       FROM EXPORT_PERMIT_DETAIL
       WHERE EXEMPTION_NUMBER = ?
-      """;
-  // The exemption columns of LEXIS.FIND_EXEMPTION_BY_NUMBER, which also aggregates every linked
-  // application, package and scale row that nothing here reads.
-  private static final String FIND_EXEMPTION_BY_NUMBER =
-      """
-      SELECT
-        EE.EXEMPTION_NUMBER,
-        EE.APPROVED_VOLUME,
-        EE.APPROVAL_DATE,
-        EE.EXPIRY_DATE,
-        EE.OTHER_CONDITIONS,
-        EE.EXPORT_EXEMPTION_TYPE_CODE,
-        EE.EXPORT_EXEMPTION_STATUS_CODE,
-        EE.ENTRY_USERID,
-        EE.ENTRY_TIMESTAMP,
-        EE.UPDATE_USERID,
-        EE.UPDATE_TIMESTAMP
-      FROM EXPORT_EXEMPTION EE
-      INNER JOIN EXPORT_EXEMPTION_STATUS_CODE EESC
-        ON EESC.EXPORT_EXEMPTION_STATUS_CODE = EE.EXPORT_EXEMPTION_STATUS_CODE
-      WHERE EE.EXEMPTION_NUMBER = ?
       """;
   private static final String FIND_EXEMPTION_TYPE_BY_NUMBER =
       """
@@ -210,7 +157,7 @@ public class ExemptionDetailsRpcRepository extends OracleRepositorySupport {
       return List.of();
     }
     return queryDirectRequired(
-        FIND_APPLICATIONS_BY_EXEMPTION, this::mapApplicationSummaryRow, normalized);
+        APPLICATIONS_BY_EXEMPTION, this::mapApplicationSummaryRow, normalized);
   }
 
   /** The exemption's applications that have a permit row, as the per-application cursor finds it. */
@@ -281,7 +228,7 @@ public class ExemptionDetailsRpcRepository extends OracleRepositorySupport {
       return false;
     }
     return !queryDirectRequired(
-            FIND_EXEMPTION_BY_NUMBER, rs -> getString(rs, "EXEMPTION_NUMBER"), normalized)
+            EXEMPTION_BY_NUMBER, rs -> getString(rs, "EXEMPTION_NUMBER"), normalized)
         .isEmpty();
   }
 
@@ -290,7 +237,7 @@ public class ExemptionDetailsRpcRepository extends OracleRepositorySupport {
     if (normalized == null) {
       return Optional.empty();
     }
-    return queryDirectRequired(FIND_EXEMPTION_BY_NUMBER, this::mapExemptionRecord, normalized)
+    return queryDirectRequired(EXEMPTION_BY_NUMBER, this::mapExemptionRecord, normalized)
         .stream()
         .findFirst();
   }

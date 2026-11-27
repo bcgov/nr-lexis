@@ -1,6 +1,8 @@
 package ca.bc.gov.mof.lexis.repository.permit;
 
+import static ca.bc.gov.mof.lexis.repository.application.ApplicationRowQueries.APPLICATIONS_BY_EXEMPTION;
 import static ca.bc.gov.mof.lexis.repository.application.ApplicationRowQueries.APPLICATION_BY_NUMBER;
+import static ca.bc.gov.mof.lexis.repository.exemption.ExemptionRowQueries.EXEMPTION_BY_NUMBER;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.assertj.core.groups.Tuple.tuple;
@@ -1151,29 +1153,53 @@ class PermitRpcRepositoryTest {
   }
 
   @Test
+  @SuppressWarnings("unchecked")
   void requiredExemptionApplicationRelationshipsShouldBeSortedAndFailClosed()
       throws Exception {
-    stubCursorProcedure("{ call LEXIS_GROUP_5.FIND_APPLICATION_BY_EXEMPTION(?,?) }", 2);
-    when(resultSet.next()).thenReturn(true, true, false);
-    when(resultSet.getLong("APPLICATION_NUMBER")).thenReturn(1000457L, 1000456L);
-    when(resultSet.wasNull()).thenReturn(false);
+    when(resultSet.getLong("APPLICATION_NUMBER")).thenReturn(1000457L, 1000456L, 0L);
+    when(resultSet.wasNull()).thenReturn(false, false, true);
+    when(jdbcTemplate.query(eq(APPLICATIONS_BY_EXEMPTION), any(RowMapper.class), eq("EX-700")))
+        .thenAnswer(
+            invocation -> {
+              RowMapper<Object> mapper = invocation.getArgument(1);
+              return List.of(mapper.mapRow(resultSet, 0), mapper.mapRow(resultSet, 1));
+            })
+        .thenAnswer(
+            invocation ->
+                java.util.Arrays.asList(
+                    ((RowMapper<Object>) invocation.getArgument(1)).mapRow(resultSet, 0)));
     PermitRpcRepository repository = new PermitRpcRepository(jdbcTemplate);
 
-    assertThat(repository.findApplicationNumbersByExemptionNumberRequired("EX-700"))
+    assertThat(repository.findApplicationNumbersByExemptionNumberRequired(" EX-700 "))
         .containsExactly(1000456L, 1000457L);
-    verify(callableStatement).setString(1, "EX-700");
-
-    org.mockito.Mockito.reset(callableStatement, resultSet);
-    stubCursorProcedure("{ call LEXIS_GROUP_5.FIND_APPLICATION_BY_EXEMPTION(?,?) }", 2);
-    when(resultSet.next()).thenReturn(true, false);
-    when(resultSet.getLong("APPLICATION_NUMBER")).thenReturn(0L);
-    when(resultSet.wasNull()).thenReturn(true);
 
     assertThatThrownBy(
             () -> repository.findApplicationNumbersByExemptionNumberRequired("EX-700"))
         .isInstanceOf(DataRetrievalFailureException.class)
         .hasMessageContaining("invalid application relationship")
         .hasMessageContaining("exemption EX-700");
+    verify(jdbcTemplate, never()).execute(anyString(), any(CallableStatementCallback.class));
+  }
+
+  @Test
+  @SuppressWarnings("unchecked")
+  void exemptionTypeAndExpiryShouldReadTheExemptionRowDirectly() throws Exception {
+    when(resultSet.getString("EXPORT_EXEMPTION_TYPE_CODE")).thenReturn(" B ");
+    when(resultSet.getTimestamp("EXPIRY_DATE"))
+        .thenReturn(java.sql.Timestamp.valueOf("2027-03-31 00:00:00"));
+    when(jdbcTemplate.query(eq(EXEMPTION_BY_NUMBER), any(RowMapper.class), eq("EX-700")))
+        .thenAnswer(
+            invocation ->
+                List.of(((RowMapper<Object>) invocation.getArgument(1)).mapRow(resultSet, 0)));
+    PermitRpcRepository repository = new PermitRpcRepository(jdbcTemplate);
+
+    assertThat(repository.findExemptionTypeCode(" EX-700 ")).contains("B");
+    assertThat(repository.findExemptionExpiryDate("EX-700"))
+        .contains(java.time.LocalDate.of(2027, 3, 31));
+    assertThat(EXEMPTION_BY_NUMBER)
+        .contains("WHERE EE.EXEMPTION_NUMBER = ?")
+        .doesNotContain("EXPORT_EXEMPTION_APPLICATION");
+    verify(jdbcTemplate, never()).execute(anyString(), any(CallableStatementCallback.class));
   }
 
   @Test
