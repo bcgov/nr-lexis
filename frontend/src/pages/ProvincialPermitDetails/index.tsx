@@ -22,11 +22,9 @@ import {
 } from '@carbon/icons-react'
 import { Cardboard, Invoice } from '@carbon/pictograms-react'
 import {
-  ActionableNotification,
   Button,
   Checkbox,
   Column,
-  FeatureFlags,
   Grid,
   InlineLoading,
   InlineNotification,
@@ -7988,23 +7986,16 @@ const ProvincialPermitDetailsPage = () => {
             !permitReviewRequestSent && (
               <Column sm={4} md={8} lg={16} className="detail-page-error">
                 <div ref={reviewRequestOutcomeRef} tabIndex={-1} className="permit-page-result">
-                  <FeatureFlags enableFocusWrapWithoutSentinels>
-                    <ActionableNotification
-                      actionButtonLabel="Send review request"
-                      closeOnEscape={false}
-                      inline
-                      kind={reviewRequestOutcome ? 'error' : 'info'}
-                      lowContrast
-                      hideCloseButton
-                      role="status"
-                      title={reviewRequestOutcome?.title ?? 'Review request'}
-                      subtitle={
-                        reviewRequestOutcome?.message ??
-                        'When your permit request is complete, send it to the regional office for review. You only need to send it once.'
-                      }
-                      onActionButtonClick={() => void onOpenPermitReviewRequest()}
-                    />
-                  </FeatureFlags>
+                  <AppNotification
+                    actionButtonLabel="Send review request"
+                    kind={reviewRequestOutcome ? 'error' : 'info'}
+                    title={reviewRequestOutcome?.title ?? 'Review request'}
+                    subtitle={
+                      reviewRequestOutcome?.message ??
+                      'When your permit request is complete, send it to the regional office for review. You only need to send it once.'
+                    }
+                    onActionButtonClick={() => void onOpenPermitReviewRequest()}
+                  />
                 </div>
               </Column>
             )
