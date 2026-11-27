@@ -128,8 +128,7 @@ Under the title of an application, exemption or permit, LEXIS shows the
 author, then a line for each kind of related record you can open. An
 application shows its exemption and permit numbers, an exemption its
 application and permit numbers, and a permit its exemption and application
-numbers. Blanket OIC exemptions and permits don't list application numbers.
-Each number shows its status in brackets after it, such as (ACT)
+numbers. Each number shows its status in brackets after it, such as (ACT)
 for an active exemption or (Complete) for a permit. Select a number to open
 that record. A list of more than five shows the first five and a count of
 the rest, for example **+18 more**. On an exemption, select the count to
