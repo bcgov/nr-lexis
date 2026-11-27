@@ -355,11 +355,14 @@ class ExemptionRepositoryTest {
 
     assertThat(repository.whereSql())
         .contains(
-            "EXISTS (SELECT 1 FROM EXPORT_EXEMPTION_APPLICATION EEA_MATCH "
-                + "WHERE EEA_MATCH.EXEMPTION_NUMBER = EE.EXEMPTION_NUMBER "
+            " AND EE.EXEMPTION_NUMBER IN (SELECT EEA_MATCH.EXEMPTION_NUMBER "
+                + "FROM EXPORT_EXEMPTION_APPLICATION EEA_MATCH "
+                + "WHERE EEA_MATCH.EXEMPTION_NUMBER IS NOT NULL "
                 + "AND TO_CHAR(EEA_MATCH.APPLICATION_NUMBER) LIKE '%' || ? || '%' "
                 + "AND EXISTS (SELECT 1 FROM EXPORT_PACKAGE EP "
                 + "WHERE EP.APPLICATION_NUMBER = EEA_MATCH.APPLICATION_NUMBER")
+        .contains(" INTERSECT (SELECT EEA_REGION.EXEMPTION_NUMBER")
+        .doesNotContain("EEA_MATCH.EXEMPTION_NUMBER = EE.EXEMPTION_NUMBER")
         .doesNotContain("EEA.APPLICATION_NUMBER")
         .doesNotContain("EEA_MATCH.OWNER_CLIENT_NUMBER")
         .contains("EE.EXEMPTION_NUMBER")
@@ -386,16 +389,16 @@ class ExemptionRepositoryTest {
         .doesNotContain("PERMIT_VOLUME_BY_EXEMPTION");
     assertThat(repository.bindValues())
         .containsExactly(
-            "900123",
-            "PKG-1",
-            java.sql.Date.valueOf("2026-02-01"),
-            java.sql.Date.valueOf("2026-02-28"),
             "EX-1",
             "B",
             "NEW",
             "00077881",
             "00055667",
             "00055667",
+            "900123",
+            "PKG-1",
+            java.sql.Date.valueOf("2026-02-01"),
+            java.sql.Date.valueOf("2026-02-28"),
             1904L,
             1904L);
   }
@@ -431,12 +434,23 @@ class ExemptionRepositoryTest {
             + "WHERE EEA_REGION.OIC_INDICATOR = 'N' AND EEA_REGION.ORG_UNIT_NO IN (?, ?) "
             + "UNION ALL SELECT OEO_REGION.EXEMPTION_NUMBER FROM OIC_EXEMPTION_ORG_UNIT OEO_REGION "
             + "WHERE OEO_REGION.ORG_UNIT_NO IN (?, ?))";
+    // The list date and both region filters are intersected in one IN, so Oracle reads each set
+    // once instead of probing one set per exemption of another.
     assertThat(repository.whereSql())
-        .contains(" AND EE.EXEMPTION_NUMBER IN (" + regionSet)
         .contains(
-            " AND EE.EXEMPTION_NUMBER IN (SELECT EE_TYPE.EXEMPTION_NUMBER FROM EXPORT_EXEMPTION "
+            " AND EE.EXEMPTION_NUMBER IN (SELECT EEA_MATCH.EXEMPTION_NUMBER "
+                + "FROM EXPORT_EXEMPTION_APPLICATION EEA_MATCH "
+                + "WHERE EEA_MATCH.EXEMPTION_NUMBER IS NOT NULL "
+                + "AND EXISTS (SELECT 1 FROM EXPORT_SCHEDULE ES_MATCH "
+                + "WHERE ES_MATCH.EXPORT_SCHEDULE_ID = EEA_MATCH.EXPORT_SCHEDULE_ID "
+                + "AND ES_MATCH.ADVERTISING_DATE >= ? AND ES_MATCH.ADVERTISING_DATE <= ?)"
+                + " INTERSECT (" + regionSet
+                + " INTERSECT (SELECT EE_TYPE.EXEMPTION_NUMBER FROM EXPORT_EXEMPTION "
                 + "EE_TYPE WHERE EE_TYPE.EXPORT_EXEMPTION_TYPE_CODE = 'M' UNION ALL "
-                + regionSet)
+                + regionSet
+                + ")")
+        .contains(") AND EE.EXPORT_EXEMPTION_TYPE_CODE NOT IN ('B', 'O')")
+        .doesNotContain("EEA_MATCH.EXEMPTION_NUMBER = EE.EXEMPTION_NUMBER")
         .doesNotContain("EEA_REGION.EXEMPTION_NUMBER = EE.EXEMPTION_NUMBER")
         .doesNotContain("OEO_REGION.EXEMPTION_NUMBER = EE.EXEMPTION_NUMBER")
         .doesNotContain(" OR ");
@@ -452,6 +466,32 @@ class ExemptionRepositoryTest {
             1909L, 1910L, 1909L, 1910L,
             1909L, 1910L, 1909L, 1910L);
     assertThat(repository.countBindValues).isEqualTo(repository.bindValues());
+  }
+
+  @Test
+  void aSingleSetFilterShouldKeepItsOwnPredicate() {
+    TestExemptionRepository dateOnly = new TestExemptionRepository(List.of(exemptionResult("EX-1")));
+    dateOnly.search(
+        new ExemptionSearchCriteria(
+            null, null, null, null, null, null, null,
+            LocalDate.of(2026, 11, 12), LocalDate.of(2026, 11, 12), List.of(), 0, 10));
+    assertThat(dateOnly.whereSql())
+        .contains(
+            " AND EXISTS (SELECT 1 FROM EXPORT_EXEMPTION_APPLICATION EEA_MATCH "
+                + "WHERE EEA_MATCH.EXEMPTION_NUMBER = EE.EXEMPTION_NUMBER")
+        .contains(" AND EE.EXPORT_EXEMPTION_TYPE_CODE NOT IN ('B', 'O')")
+        .doesNotContain("INTERSECT");
+
+    TestExemptionRepository regionOnly =
+        new TestExemptionRepository(List.of(exemptionResult("EX-1")));
+    regionOnly.search(
+        new ExemptionSearchCriteria(
+            null, null, null, null, null, null, null, null, null, List.of(1908L, 1909L), 0, 10));
+    assertThat(regionOnly.whereSql())
+        .contains(" AND EE.EXEMPTION_NUMBER IN (SELECT EEA_REGION.EXEMPTION_NUMBER")
+        .doesNotContain("INTERSECT")
+        .doesNotContain("EEA_MATCH");
+    assertThat(regionOnly.bindValues()).containsExactly(1908L, 1909L, 1908L, 1909L);
   }
 
   @Test
