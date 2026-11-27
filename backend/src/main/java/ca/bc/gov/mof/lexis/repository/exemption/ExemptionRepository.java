@@ -635,7 +635,8 @@ public class ExemptionRepository extends OracleRepositorySupport {
   /**
    * Application number, package number and list date match any application linked to the
    * exemption, as in legacy, not only the canonical one; submitters match only their own client's
-   * applications. Legacy matched a list date only on exemptions other than Blanket OIC and OIC.
+   * applications. Legacy matched a list date only on exemptions with a type other than Blanket OIC
+   * and OIC, the ones whose results show a list date.
    */
   private void addLinkedApplicationFilter(
       DirectSqlBuilder where, ExemptionSearchCriteria criteria, String scopedClientNumber) {

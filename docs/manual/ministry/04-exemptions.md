@@ -42,8 +42,9 @@ date. Permits are issued against it.
 **Application number**, **Package number**, **Region**, the list date range,
 **Exemption type**, **Exemption status**, **Owner client** and **Agent
 client**. A list date range finds an exemption when any of its applications
-is listed in that range; Blanket OIC and OIC exemptions have no list date, so
-a list date search leaves them out. Select the number in the first column to
+is listed in that range; the results show its latest list date. Blanket OIC
+and OIC exemptions have no list date, so a list date search leaves them out.
+Select the number in the first column to
 open the exemption. Its **Applications** tab lists the applications it
 covers: select a number to open one.
 
