@@ -636,7 +636,8 @@ public class ExemptionRepository extends OracleRepositorySupport {
    * Application number, package number and list date match any application linked to the
    * exemption, as in legacy, not only the canonical one; submitters match only their own client's
    * applications. Legacy matched a list date only on exemptions with a type other than Blanket OIC
-   * and OIC, the ones whose results show a list date.
+   * and OIC, the ones whose results show a list date. Like the region filters, this is one
+   * uncorrelated IN: a correlated EXISTS on the unindexed EXEMPTION_NUMBER could run per exemption.
    */
   private void addLinkedApplicationFilter(
       DirectSqlBuilder where, ExemptionSearchCriteria criteria, String scopedClientNumber) {
@@ -650,8 +651,9 @@ public class ExemptionRepository extends OracleRepositorySupport {
     }
     StringBuilder clause =
         new StringBuilder(
-            " AND EXISTS (SELECT 1 FROM EXPORT_EXEMPTION_APPLICATION EEA_MATCH "
-                + "WHERE EEA_MATCH.EXEMPTION_NUMBER = EE.EXEMPTION_NUMBER");
+            " AND EE.EXEMPTION_NUMBER IN (SELECT EEA_MATCH.EXEMPTION_NUMBER "
+                + "FROM EXPORT_EXEMPTION_APPLICATION EEA_MATCH "
+                + "WHERE EEA_MATCH.EXEMPTION_NUMBER IS NOT NULL");
     List<Object> bindValues = new ArrayList<>();
     if (applicationNumber != null) {
       clause.append(" AND TO_CHAR(EEA_MATCH.APPLICATION_NUMBER) LIKE '%' || ? || '%'");

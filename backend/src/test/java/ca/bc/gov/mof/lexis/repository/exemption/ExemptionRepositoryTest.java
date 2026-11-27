@@ -355,12 +355,14 @@ class ExemptionRepositoryTest {
 
     assertThat(repository.whereSql())
         .contains(
-            "EXISTS (SELECT 1 FROM EXPORT_EXEMPTION_APPLICATION EEA_MATCH "
-                + "WHERE EEA_MATCH.EXEMPTION_NUMBER = EE.EXEMPTION_NUMBER "
+            "EE.EXEMPTION_NUMBER IN (SELECT EEA_MATCH.EXEMPTION_NUMBER "
+                + "FROM EXPORT_EXEMPTION_APPLICATION EEA_MATCH "
+                + "WHERE EEA_MATCH.EXEMPTION_NUMBER IS NOT NULL "
                 + "AND TO_CHAR(EEA_MATCH.APPLICATION_NUMBER) LIKE '%' || ? || '%' "
                 + "AND EXISTS (SELECT 1 FROM EXPORT_PACKAGE EP "
                 + "WHERE EP.APPLICATION_NUMBER = EEA_MATCH.APPLICATION_NUMBER")
         .doesNotContain("EEA.APPLICATION_NUMBER")
+        .doesNotContain("EEA_MATCH.EXEMPTION_NUMBER = EE.EXEMPTION_NUMBER")
         .doesNotContain("EEA_MATCH.OWNER_CLIENT_NUMBER")
         .contains("EE.EXEMPTION_NUMBER")
         .contains("ES_MATCH.ADVERTISING_DATE >= ? AND ES_MATCH.ADVERTISING_DATE <= ?)")
@@ -577,8 +579,9 @@ class ExemptionRepositoryTest {
 
     assertThat(repository.whereSql())
         .contains(
-            "EXISTS (SELECT 1 FROM EXPORT_EXEMPTION_APPLICATION EEA_MATCH "
-                + "WHERE EEA_MATCH.EXEMPTION_NUMBER = EE.EXEMPTION_NUMBER "
+            "EE.EXEMPTION_NUMBER IN (SELECT EEA_MATCH.EXEMPTION_NUMBER "
+                + "FROM EXPORT_EXEMPTION_APPLICATION EEA_MATCH "
+                + "WHERE EEA_MATCH.EXEMPTION_NUMBER IS NOT NULL "
                 + "AND TO_CHAR(EEA_MATCH.APPLICATION_NUMBER) LIKE '%' || ? || '%' "
                 + "AND (EEA_MATCH.OWNER_CLIENT_NUMBER = ? "
                 + "OR EEA_MATCH.AGENT_CLIENT_NUMBER = ?))")
