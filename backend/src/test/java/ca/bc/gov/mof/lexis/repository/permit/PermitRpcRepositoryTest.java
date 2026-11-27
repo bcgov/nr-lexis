@@ -65,11 +65,13 @@ class PermitRpcRepositoryTest {
     assertThat(sql.getValue())
         .contains("WHEN EXISTS")
         .contains("FROM EXPORT_PACKAGE P")
-        .contains("LEFT JOIN EXPORT_EXEMPTION_APPLICATION EEA")
-        .contains("LEFT JOIN EXPORT_PERMIT_DETAIL EPD")
-        .contains("LEFT JOIN EXPORT_SCALE_DETAIL ESD")
-        .contains("EPD.EXPORT_PERMIT_DETAIL_NUMBER = ?")
-        .contains("OR ESD.EXPORT_PERMIT_DETAIL_NUMBER = ?");
+        .contains("WHERE P.PACKAGE_NUMBER = ?")
+        .contains("ON EEA.APPLICATION_NUMBER = EPD.OIC_APPLICATION_NUMBER")
+        .contains("WHERE EPD.EXPORT_PERMIT_DETAIL_NUMBER = ?")
+        .contains("AND EEA.APPLICATION_NUMBER = P.APPLICATION_NUMBER")
+        .contains("WHERE ESD.PACKAGE_NUMBER = P.PACKAGE_NUMBER")
+        .contains("AND ESD.EXPORT_PERMIT_DETAIL_NUMBER = ?")
+        .doesNotContain("LEFT JOIN EXPORT_PERMIT_DETAIL EPD");
   }
 
   @Test
@@ -173,13 +175,29 @@ class PermitRpcRepositoryTest {
   }
 
   @Test
-  void oicPackageListShouldPreserveDistinctCursorKeys() throws Exception {
-    stubCursorProcedure("{ call LEXIS_GROUP_5.FIND_PACKAGES_BY_OIC_PERMIT(?,?) }", 2);
-    when(resultSet.next()).thenReturn(true, true, true, false);
+  @SuppressWarnings("unchecked")
+  void oicPackageListShouldPreserveDistinctKeysFromOneDrivenQuery() throws Exception {
     when(resultSet.getString("PACKAGE_NUMBER")).thenReturn("PKG-100  ", "PKG-100", "PKG-100  ");
+    when(jdbcTemplate.query(anyString(), any(RowMapper.class), eq(7000123L), eq(7000123L)))
+        .thenAnswer(
+            invocation -> {
+              RowMapper<Object> mapper = invocation.getArgument(1);
+              return List.of(
+                  mapper.mapRow(resultSet, 0), mapper.mapRow(resultSet, 1), mapper.mapRow(resultSet, 2));
+            });
 
     assertThat(new PermitRpcRepository(jdbcTemplate).findPackageNumbersByOicPermitNumber(7000123L))
         .containsExactly("PKG-100", "PKG-100  ");
+
+    ArgumentCaptor<String> sql = ArgumentCaptor.forClass(String.class);
+    verify(jdbcTemplate).query(sql.capture(), any(RowMapper.class), eq(7000123L), eq(7000123L));
+    assertThat(sql.getValue())
+        .contains("WHERE P.PACKAGE_NUMBER IN (")
+        .contains("WHERE EPD.EXPORT_PERMIT_DETAIL_NUMBER = ?")
+        .contains("UNION ALL")
+        .contains("WHERE ESD.EXPORT_PERMIT_DETAIL_NUMBER = ?")
+        .doesNotContain(" OR ");
+    verify(jdbcTemplate, never()).execute(anyString(), any(CallableStatementCallback.class));
   }
 
   @Test
@@ -362,11 +380,13 @@ class PermitRpcRepositoryTest {
         .contains("LEFT JOIN EXPORT_EXEMPTION_APPLICATION EEA")
         .contains("LEFT JOIN EXPORT_EXEMPTION EE")
         .contains("ASSIGNED_TO_PERMIT")
+        .contains("WHERE P.PACKAGE_NUMBER IN (")
         .contains("TARGET_SCALE.EXPORT_PERMIT_DETAIL_NUMBER = ?")
         .contains("UNASSIGNED_SCALE.EXPORT_PERMIT_DETAIL_NUMBER IS NULL")
-        .contains("ASSOCIATED_PACKAGE.APPLICATION_NUMBER = P.APPLICATION_NUMBER")
+        .contains("SIBLING_PACKAGE.APPLICATION_NUMBER = ASSOCIATED_PACKAGE.APPLICATION_NUMBER")
         .contains("ASSOCIATED_SCALE.EXPORT_PERMIT_DETAIL_NUMBER = ?")
-        .contains("ORDER BY P.PACKAGE_NUMBER");
+        .contains("ORDER BY P.PACKAGE_NUMBER")
+        .doesNotContain(" OR (EXISTS");
   }
 
   @Test
@@ -388,6 +408,16 @@ class PermitRpcRepositoryTest {
 
     assertThat(new PermitRpcRepository(jdbcTemplate).findCorePackageContexts(7000123L, true))
         .containsExactly(plain, padded);
+
+    ArgumentCaptor<String> sql = ArgumentCaptor.forClass(String.class);
+    verify(jdbcTemplate)
+        .query(sql.capture(), any(RowMapper.class), eq(7000123L), eq(7000123L), eq(7000123L));
+    assertThat(sql.getValue())
+        .contains("WHERE P.PACKAGE_NUMBER IN (")
+        .contains("ON OIC_PACKAGE.APPLICATION_NUMBER = TARGET_PERMIT.OIC_APPLICATION_NUMBER")
+        .contains("WHERE TARGET_PERMIT.EXPORT_PERMIT_DETAIL_NUMBER = ?")
+        .contains("WHERE TARGET_SCALE.EXPORT_PERMIT_DETAIL_NUMBER = ?")
+        .doesNotContain(" OR EXISTS");
   }
 
   @Test
