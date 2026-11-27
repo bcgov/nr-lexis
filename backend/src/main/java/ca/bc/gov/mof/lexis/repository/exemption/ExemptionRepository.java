@@ -15,8 +15,10 @@ import ca.bc.gov.mof.lexis.dto.exemption.ExemptionSummaryLookupDto;
 import ca.bc.gov.mof.lexis.repository.oracle.OracleRepositorySupport;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
+import java.sql.Date;
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.LinkedHashSet;
 import java.util.LinkedHashMap;
@@ -454,8 +456,9 @@ public class ExemptionRepository extends OracleRepositorySupport {
       FROM DUAL
       """;
   // An exemption's regions for access checks: those of its linked applications and its stored OIC
-  // region rows, matching the search region filter (regionExists). Ministerial exemptions usually
-  // have only application regions, so the OIC-only FIND_EXEMPTION_ORG_UNIT cursor is not enough.
+  // region rows, matching the search region filter (addRegionOrTypeFilter). Ministerial exemptions
+  // usually have only application regions, so the OIC-only FIND_EXEMPTION_ORG_UNIT cursor is not
+  // enough.
   // System-owned Blanket OIC permit applications (OIC_INDICATOR 'Y') are excluded, as in search.
   private static final String FIND_EXEMPTION_ACCESS_ORG_UNITS =
       """
@@ -617,8 +620,6 @@ public class ExemptionRepository extends OracleRepositorySupport {
           applicantClientNumber);
     }
 
-    where.addDateGte("ES.ADVERTISING_DATE", criteria.listingFromDate());
-    where.addDateLte("ES.ADVERTISING_DATE", criteria.listingToDate());
     // INTENTIONAL_LEGACY_DIVERGENCE(HISTORICAL_ORG_UNIT_SEARCH_VISIBILITY):
     // Apply region scope only when the caller supplies it. Injecting today's active regions would
     // hide exact matches belonging to historical organizational units.
@@ -632,14 +633,19 @@ public class ExemptionRepository extends OracleRepositorySupport {
   }
 
   /**
-   * Application and package numbers match any application linked to the exemption, not only the
-   * canonical one; submitters match only their own client's applications.
+   * Application number, package number and list date match any application linked to the
+   * exemption, as in legacy, not only the canonical one; submitters match only their own client's
+   * applications. Legacy matched a list date only on exemptions with a type other than Blanket OIC
+   * and OIC, the ones whose results show a list date.
    */
   private void addLinkedApplicationFilter(
       DirectSqlBuilder where, ExemptionSearchCriteria criteria, String scopedClientNumber) {
     String applicationNumber = trim(criteria.applicationNumber());
     String packageNumber = trim(criteria.packageNumber());
-    if (applicationNumber == null && packageNumber == null) {
+    LocalDate listingFromDate = criteria.listingFromDate();
+    LocalDate listingToDate = criteria.listingToDate();
+    boolean hasListingDate = listingFromDate != null || listingToDate != null;
+    if (applicationNumber == null && packageNumber == null && !hasListingDate) {
       return;
     }
     StringBuilder clause =
@@ -658,6 +664,20 @@ public class ExemptionRepository extends OracleRepositorySupport {
               + "AND EP.PACKAGE_NUMBER LIKE '%' || ? || '%')");
       bindValues.add(packageNumber);
     }
+    if (hasListingDate) {
+      clause.append(
+          " AND EXISTS (SELECT 1 FROM EXPORT_SCHEDULE ES_MATCH "
+              + "WHERE ES_MATCH.EXPORT_SCHEDULE_ID = EEA_MATCH.EXPORT_SCHEDULE_ID");
+      if (listingFromDate != null) {
+        clause.append(" AND ES_MATCH.ADVERTISING_DATE >= ?");
+        bindValues.add(Date.valueOf(listingFromDate));
+      }
+      if (listingToDate != null) {
+        clause.append(" AND ES_MATCH.ADVERTISING_DATE <= ?");
+        bindValues.add(Date.valueOf(listingToDate));
+      }
+      clause.append(")");
+    }
     if (scopedClientNumber != null) {
       clause.append(
           " AND (EEA_MATCH.OWNER_CLIENT_NUMBER = ? OR EEA_MATCH.AGENT_CLIENT_NUMBER = ?)");
@@ -665,6 +685,9 @@ public class ExemptionRepository extends OracleRepositorySupport {
       bindValues.add(scopedClientNumber);
     }
     clause.append(")");
+    if (hasListingDate) {
+      clause.append(" AND EE.EXPORT_EXEMPTION_TYPE_CODE NOT IN ('B', 'O')");
+    }
     where.addRawWithBinds(clause.toString(), bindValues.toArray());
   }
 
@@ -735,9 +758,7 @@ public class ExemptionRepository extends OracleRepositorySupport {
     return scopedClientNumber == null
         && trim(criteria.ownerClientNumber()) == null
         && trim(criteria.applicantClientNumber()) == null
-        && trim(criteria.agentClientNumber()) == null
-        && criteria.listingFromDate() == null
-        && criteria.listingToDate() == null;
+        && trim(criteria.agentClientNumber()) == null;
   }
 
   private boolean supportsScopedSummaryFilterOnlyCount(
@@ -835,29 +856,7 @@ public class ExemptionRepository extends OracleRepositorySupport {
 
   private void addRegionFilter(
       DirectSqlBuilder where, List<Long> regionNumbers, boolean includeBlanketOic) {
-    LinkedHashSet<Long> distinct = new LinkedHashSet<>();
-    regionNumbers.stream()
-        .filter(value -> value != null && value > 0)
-        .forEach(distinct::add);
-    if (distinct.isEmpty()) {
-      where.addRaw(
-          includeBlanketOic
-              ? " AND EE.EXPORT_EXEMPTION_TYPE_CODE = 'B'"
-              : " AND 1=0");
-      return;
-    }
-
-    StringJoiner placeholders = new StringJoiner(", ");
-    distinct.forEach(ignored -> placeholders.add("?"));
-    List<Object> bindValues = new java.util.ArrayList<>(distinct.size() * 2);
-    bindValues.addAll(distinct);
-    bindValues.addAll(distinct);
-    String condition =
-        " AND (("
-            + regionExists(placeholders.toString())
-            + (includeBlanketOic ? " OR EE.EXPORT_EXEMPTION_TYPE_CODE = 'B'" : "")
-            + "))";
-    where.addRawWithBinds(condition, bindValues.toArray());
+    addRegionOrTypeFilter(where, regionNumbers, includeBlanketOic ? "B" : null);
   }
 
   /**
@@ -865,37 +864,52 @@ public class ExemptionRepository extends OracleRepositorySupport {
    * other filters. An empty list leaves only Ministerial exemptions.
    */
   private void addNonMinisterialRegionFilter(DirectSqlBuilder where, List<Long> regionNumbers) {
+    addRegionOrTypeFilter(where, regionNumbers, "M");
+  }
+
+  /**
+   * Exemptions with an application or OIC region in the given regions, or of the given type.
+   * EXPORT_EXEMPTION_APPLICATION has no EXEMPTION_NUMBER index, so this is one uncorrelated IN
+   * that Oracle reads once; a correlated EXISTS ORed with the type scanned it per exemption.
+   */
+  private void addRegionOrTypeFilter(
+      DirectSqlBuilder where, List<Long> regionNumbers, String alsoMatchedTypeCode) {
     LinkedHashSet<Long> distinct = new LinkedHashSet<>();
     regionNumbers.stream()
         .filter(value -> value != null && value > 0)
         .forEach(distinct::add);
     if (distinct.isEmpty()) {
-      where.addRaw(" AND EE.EXPORT_EXEMPTION_TYPE_CODE = 'M'");
+      where.addRaw(
+          alsoMatchedTypeCode == null
+              ? " AND 1=0"
+              : " AND EE.EXPORT_EXEMPTION_TYPE_CODE = '" + alsoMatchedTypeCode + "'");
       return;
     }
 
     StringJoiner placeholders = new StringJoiner(", ");
     distinct.forEach(ignored -> placeholders.add("?"));
-    List<Object> bindValues = new java.util.ArrayList<>(distinct.size() * 2);
+    List<Object> bindValues = new ArrayList<>(distinct.size() * 2);
     bindValues.addAll(distinct);
     bindValues.addAll(distinct);
+    String typeBranch =
+        alsoMatchedTypeCode == null
+            ? ""
+            : "SELECT EE_TYPE.EXEMPTION_NUMBER FROM EXPORT_EXEMPTION EE_TYPE "
+                + "WHERE EE_TYPE.EXPORT_EXEMPTION_TYPE_CODE = '"
+                + alsoMatchedTypeCode
+                + "' UNION ALL ";
     where.addRawWithBinds(
-        " AND (EE.EXPORT_EXEMPTION_TYPE_CODE = 'M' OR " + regionExists(placeholders.toString()) + ")",
+        " AND EE.EXEMPTION_NUMBER IN ("
+            + typeBranch
+            + "SELECT EEA_REGION.EXEMPTION_NUMBER FROM EXPORT_EXEMPTION_APPLICATION EEA_REGION "
+            + "WHERE EEA_REGION.OIC_INDICATOR = 'N' AND EEA_REGION.ORG_UNIT_NO IN ("
+            + placeholders
+            + ") UNION ALL "
+            + "SELECT OEO_REGION.EXEMPTION_NUMBER FROM OIC_EXEMPTION_ORG_UNIT OEO_REGION "
+            + "WHERE OEO_REGION.ORG_UNIT_NO IN ("
+            + placeholders
+            + "))",
         bindValues.toArray());
-  }
-
-  /** Whether the exemption has an application or OIC region in the bound placeholders. */
-  private static String regionExists(String placeholders) {
-    return "EXISTS (SELECT 1 FROM EXPORT_EXEMPTION_APPLICATION EEA_REGION "
-        + "WHERE EEA_REGION.EXEMPTION_NUMBER = EE.EXEMPTION_NUMBER "
-        + "AND EEA_REGION.OIC_INDICATOR = 'N' "
-        + "AND EEA_REGION.ORG_UNIT_NO IN ("
-        + placeholders
-        + ")) OR EXISTS (SELECT 1 FROM OIC_EXEMPTION_ORG_UNIT OEO_REGION "
-        + "WHERE OEO_REGION.EXEMPTION_NUMBER = EE.EXEMPTION_NUMBER "
-        + "AND OEO_REGION.ORG_UNIT_NO IN ("
-        + placeholders
-        + "))";
   }
 
   public Optional<ExemptionDetailDto> findByExemptionNumber(String exemptionNumber) {
