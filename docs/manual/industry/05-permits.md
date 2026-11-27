@@ -77,7 +77,7 @@ A permit record has these tabs: **Permit**, **Applicant**, **Shipping**,
    a scale line off this permit, select **Edit scale selection**, clear its
    **Include in permit** tick and save.
 8. Add any documents the export office needs on the **Documents** tab.
-9. Send the review request when LEXIS offers it (see below).
+9. Send the review request (see below).
 
 ![A permit request: the Permit tab](images/05-permit.png)
 
@@ -123,8 +123,8 @@ Then add what is being shipped, on the saved permit's **Package and scale** tab:
    mark**, **Pieces**, **Species**, **Grade** and **Volume (m³)**. Select
    **Save scale**. You can type the timber mark in lowercase and select
    the grade by its code.
-3. Add documents on the **Documents** tab, then select **Email review
-   request**.
+3. Add documents on the **Documents** tab, then send the review request
+   (see below).
 
 | Rule | Detail |
 |---|---|
@@ -137,22 +137,25 @@ Then add what is being shipped, on the saved permit's **Package and scale** tab:
 
 ### Send the request for review
 
-The export office starts its review when you send the request. Each time
-you save any tab of an **Active** permit that has shipping details and a
-package with scale, LEXIS asks **Send permit [number] for review?**
+The export office starts its review when you send the request. Once an
+**Active** permit has shipping details and a package with scale, a
+**Review request** notice at the top of the permit offers **Send review
+request**. LEXIS also asks **Send review request for permit [number]?**
+when a save makes the scale add up to the volume of each package.
 
 1. **Send to** is the regional export office. **Copy to** starts with the
    agent's email address on the permit, or the owner's if there is no
    agent. Change it or clear it.
-2. Select **Send request**.
+2. Select **Send request**. If the permit request isn't complete yet,
+   select **Don't send** and send it later from the notice.
 
-LEXIS confirms **Review request sent**. You get an email when the permit is
-issued. Until then it stays **Active**, shown as **(Pending)** beside its
-number.
+LEXIS confirms **Review request sent**. You only need to send it once. The
+notice shows again each time you open the permit until the permit is
+issued. Until then the permit stays **Active**, shown as **(Pending)**
+beside its number.
 
-> **If you select Cancel, or LEXIS says the request was not sent**, the
-> export office doesn't know the permit is ready. Send the request the next
-> time you save, or contact the office yourself.
+> **If LEXIS says the request was not sent**, select **Send review request**
+> to send it again, or contact the export office yourself.
 
 ### Check the fees
 

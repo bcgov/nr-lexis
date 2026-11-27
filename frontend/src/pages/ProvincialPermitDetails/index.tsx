@@ -22,9 +22,11 @@ import {
 } from '@carbon/icons-react'
 import { Cardboard, Invoice } from '@carbon/pictograms-react'
 import {
+  ActionableNotification,
   Button,
   Checkbox,
   Column,
+  FeatureFlags,
   Grid,
   InlineLoading,
   InlineNotification,
@@ -379,22 +381,42 @@ const isStorableText = (value: string, storedValue: string | null | undefined): 
 // Legacy allows an approver to move a permit to EXP; once expired, the record is read-only.
 const EDITABLE_PERMIT_STATUS_CODES = new Set(['ACT', 'COM', 'CAN', 'EXP'])
 const SERVER_ASSIGNED_PAYMENT_PENDING_STATUS = 'PPD'
-const reviewRequestSentResult = (permitNumber: string): PermitActionResult => ({
+const REVIEW_REQUEST_SENT_RESULT: PermitActionResult = {
   kind: 'success',
   title: 'Review request sent',
-  message: `Permit ${permitNumber} was sent to the regional office. You'll get an email when it's issued.`,
-})
+  message: 'The regional office has been notified.',
+}
 const REVIEW_REQUEST_FAILED_RESULT: PermitActionResult = {
   kind: 'error',
   title: 'Review request not sent',
-  message:
-    "The email couldn't be sent. Save the permit again to retry, or contact your regional export office.",
+  message: "The email couldn't be sent. Try again, or contact your regional export office.",
 }
-const REVIEW_REQUEST_CANCELLED_RESULT: PermitActionResult = {
-  kind: 'warning',
-  title: 'Review request not sent',
-  message:
-    "The regional office won't know this permit is ready. Send the request the next time you save, or contact the office.",
+
+// Volumes are stored with two decimals, so whole hundredths compare exactly. A Blanket OIC permit
+// counts every package; a Ministerial or OIC permit only the packages it carries scale from.
+const permitScaleFillsPackages = (
+  tabs: ProvincialPermitDetailTabsData,
+  blanketOic: boolean,
+): boolean => {
+  const scaleHundredthsByPackage = new Map<string, number>()
+  for (const item of tabs.items) {
+    if (!blanketOic && !item.includedInPermit) continue
+    scaleHundredthsByPackage.set(
+      item.packageNumber,
+      (scaleHundredthsByPackage.get(item.packageNumber) ?? 0) + Math.round(item.volume * 100),
+    )
+  }
+  const packages = blanketOic
+    ? tabs.packages
+    : tabs.packages.filter((row) => scaleHundredthsByPackage.has(row.packageNumber))
+  return (
+    packages.length > 0 &&
+    packages.every(
+      (row) =>
+        scaleHundredthsByPackage.get(row.packageNumber) ===
+        Math.round(Number(row.packageVolume) * 100),
+    )
+  )
 }
 
 /**
@@ -1469,9 +1491,9 @@ const ProvincialPermitDetailsPage = () => {
     const frame = requestAnimationFrame(() => reviewRequestOutcomeRef.current?.focus())
     return () => cancelAnimationFrame(frame)
   }, [reviewRequestOutcome])
+  // The review request's outcome stays until it is dismissed, replaced or the permit changes.
   const clearActionNotifications = useCallback(() => {
     setActionResult(null)
-    setReviewRequestOutcome(null)
     setPermitApprovalEmailErrorMessage('')
   }, [])
   const [isRemovingDocumentId, setIsRemovingDocumentId] = useState<string | null>(null)
@@ -1482,8 +1504,13 @@ const ProvincialPermitDetailsPage = () => {
   const [permitReviewRequestCopyTo, setPermitReviewRequestCopyTo] = useState('')
   const [showPermitReviewRequestCopyToError, setShowPermitReviewRequestCopyToError] =
     useState(false)
-  // Set by a successful save; a submitter's ready permit then offers the review request.
-  const [permitReviewCheckDue, setPermitReviewCheckDue] = useState(false)
+  // Set by a successful submitter save; the dialog opens if that save made the scale fill every
+  // package.
+  const [permitReviewCheck, setPermitReviewCheck] = useState<{
+    scaleFilledBeforeSave: boolean
+  } | null>(null)
+  // Sends aren't recorded, so this lasts only until the page leaves the permit.
+  const [permitReviewRequestSent, setPermitReviewRequestSent] = useState(false)
   // The review request's outcome shows on the page once its dialog has closed.
   const permitReviewRequestResultRef = useRef<PermitActionResult | null>(null)
   // INTENTIONAL_LEGACY_DIVERGENCE(MINISTERIAL_SCALE_SELECTION_EDIT): selection stays local until Save changes.
@@ -1684,7 +1711,8 @@ const ProvincialPermitDetailsPage = () => {
     agentClientLookupRequestRef.current += 1
     setOwnerEditClientData(null)
     setAgentEditClientData(null)
-    setPermitReviewCheckDue(false)
+    setPermitReviewCheck(null)
+    setPermitReviewRequestSent(false)
     setReviewRequestOutcome(null)
     setPermitReviewRequestOpen(false)
     setPermitReviewRequestCopyTo('')
@@ -2841,7 +2869,9 @@ const ProvincialPermitDetailsPage = () => {
     // A Blanket OIC permit's application comes with its package.
     (detail?.blanketOic ? !!detail.oicApplicationNumber : tabsData.applications.length > 0) &&
     tabsData.packages.length > 0 &&
-    tabsData.items.length > 0
+    tabsData.items.length > 0 &&
+    !!permitBaselineForm &&
+    !shippingFieldsMissing(permitBaselineForm)
   const totalFeeVolume = tabsData?.totalFeeVolume
   const calculatedPermitFee = (tabsData?.fees ?? []).reduce((total, row) => total + row.amount, 0)
   // A fee row without an amount means the permit's calculated fee has no amount either.
@@ -5112,14 +5142,14 @@ const ProvincialPermitDetailsPage = () => {
 
   // A permit other than a Ministerial or Blanket OIC permit adds and removes its applications one
   // at a time, from its Associated applications card.
-  const onAddPermitApplication = useCallback(async () => {
+  const onAddPermitApplication = useCallback(async (): Promise<boolean> => {
     const resolvedPermitNumber = String(detail?.permitNumber ?? permitNumber ?? '').trim()
     const resultSource: PermitActionResultSource = 'applications'
     const selectedApplications = selectedPermitApplicationToAdd
       ? [selectedPermitApplicationToAdd]
       : []
     if (!canAddPermitApplications || !resolvedPermitNumber || selectedApplications.length === 0) {
-      return
+      return false
     }
 
     const isLatestRequest = tryBeginPermitMutation()
@@ -5130,7 +5160,7 @@ const ProvincialPermitDetailsPage = () => {
         message: 'Wait for the current permit change to finish before saving again.',
         source: resultSource,
       })
-      return
+      return false
     }
 
     const addedTitle =
@@ -5143,7 +5173,7 @@ const ProvincialPermitDetailsPage = () => {
         selectedApplications,
       })
       if (!isLatestRequest()) {
-        return
+        return false
       }
       if (!result.success) {
         setActionResult({
@@ -5152,7 +5182,7 @@ const ProvincialPermitDetailsPage = () => {
           message: result.errors[0] || result.message || 'Unable to add application to the permit.',
           source: resultSource,
         })
-        return
+        return false
       }
 
       setPermitApplicationToAdd('')
@@ -5170,7 +5200,7 @@ const ProvincialPermitDetailsPage = () => {
       )
       try {
         await reloadPermitScaleState()
-        if (!isLatestRequest()) return
+        if (!isLatestRequest()) return false
         setActionResult({
           kind: 'success',
           title: addedTitle,
@@ -5178,8 +5208,9 @@ const ProvincialPermitDetailsPage = () => {
           source: resultSource,
           focusOnReveal: true,
         })
+        return true
       } catch (refreshError) {
-        if (!isLatestRequest()) return
+        if (!isLatestRequest()) return false
         console.error(refreshError)
         setPermitTablesErrorMessage(
           'The application was added, but permit tables could not be refreshed. Reload the page.',
@@ -5206,6 +5237,7 @@ const ProvincialPermitDetailsPage = () => {
       endPermitMutation(isLatestRequest)
       if (isLatestRequest()) setIsSavingPermitApplication(false)
     }
+    return false
   }, [
     canAddPermitApplications,
     detail?.permitNumber,
@@ -5921,16 +5953,17 @@ const ProvincialPermitDetailsPage = () => {
     [beginPermitRouteWork, canSendPermitApproval, detail?.permitNumber, permitNumber],
   )
 
-  // A tab's save that succeeds checks whether the permit is now ready for review.
+  // A save that succeeds checks whether it made the permit's scale fill its packages.
   const saveThenCheckReview = useCallback(
     async (save: () => Promise<boolean>): Promise<boolean> => {
       const onSamePermit = beginPermitRouteWork()
-      setReviewRequestOutcome(null)
+      const scaleFilledBeforeSave =
+        !!tabsData && permitScaleFillsPackages(tabsData, !!detail?.blanketOic)
       const saved = await save()
-      if (saved && onSamePermit()) setPermitReviewCheckDue(true)
+      if (saved && onSamePermit()) setPermitReviewCheck({ scaleFilledBeforeSave })
       return saved
     },
-    [beginPermitRouteWork],
+    [beginPermitRouteWork, detail?.blanketOic, tabsData],
   )
 
   const onOpenPermitReviewRequest = useCallback(async () => {
@@ -5953,22 +5986,30 @@ const ProvincialPermitDetailsPage = () => {
     setPermitReviewRequestOpen(true)
   }, [beginPermitRouteWork, detail?.permitNumber, isSendingPermitEmail, permitNumber])
 
-  // A submitter's save offers the review request once the saved permit is Active with shipping
-  // details and a package with scale, as in legacy.
+  // INTENTIONAL_LEGACY_DIVERGENCE(PERMIT_REVIEW_REQUEST_PROMPT): the save that makes the permit's
+  // scale fill its packages offers the review request, instead of the permit save.
   useEffect(() => {
-    if (!permitReviewCheckDue || isPermitTablesLoading || isPermitBusy) return
+    if (!permitReviewCheck || isPermitTablesLoading || isPermitBusy) return
     // eslint-disable-next-line @eslint-react/set-state-in-effect
-    setPermitReviewCheckDue(false)
-    if (permitReviewReady && detail && !shippingFieldsMissing(buildPermitDetailForm(detail))) {
+    setPermitReviewCheck(null)
+    if (
+      permitReviewReady &&
+      !permitReviewRequestSent &&
+      !permitReviewCheck.scaleFilledBeforeSave &&
+      !!tabsData &&
+      permitScaleFillsPackages(tabsData, !!detail?.blanketOic)
+    ) {
       void onOpenPermitReviewRequest()
     }
   }, [
-    detail,
+    detail?.blanketOic,
     isPermitBusy,
     isPermitTablesLoading,
     onOpenPermitReviewRequest,
-    permitReviewCheckDue,
+    permitReviewCheck,
     permitReviewReady,
+    permitReviewRequestSent,
+    tabsData,
   ])
 
   // The outcome shows on the page once the dialog closes. An invalid copy recipient keeps the
@@ -6016,8 +6057,9 @@ const ProvincialPermitDetailsPage = () => {
     } finally {
       if (onSamePermit()) setIsSendingPermitEmail(false)
     }
+    if (sent) setPermitReviewRequestSent(true)
     permitReviewRequestResultRef.current = sent
-      ? reviewRequestSentResult(resolvedPermitNumber)
+      ? REVIEW_REQUEST_SENT_RESULT
       : REVIEW_REQUEST_FAILED_RESULT
     return true
   }, [beginPermitRouteWork, detail?.permitNumber, permitNumber, permitReviewRequestCopyTo])
@@ -7932,7 +7974,7 @@ const ProvincialPermitDetailsPage = () => {
               </div>
             </Column>
           )}
-          {!!reviewRequestOutcome && (
+          {reviewRequestOutcome?.kind === 'success' ? (
             <Column sm={4} md={8} lg={16} className="detail-page-error">
               <div ref={reviewRequestOutcomeRef} tabIndex={-1} className="permit-page-result">
                 <ActionResultNotification
@@ -7941,6 +7983,31 @@ const ProvincialPermitDetailsPage = () => {
                 />
               </div>
             </Column>
+          ) : (
+            permitReviewReady &&
+            !permitReviewRequestSent && (
+              <Column sm={4} md={8} lg={16} className="detail-page-error">
+                <div ref={reviewRequestOutcomeRef} tabIndex={-1} className="permit-page-result">
+                  <FeatureFlags enableFocusWrapWithoutSentinels>
+                    <ActionableNotification
+                      actionButtonLabel="Send review request"
+                      closeOnEscape={false}
+                      inline
+                      kind={reviewRequestOutcome ? 'error' : 'info'}
+                      lowContrast
+                      hideCloseButton
+                      role="status"
+                      title={reviewRequestOutcome?.title ?? 'Review request'}
+                      subtitle={
+                        reviewRequestOutcome?.message ??
+                        'When your permit request is complete, send it to the regional office for review. You only need to send it once.'
+                      }
+                      onActionButtonClick={() => void onOpenPermitReviewRequest()}
+                    />
+                  </FeatureFlags>
+                </div>
+              </Column>
+            )
           )}
 
           {!!boicPackageErrorMessage && !blanketOicPackageEditorOpen && (
@@ -8230,7 +8297,7 @@ const ProvincialPermitDetailsPage = () => {
                                     !selectedPermitApplicationToAdd
                                   }
                                   renderIcon={isSavingPermitApplication ? PendingIcon : undefined}
-                                  onClick={() => void onAddPermitApplication()}
+                                  onClick={() => void saveThenCheckReview(onAddPermitApplication)}
                                 >
                                   {isSavingPermitApplication ? 'Adding…' : 'Add application'}
                                 </Button>
@@ -9176,16 +9243,16 @@ const ProvincialPermitDetailsPage = () => {
       {permitReviewRequestOpen && (
         <ConfirmationModal
           open
-          title={`Send permit ${detail?.permitNumber ?? permitNumber ?? ''} for review?`}
-          description="Your changes were saved. An email will tell the regional office this permit is ready for review."
+          title={`Send review request for permit ${detail?.permitNumber ?? permitNumber ?? ''}?`}
+          description="The regional office will get an email saying this permit is ready for review. If your permit request isn't complete yet, choose Don't send. You can send it later from the top of this page."
           confirmLabel="Send request"
+          cancelLabel="Don't send"
           pendingLabel="Sending…"
           restoreFocusAfterAction={false}
           onClose={() => {
             setPermitReviewRequestOpen(false)
-            setReviewRequestOutcome(
-              permitReviewRequestResultRef.current ?? REVIEW_REQUEST_CANCELLED_RESULT,
-            )
+            const result = permitReviewRequestResultRef.current
+            if (result) setReviewRequestOutcome(result)
             permitReviewRequestResultRef.current = null
           }}
           onConfirm={onSendPermitReviewRequest}
