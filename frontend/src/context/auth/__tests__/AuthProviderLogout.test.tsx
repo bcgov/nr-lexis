@@ -104,6 +104,10 @@ describe('AuthProvider logout', () => {
   const otherTabActivity = (key = 'lexis.session-activity') =>
     window.dispatchEvent(new StorageEvent('storage', { key, newValue: String(Date.now()) }))
 
+  // The activity listeners attach in an effect that can run after the signed-in state renders.
+  const waitForActivityListeners = () =>
+    waitFor(() => expect(window.localStorage.getItem('lexis.session-activity')).not.toBeNull())
+
   it('signs out of OIDC', async () => {
     markSessionExpiredLoginNotice()
     window.localStorage.setItem('lexis.last-login-provider', 'idir')
@@ -563,6 +567,7 @@ describe('AuthProvider logout', () => {
   it('keeps the session after a temporary activity renewal failure', async () => {
     renderProbe()
     await waitFor(() => expect(screen.getByTestId('is-logged-in')).toHaveTextContent('true'))
+    await waitForActivityListeners()
     authMocks.getOidcUser.mockClear()
     authMocks.getOidcUser.mockRejectedValueOnce(new TypeError('Failed to fetch'))
 
@@ -579,6 +584,7 @@ describe('AuthProvider logout', () => {
   it('ends the session when activity renewal finds it rejected by SSO', async () => {
     renderProbe()
     await waitFor(() => expect(screen.getByTestId('is-logged-in')).toHaveTextContent('true'))
+    await waitForActivityListeners()
     authMocks.getOidcUser.mockRejectedValueOnce(new ErrorResponse({ error: 'invalid_grant' }))
 
     await act(async () => {
