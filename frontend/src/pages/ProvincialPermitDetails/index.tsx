@@ -6331,9 +6331,11 @@ const ProvincialPermitDetailsPage = () => {
     { label: permitPageTitle, to: locationPath(location) },
     detailReturnTo,
   )
-  // The permit's own application stands in until its associated applications load.
-  const relatedApplicationNumbers =
-    associatedPermitApplications.length > 0
+  // A Blanket OIC permit's application is a hidden placeholder. On other permits, the
+  // permit's own application stands in until its associated applications load.
+  const relatedApplicationNumbers = blanketOicPermit
+    ? []
+    : associatedPermitApplications.length > 0
       ? associatedPermitApplications
       : detail?.applicationNumber
         ? [String(detail.applicationNumber)]

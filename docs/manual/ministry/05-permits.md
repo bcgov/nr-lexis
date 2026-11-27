@@ -68,7 +68,7 @@ Open the permit and check each tab.
 
 | Tab | Check |
 |---|---|
-| **Permit** | The exemption, the region, the applications on the permit, **Current permit pieces** and **Current permit volume (m³)** against **Total volume remaining (m³)**. For a Blanket OIC, the request pieces and volume. |
+| **Permit** | The exemption, the region, the applications on the permit, **Current permit pieces** and **Current permit volume (m³)** against **Total volume remaining (m³)**. For a Blanket OIC, the request pieces and volume instead of applications. |
 | **Applicant** | The owner and agent. The **Client location** decides where the invoice goes. |
 | **Shipping** | Purchaser, final destination country, transport, estimated shipping date and customs port of export. |
 | **Package and scale** | Each package and its summary of scale. |
