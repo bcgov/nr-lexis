@@ -1,5 +1,6 @@
 package ca.bc.gov.mof.lexis.repository.permit;
 
+import static ca.bc.gov.mof.lexis.repository.application.ApplicationRowQueries.APPLICATION_BY_NUMBER;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.assertj.core.groups.Tuple.tuple;
@@ -973,23 +974,49 @@ class PermitRpcRepositoryTest {
         .hasMessage("Oracle unavailable");
   }
 
+  @SuppressWarnings("unchecked")
+  private void stubApplicationRow(long applicationNumber) throws Exception {
+    when(jdbcTemplate.query(
+            eq(APPLICATION_BY_NUMBER),
+            any(RowMapper.class),
+            eq(applicationNumber)))
+        .thenAnswer(
+            invocation ->
+                List.of(((RowMapper<Object>) invocation.getArgument(1)).mapRow(resultSet, 0)));
+  }
+
   @Test
   void findApplicationStatusCodeShouldUseRequiredApplicationLookup() throws Exception {
-    stubCursorProcedure("{ call LEXIS_GROUP_5.FIND_APPLICATION_BY_NUMBER(?,?) }", 2);
-    when(resultSet.next()).thenReturn(true, false);
     when(resultSet.getString("EXPORT_APPLICATION_STATUS_CODE")).thenReturn("PMT");
+    stubApplicationRow(1000456L);
 
     PermitRpcRepository repository = new PermitRpcRepository(jdbcTemplate);
 
     assertThat(repository.findApplicationStatusCodeByNumber(1000456L)).contains("PMT");
-    verify(callableStatement).setString(1, "1000456");
-    verify(callableStatement).registerOutParameter(2, Types.REF_CURSOR);
+    verify(jdbcTemplate)
+        .query(
+            eq(APPLICATION_BY_NUMBER),
+            any(RowMapper.class),
+            eq(1000456L));
+    verify(jdbcTemplate, never()).execute(anyString(), any(CallableStatementCallback.class));
+  }
+
+  @Test
+  void applicationRowQueryShouldSkipTheCursorsPerPackageApprovalDate() {
+    assertThat(APPLICATION_BY_NUMBER)
+        .contains("WHERE EEA.APPLICATION_NUMBER = ?")
+        .contains("INNER JOIN EXPORT_APPLICATION_STATUS_CODE EASC")
+        .contains("INNER JOIN EXPORT_EXEMPTION_REASON_CODE EERC")
+        .contains("INNER JOIN EXPORT_APPLICANT_TYPE_CODE EATC")
+        .contains("OU.ORG_UNIT_NAME AS REGION")
+        .contains("ES.ADVERTISING_DATE")
+        .doesNotContain("GET_APPLICATION_APPROVAL_DATE")
+        .doesNotContain("EXPORT_PACKAGE");
   }
 
   @Test
   void findApplicationInfoShouldMapTheAuthoritativeOicIndicator() throws Exception {
-    stubCursorProcedure("{ call LEXIS_GROUP_5.FIND_APPLICATION_BY_NUMBER(?,?) }", 2);
-    when(resultSet.next()).thenReturn(true, false);
+    stubApplicationRow(1000999L);
     when(resultSet.getLong(any(String.class)))
         .thenAnswer(
             invocation ->
@@ -1012,8 +1039,6 @@ class PermitRpcRepositoryTest {
         .get()
         .extracting("applicationNumber", "exemptionNumber", "regionName", "oicIndicator")
         .containsExactly(1000999L, "EX-700", "Cariboo Natural Resource Region", "Y");
-    verify(callableStatement).setString(1, "1000999");
-    verify(callableStatement).registerOutParameter(2, Types.REF_CURSOR);
     verify(resultSet, never()).getString("END_USE_SORT");
     verify(resultSet, never()).getString("ORG_UNIT_NAME");
   }

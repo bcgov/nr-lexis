@@ -1,5 +1,6 @@
 package ca.bc.gov.mof.lexis.repository.permit;
 
+import static ca.bc.gov.mof.lexis.repository.application.ApplicationRowQueries.APPLICATION_BY_NUMBER;
 import static ca.bc.gov.mof.lexis.util.ValueUtils.coalesce;
 import static ca.bc.gov.mof.lexis.util.ValueUtils.firstNonNull;
 
@@ -294,8 +295,6 @@ public class PermitRpcRepository extends OracleRepositorySupport {
       LEXIS_GROUP_5_PACKAGE + "FIND_PACKAGES_BY_EXMP(?,?)";
   private static final String FIND_PACKAGE_BY_NUMBER =
       LEXIS_GROUP_5_PACKAGE + "FIND_PACKAGE_BY_NUMBER(?,?)";
-  private static final String FIND_APPLICATION_BY_NUMBER =
-      LEXIS_GROUP_5_PACKAGE + "FIND_APPLICATION_BY_NUMBER(?,?)";
   private static final String FIND_APPLICATION_BY_EXEMPTION =
       LEXIS_GROUP_5_PACKAGE + "FIND_APPLICATION_BY_EXEMPTION(?,?)";
   private static final String FIND_END_USE_BY_APP = LEXIS_GROUP_5_PACKAGE + "FIND_END_USE_BY_APP(?,?)";
@@ -1682,26 +1681,27 @@ public class PermitRpcRepository extends OracleRepositorySupport {
       return Optional.empty();
     }
 
-    return queryCursorSingleRequired(
-        FIND_APPLICATION_BY_NUMBER,
-        cs -> cs.setString(1, applicationNumber.toString()),
-        2,
-        rs ->
-            new ApplicationInfoRow(
-                getLong(rs, "APPLICATION_NUMBER"),
-                getString(rs, "EXEMPTION_NUMBER"),
-                getLong(rs, "ORG_UNIT_NO"),
-                getString(rs, "REGION"),
-                getString(rs, "EXPORT_PRODUCT_TYPE_CODE"),
-                getString(rs, "EXPORT_GROWTH_TYPE_CODE"),
-                // FIND_APPLICATION_BY_NUMBER does not project END_USE_SORT. The service derives it
-                // from the authoritative application end-use relationships when it is needed.
-                null,
-                getString(rs, "OWNER_CLIENT_NUMBER"),
-                getString(rs, "OWNER_CLIENT_LOCATION_CODE"),
-                getString(rs, "AGENT_CLIENT_NUMBER"),
-                getString(rs, "AGENT_CLIENT_LOCATION_CODE"),
-                getString(rs, "OIC_INDICATOR")));
+    return queryDirectRequired(
+            APPLICATION_BY_NUMBER,
+            rs ->
+                new ApplicationInfoRow(
+                    getLong(rs, "APPLICATION_NUMBER"),
+                    getString(rs, "EXEMPTION_NUMBER"),
+                    getLong(rs, "ORG_UNIT_NO"),
+                    getString(rs, "REGION"),
+                    getString(rs, "EXPORT_PRODUCT_TYPE_CODE"),
+                    getString(rs, "EXPORT_GROWTH_TYPE_CODE"),
+                    // The application row has no END_USE_SORT. The service derives it from the
+                    // authoritative application end-use relationships when it is needed.
+                    null,
+                    getString(rs, "OWNER_CLIENT_NUMBER"),
+                    getString(rs, "OWNER_CLIENT_LOCATION_CODE"),
+                    getString(rs, "AGENT_CLIENT_NUMBER"),
+                    getString(rs, "AGENT_CLIENT_LOCATION_CODE"),
+                    getString(rs, "OIC_INDICATOR")),
+            applicationNumber)
+        .stream()
+        .findFirst();
   }
 
   public Optional<String> findApplicationStatusCodeByNumber(Long applicationNumber) {
@@ -1709,11 +1709,12 @@ public class PermitRpcRepository extends OracleRepositorySupport {
       return Optional.empty();
     }
 
-    return queryCursorSingleRequired(
-        FIND_APPLICATION_BY_NUMBER,
-        cs -> cs.setString(1, applicationNumber.toString()),
-        2,
-        rs -> getString(rs, "EXPORT_APPLICATION_STATUS_CODE"));
+    return queryDirectRequired(
+            APPLICATION_BY_NUMBER,
+            rs -> getString(rs, "EXPORT_APPLICATION_STATUS_CODE"),
+            applicationNumber)
+        .stream()
+        .findFirst();
   }
 
   public List<EndUsePairRow> findEndUsesByApplicationNumber(Long applicationNumber) {

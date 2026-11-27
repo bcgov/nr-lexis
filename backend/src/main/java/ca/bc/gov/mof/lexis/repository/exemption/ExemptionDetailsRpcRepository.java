@@ -1,5 +1,6 @@
 package ca.bc.gov.mof.lexis.repository.exemption;
 
+import static ca.bc.gov.mof.lexis.repository.application.ApplicationRowQueries.APPLICATION_BY_NUMBER;
 import static ca.bc.gov.mof.lexis.util.ValueUtils.coalesce;
 import static ca.bc.gov.mof.lexis.util.ValueUtils.positiveOrNull;
 
@@ -38,8 +39,40 @@ import org.springframework.transaction.interceptor.TransactionAspectSupport;
 @Profile("oracle")
 public class ExemptionDetailsRpcRepository extends OracleRepositorySupport {
 
+  // The rows of LEXIS.FIND_APPLICATION_BY_EXEMPTION for the columns read here, without that
+  // cursor's package join and per-row approval date function, which scans the application audit.
   private static final String FIND_APPLICATIONS_BY_EXEMPTION =
-      LEXIS_GROUP_5_PACKAGE + "FIND_APPLICATION_BY_EXEMPTION(?,?)";
+      """
+      SELECT
+        EEA.APPLICATION_NUMBER,
+        EEA.EXEMPTION_APPLICATION_VOLUME,
+        EEA.OWNER_CLIENT_NUMBER,
+        EEA.AGENT_CLIENT_NUMBER,
+        EEA.OWNER_CLIENT_LOCATION_CODE,
+        EEA.AGENT_CLIENT_LOCATION_CODE,
+        EEA.EXPORT_APPLICANT_TYPE_CODE,
+        EEA.OWNER_CONTACT_NAME,
+        EEA.AGENT_CONTACT_NAME,
+        FCO.CLIENT_NAME AS OWNER_COMPANY_NAME,
+        AFCO.CLIENT_NAME AS AGENT_COMPANY_NAME,
+        EEA.EXPORT_JURISDICTION_CODE,
+        EEA.EXPORT_PRODUCT_TYPE_CODE,
+        EEA.EXPORT_APPLICATION_STATUS_CODE,
+        EASC.DESCRIPTION AS STATUS_DESCRIPTION
+      FROM EXPORT_EXEMPTION_APPLICATION EEA
+      INNER JOIN EXPORT_APPLICATION_STATUS_CODE EASC
+        ON EASC.EXPORT_APPLICATION_STATUS_CODE = EEA.EXPORT_APPLICATION_STATUS_CODE
+      INNER JOIN EXPORT_EXEMPTION_REASON_CODE EERC
+        ON EERC.EXPORT_EXEMPTION_REASON_CODE = EEA.EXPORT_EXEMPTION_REASON_CODE
+      INNER JOIN EXPORT_APPLICANT_TYPE_CODE EATC
+        ON EATC.EXPORT_APPLICANT_TYPE_CODE = EEA.EXPORT_APPLICANT_TYPE_CODE
+      LEFT JOIN THE.V_CLIENT_PUBLIC FCO
+        ON FCO.CLIENT_NUMBER = EEA.OWNER_CLIENT_NUMBER
+      LEFT JOIN THE.V_CLIENT_PUBLIC AFCO
+        ON AFCO.CLIENT_NUMBER = EEA.AGENT_CLIENT_NUMBER
+      WHERE EEA.EXEMPTION_NUMBER = ?
+      ORDER BY EEA.APPLICATION_NUMBER
+      """;
   private static final String FIND_PERMITS_BY_EXEMPTION =
       LEXIS_GROUP_5_PACKAGE + "FIND_PERMIT_DET_BY_EXMP(?,?)";
   // The deployed FIND_PERMIT_DET_BY_EXMP cursor has no ORG_UNIT_NO, so regions are read directly
@@ -50,8 +83,27 @@ public class ExemptionDetailsRpcRepository extends OracleRepositorySupport {
       FROM EXPORT_PERMIT_DETAIL
       WHERE EXEMPTION_NUMBER = ?
       """;
+  // The exemption columns of LEXIS.FIND_EXEMPTION_BY_NUMBER, which also aggregates every linked
+  // application, package and scale row that nothing here reads.
   private static final String FIND_EXEMPTION_BY_NUMBER =
-      LEXIS_GROUP_5_PACKAGE + "FIND_EXEMPTION_BY_NUMBER(?,?)";
+      """
+      SELECT
+        EE.EXEMPTION_NUMBER,
+        EE.APPROVED_VOLUME,
+        EE.APPROVAL_DATE,
+        EE.EXPIRY_DATE,
+        EE.OTHER_CONDITIONS,
+        EE.EXPORT_EXEMPTION_TYPE_CODE,
+        EE.EXPORT_EXEMPTION_STATUS_CODE,
+        EE.ENTRY_USERID,
+        EE.ENTRY_TIMESTAMP,
+        EE.UPDATE_USERID,
+        EE.UPDATE_TIMESTAMP
+      FROM EXPORT_EXEMPTION EE
+      INNER JOIN EXPORT_EXEMPTION_STATUS_CODE EESC
+        ON EESC.EXPORT_EXEMPTION_STATUS_CODE = EE.EXPORT_EXEMPTION_STATUS_CODE
+      WHERE EE.EXEMPTION_NUMBER = ?
+      """;
   private static final String FIND_EXEMPTION_TYPE_BY_NUMBER =
       """
       SELECT EXPORT_EXEMPTION_TYPE_CODE
@@ -62,8 +114,6 @@ public class ExemptionDetailsRpcRepository extends OracleRepositorySupport {
       LEXIS_GROUP_11_PACKAGE + "FIND_ALL_EXPIRING_EXEMPTIONS(?)";
   private static final String FIND_EXEMPTION_FILE_DETAILS =
       LEXIS_GROUP_5_PACKAGE + "FIND_EXEMPT_FILE_DETAILS(?,?)";
-  private static final String FIND_APPLICATION_BY_NUMBER =
-      LEXIS_GROUP_5_PACKAGE + "FIND_APPLICATION_BY_NUMBER(?,?)";
   private static final String FIND_PURCHASE_OFFERS_BY_APPLICATION =
       LEXIS_GROUP_5_PACKAGE + "FIND_PURCHASE_OFFERS_BY_APP(?,?)";
   private static final String FIND_PERMITS_BY_APPLICATION =
@@ -142,11 +192,8 @@ public class ExemptionDetailsRpcRepository extends OracleRepositorySupport {
     if (normalized == null) {
       return List.of();
     }
-    return queryCursorProcedureRequired(
-        FIND_APPLICATIONS_BY_EXEMPTION,
-        cs -> cs.setString(1, normalized),
-        2,
-        this::mapApplicationSummaryRow);
+    return queryDirectRequired(
+        FIND_APPLICATIONS_BY_EXEMPTION, this::mapApplicationSummaryRow, normalized);
   }
 
   public List<PermitSummaryRow> findPermitsByExemptionNumber(String exemptionNumber) {
@@ -203,12 +250,9 @@ public class ExemptionDetailsRpcRepository extends OracleRepositorySupport {
     if (normalized == null) {
       return false;
     }
-    return queryCursorSingleRequired(
-            FIND_EXEMPTION_BY_NUMBER,
-            cs -> cs.setString(1, normalized),
-            2,
-            rs -> getString(rs, "EXEMPTION_NUMBER"))
-        .isPresent();
+    return !queryDirectRequired(
+            FIND_EXEMPTION_BY_NUMBER, rs -> getString(rs, "EXEMPTION_NUMBER"), normalized)
+        .isEmpty();
   }
 
   public Optional<ExemptionRecord> findExemptionRecord(String exemptionNumber) {
@@ -216,11 +260,9 @@ public class ExemptionDetailsRpcRepository extends OracleRepositorySupport {
     if (normalized == null) {
       return Optional.empty();
     }
-    return queryCursorSingleRequired(
-        FIND_EXEMPTION_BY_NUMBER,
-        cs -> cs.setString(1, normalized),
-        2,
-        this::mapExemptionRecord);
+    return queryDirectRequired(FIND_EXEMPTION_BY_NUMBER, this::mapExemptionRecord, normalized)
+        .stream()
+        .findFirst();
   }
 
   public List<String> findAllExpiringExemptionNumbers() {
@@ -267,11 +309,10 @@ public class ExemptionDetailsRpcRepository extends OracleRepositorySupport {
     if (applicationNumber == null || applicationNumber < 1) {
       return Optional.empty();
     }
-    return queryCursorSingleRequired(
-        FIND_APPLICATION_BY_NUMBER,
-        cs -> cs.setString(1, applicationNumber.toString()),
-        2,
-        this::mapApplicationLinkRecord);
+    return queryDirectRequired(
+            APPLICATION_BY_NUMBER, this::mapApplicationLinkRecord, applicationNumber)
+        .stream()
+        .findFirst();
   }
 
   public boolean hasActiveValidOffers(Long applicationNumber) {
