@@ -38,6 +38,10 @@ exemption is **Active** you request permits against it.
    **Exemption status**, and select **Search**.
 3. Select the number in the **Exemption** column.
 
+A list date range finds an exemption when one of your applications on it is
+listed in that range. Blanket OIC and OIC exemptions have no list date, so a
+list date search leaves them out.
+
 The results show each exemption's type, status, owner and agent client
 numbers, **Approval volume (m³)**, **Balance remaining (m³)**, list date,
 expiry date and region.
