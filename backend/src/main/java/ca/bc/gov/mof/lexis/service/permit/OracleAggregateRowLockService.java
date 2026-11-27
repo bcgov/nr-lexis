@@ -25,6 +25,7 @@ import java.util.function.Supplier;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Profile;
 import org.springframework.dao.PessimisticLockingFailureException;
+import org.springframework.jdbc.UncategorizedSQLException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.interceptor.TransactionAspectSupport;
@@ -176,9 +177,26 @@ public class OracleAggregateRowLockService {
       publishFreshVersion(optimisticTarget);
       return result;
     } catch (PessimisticLockingFailureException exception) {
-      throw new DistributedLockBusyException(
-          "Another LEXIS operation is updating the same record. Try again shortly.", exception);
+      throw recordBusy(exception);
+    } catch (UncategorizedSQLException exception) {
+      if (isOracleRowLockTimeout(exception)) {
+        throw recordBusy(exception);
+      }
+      throw exception;
     }
+  }
+
+  private static DistributedLockBusyException recordBusy(RuntimeException cause) {
+    return new DistributedLockBusyException(
+        "Another LEXIS operation is updating the same record. Try again shortly.", cause);
+  }
+
+  // Spring's default translator classifies by SQLState and leaves Oracle's row lock timeouts
+  // uncategorized: ORA-30006 (FOR UPDATE WAIT expired) and ORA-00054 (resource busy).
+  private static boolean isOracleRowLockTimeout(UncategorizedSQLException exception) {
+    return exception.getSQLException() != null
+        && (exception.getSQLException().getErrorCode() == 30006
+            || exception.getSQLException().getErrorCode() == 54);
   }
 
   @Transactional
