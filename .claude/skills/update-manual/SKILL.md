@@ -108,7 +108,10 @@ a chapter, and add new ones here when the business confirms wording.
   records. The permit **(Pending)** label is separate and stays.
 - Ministry `02-applications.md`, **Disapprove an application**, step 4: keep
   the business's wording and order word for word. Reflow lines only.
-- Users never see an application on a Blanket OIC permit. Ministry
+- Users never see an application on a Blanket OIC permit. It exists only in
+  the background, so don't mention it in either edition: not that it exists,
+  and not that a Blanket OIC exemption or permit hides or doesn't list
+  application numbers. Ministry
   `02-applications.md`, **Change an application**: the agent change after the
   details lock names Ministerial permits only, and says add or remove, not
   change.

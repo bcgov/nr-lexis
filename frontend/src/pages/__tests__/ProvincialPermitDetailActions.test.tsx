@@ -5751,6 +5751,36 @@ describe('Provincial Permit Detail Action Smoke', () => {
     )
   })
 
+  it('leaves the hidden application of a Blanket OIC permit out of the header', async () => {
+    mockedFetchProvincialPermitDetail.mockResolvedValue({
+      ...permitDetail,
+      applicationNumber: 1000999,
+      exemptionStatusCode: 'ACT',
+      exemptionTypeDescription: 'Blanket OIC',
+      blanketOic: true,
+      oicApplicationNumber: 1000999,
+    })
+    mockedFetchProvincialPermitDetailTabs.mockResolvedValue({
+      ...tabsResult,
+      applications: ['1000999'],
+      applicationStatuses: { '1000999': 'Permitted' },
+    })
+    renderPermitDetails()
+
+    await screen.findByRole('heading', { level: 1, name: /^Permit 777/ })
+    await waitFor(() => expect(mockedFetchProvincialPermitDetailTabs).toHaveBeenCalled())
+    const subtitle = getPageSubtitle()
+    await waitFor(() =>
+      expect(
+        Array.from(
+          subtitle.querySelectorAll('.record-header-subtitle__item'),
+          (item) => item.textContent,
+        ),
+      ).toEqual(['Author: idir\\permit-author', 'Exemption number: EX-9 (ACT)']),
+    )
+    expect(within(subtitle).queryByText(/1000999/)).not.toBeInTheDocument()
+  })
+
   it('shows header records as text when the user cannot open their pages', async () => {
     mockedUseAuth.mockReturnValue(
       createTestAuthContext({
