@@ -2220,7 +2220,6 @@ const ProvincialPermitDetailsPage = () => {
     ? selectedBlanketOicPackageNumberState
     : (blanketOicPackageOptions[0]?.value ?? '')
 
-  // Keep packages with only unassigned rows available so their scales can be re-included.
   const normalPermitPackageOptions = useMemo(
     () =>
       !blanketOicPermit
