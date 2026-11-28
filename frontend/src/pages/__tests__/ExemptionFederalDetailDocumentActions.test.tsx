@@ -871,6 +871,30 @@ describe('Exemption and Federal Detail Document Actions', () => {
     },
   )
 
+  it('does not request the applications a Blanket OIC hides', async () => {
+    mockedFetchProvincialExemptionDetail.mockResolvedValue({
+      ...exemptionDetail,
+      exemptionTypeCode: 'B',
+      exemptionTypeDescription: 'Blanket OIC',
+      blanketOic: true,
+    })
+    render(
+      <MemoryRouter initialEntries={['/provincial/exemption/EX-777']}>
+        <Routes>
+          <Route
+            path="/provincial/exemption/:exemptionNumber"
+            element={<ProvincialExemptionDetailsPage />}
+          />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    expect((await screen.findAllByText('Blanket OIC')).length).toBeGreaterThan(0)
+    expect(mockedFetchExemptionPermits).toHaveBeenCalled()
+    expect(mockedFetchExemptionApplications).not.toHaveBeenCalled()
+    expect(screen.queryByRole('tab', { name: 'Applications' })).not.toBeInTheDocument()
+  })
+
   it('names the owner of the first listed application, which the server compares', async () => {
     const listedApplication = (applicationNumber: string, ownerClientNumber: string) => ({
       applicationNumber,

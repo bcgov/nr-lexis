@@ -5,6 +5,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.assertj.core.api.Assertions.tuple;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.CALLS_REAL_METHODS;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.mock;
@@ -707,7 +708,7 @@ class OracleExemptionDetailsRpcServiceTest {
                 new ExemptionDetailsRpcRepository.ApplicationSummaryRow(
                     1000462L, 16.0d, 16.0d, "00077881", "P", "S", "REJ")));
     when(repository.findExemptionRecord("EX-205")).thenReturn(Optional.of(exemption("ACT")));
-    when(repository.findApplicationNumbersWithPermitsByExemptionNumber("EX-205"))
+    when(repository.findApplicationNumbersWithPermits(eq("EX-205"), any()))
         .thenReturn(Set.of(1000457L, 1000460L, 1000461L));
 
     ExemptionDetailsRpcService.ExemptionApplicationsResponse response =
@@ -725,7 +726,7 @@ class OracleExemptionDetailsRpcServiceTest {
             tuple(1000460L, false),
             tuple(1000461L, false),
             tuple(1000462L, false));
-    verify(repository).findApplicationNumbersWithPermitsByExemptionNumber("EX-205");
+    verify(repository).findApplicationNumbersWithPermits(eq("EX-205"), any());
     verify(repository, never()).findPermitsByApplicationNumberRequired(any());
   }
 
@@ -741,7 +742,7 @@ class OracleExemptionDetailsRpcServiceTest {
         service.getApplications("EX-205", true, ignored -> false);
 
     assertThat(response.applications()).isEmpty();
-    verify(repository, never()).findApplicationNumbersWithPermitsByExemptionNumber(any());
+    verify(repository, never()).findApplicationNumbersWithPermits(any(), any());
     verify(repository, never()).findExemptionRecord(any());
   }
 
@@ -755,7 +756,7 @@ class OracleExemptionDetailsRpcServiceTest {
                 new ExemptionDetailsRpcRepository.ApplicationSummaryRow(
                     1000458L, 12.0d, 12.0d, "00077881", "P", "S", "APP")));
     when(repository.findExemptionRecord("EX-205")).thenReturn(Optional.of(exemption(status)));
-    when(repository.findApplicationNumbersWithPermitsByExemptionNumber("EX-205"))
+    when(repository.findApplicationNumbersWithPermits(eq("EX-205"), any()))
         .thenReturn(Set.of());
 
     ExemptionDetailsRpcService.ExemptionApplicationsResponse response =
@@ -778,7 +779,7 @@ class OracleExemptionDetailsRpcServiceTest {
                     1000456L, 95.0d, 95.0d, "00077881", "P", "S", "EXE")));
     when(repository.findExemptionRecord("EX-205")).thenReturn(Optional.of(exemption(status)));
     if (removable) {
-      when(repository.findApplicationNumbersWithPermitsByExemptionNumber("EX-205"))
+      when(repository.findApplicationNumbersWithPermits(eq("EX-205"), any()))
           .thenReturn(Set.of());
     }
 
@@ -790,7 +791,7 @@ class OracleExemptionDetailsRpcServiceTest {
         .extracting(ExemptionDetailsRpcService.ApplicationItem::removable)
         .isEqualTo(removable);
     if (!removable) {
-      verify(repository, never()).findApplicationNumbersWithPermitsByExemptionNumber(any());
+      verify(repository, never()).findApplicationNumbersWithPermits(any(), any());
     }
   }
 
@@ -3775,6 +3776,62 @@ class OracleExemptionDetailsRpcServiceTest {
     assertThat(response.success()).isTrue();
     verify(repository, atLeastOnce()).findApplicationLinkRecord(1000457L);
     verify(repository, never()).findApplicationLinkRecord(1000456L);
+    verify(notificationService)
+        .publish(
+            new WorkflowEmailEvent.ExemptionApproval(
+                "EX-205", "1000457\n1000456", "edited@example.com", RegionalMailRoute.RSI));
+  }
+
+  @Test
+  void queueApprovalEmailsShouldListApplicationsInTheLegacyCursorsOrder() {
+    when(repository.findExemptionRecord("EX-205")).thenReturn(Optional.of(exemption("ACT")));
+    when(repository.findApplicationSummariesByExemptionNumber("EX-205"))
+        .thenReturn(
+            List.of(
+                applicationSummary(1000456L, "00077881"),
+                applicationSummary(1000457L, "00077881")));
+    when(repository.findLegacyApplicationOrder("EX-205")).thenReturn(List.of(1000457L, 1000456L));
+    when(repository.findApplicationLinkRecord(1000457L))
+        .thenReturn(
+            Optional.of(
+                applicationWithIdentity(
+                    1000457L, "00077881", "00", null, null, "EXE", "EX-205", 1834L)));
+
+    assertThat(
+            service.queueApprovalEmails(
+                List.of(
+                    new ExemptionDetailsRpcService.ApprovalRecipients(
+                        "EX-205", "manual@example.com", ""))))
+        .containsExactly(
+            new ExemptionDetailsRpcService.ApprovalEmailOutcome(
+                "EX-205", true, "Approval email queued."));
+    verify(notificationService)
+        .publish(
+            new WorkflowEmailEvent.ExemptionApproval(
+                "EX-205", "1000457\n1000456", "manual@example.com", RegionalMailRoute.RSI));
+  }
+
+  @Test
+  void getApplicationsShouldLookUpPermitsForOnlyTheListedRemovableApplications() {
+    when(repository.findApplicationSummariesByExemptionNumber("EX-205"))
+        .thenReturn(
+            List.of(
+                new ExemptionDetailsRpcRepository.ApplicationSummaryRow(
+                    1000456L, 1.0d, 1.0d, "00077881", "P", "S", "APP"),
+                new ExemptionDetailsRpcRepository.ApplicationSummaryRow(
+                    1000457L, 1.0d, 1.0d, "00077881", "P", "S", "NEW"),
+                new ExemptionDetailsRpcRepository.ApplicationSummaryRow(
+                    1000458L, 1.0d, 1.0d, "00077881", "F", "S", "APP")));
+    when(repository.findExemptionRecord("EX-205")).thenReturn(Optional.of(exemption("NEW")));
+    when(repository.findApplicationNumbersWithPermits("EX-205", List.of(1000456L)))
+        .thenReturn(Set.of());
+
+    ExemptionDetailsRpcService.ExemptionApplicationsResponse response =
+        service.getApplications("EX-205", false, ignored -> true);
+
+    assertThat(response.applications())
+        .extracting("applicationNumber", "removable")
+        .containsExactly(tuple(1000456L, true), tuple(1000457L, false));
   }
 
   @Test

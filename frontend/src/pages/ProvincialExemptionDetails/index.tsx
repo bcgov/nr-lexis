@@ -560,6 +560,15 @@ const ExemptionClientTile = ({
   </Tile>
 )
 
+// A Blanket OIC hides its applications, so the list isn't read.
+const fetchShownExemptionApplications = (
+  exemptionNumber: string,
+  blanketOic: boolean,
+): ReturnType<typeof fetchExemptionApplications> =>
+  blanketOic
+    ? Promise.resolve({ applications: [], containsUnmanu: false, ownerNumber: '' })
+    : fetchExemptionApplications(exemptionNumber)
+
 const ProvincialExemptionDetailsPage = () => {
   const navigate = useNavigate()
   const location = useLocation()
@@ -998,7 +1007,7 @@ const ProvincialExemptionDetailsPage = () => {
         const [documentsResult, applicationsResult, editContextResult, permitsResult] =
           await Promise.allSettled([
             fetchExemptionDocuments(exemptionNumber),
-            fetchExemptionApplications(exemptionNumber),
+            fetchShownExemptionApplications(exemptionNumber, response.blanketOic),
             fetchExemptionEditContext(exemptionNumber),
             fetchExemptionPermits(exemptionNumber),
           ])
@@ -1590,7 +1599,7 @@ const ProvincialExemptionDetailsPage = () => {
         // Read after the detail's record version, so none of them is older than it.
         const [[nextApplications, nextContext]] = await Promise.all([
           Promise.all([
-            fetchExemptionApplications(exemptionNumber),
+            fetchShownExemptionApplications(exemptionNumber, nextDetail.blanketOic),
             fetchExemptionEditContext(exemptionNumber),
           ]),
           refreshPermitData(nextDetail.exemptionNumber),

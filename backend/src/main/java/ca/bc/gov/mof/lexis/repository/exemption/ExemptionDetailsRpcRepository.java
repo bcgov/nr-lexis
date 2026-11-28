@@ -20,7 +20,10 @@ import java.sql.Timestamp;
 import java.sql.Types;
 import java.time.Instant;
 import java.time.LocalDate;
+import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -42,8 +45,8 @@ import org.springframework.transaction.interceptor.TransactionAspectSupport;
 @Profile("oracle")
 public class ExemptionDetailsRpcRepository extends OracleRepositorySupport {
 
-  // The exemption's applications that LEXIS.FIND_PERMIT_DET_BY_APP lists a permit for, in one read.
-  private static final String FIND_APPLICATIONS_WITH_PERMITS_BY_EXEMPTION =
+  // Which of the given applications LEXIS.FIND_PERMIT_DET_BY_APP lists a permit for, in one read.
+  private static final String FIND_APPLICATIONS_WITH_PERMITS =
       """
       SELECT DISTINCT EEA.APPLICATION_NUMBER
       FROM EXPORT_EXEMPTION_APPLICATION EEA
@@ -57,7 +60,10 @@ public class ExemptionDetailsRpcRepository extends OracleRepositorySupport {
       INNER JOIN EXPORT_PERMIT_STATUS_CODE EPSC
         ON EPSC.EXPORT_PERMIT_STATUS_CODE = EPD.EXPORT_PERMIT_STATUS_CODE
       WHERE EEA.EXEMPTION_NUMBER = ?
+        AND EEA.APPLICATION_NUMBER IN (%s)
       """;
+  // Oracle's limit on expressions in one IN list.
+  private static final int MAX_IN_LIST_SIZE = 1000;
   private static final String FIND_APPLICATIONS_BY_EXEMPTION =
       LEXIS_GROUP_5_PACKAGE + "FIND_APPLICATION_BY_EXEMPTION(?,?)";
   private static final String FIND_PERMITS_BY_EXEMPTION =
@@ -175,17 +181,29 @@ public class ExemptionDetailsRpcRepository extends OracleRepositorySupport {
         rs -> getLong(rs, "APPLICATION_NUMBER"));
   }
 
-  /** The exemption's applications that have a permit row, as the per-application cursor finds it. */
-  public Set<Long> findApplicationNumbersWithPermitsByExemptionNumber(String exemptionNumber) {
+  /** The given linked applications that have a permit row, as the per-application cursor does. */
+  public Set<Long> findApplicationNumbersWithPermits(
+      String exemptionNumber, List<Long> applicationNumbers) {
     String normalized = trim(exemptionNumber);
-    if (normalized == null) {
+    if (normalized == null || applicationNumbers.isEmpty()) {
       return Set.of();
     }
-    return Set.copyOf(
-        queryDirectRequired(
-            FIND_APPLICATIONS_WITH_PERMITS_BY_EXEMPTION,
-            rs -> getLong(rs, "APPLICATION_NUMBER"),
-            normalized));
+    Set<Long> withPermits = new HashSet<>();
+    for (int start = 0; start < applicationNumbers.size(); start += MAX_IN_LIST_SIZE) {
+      List<Long> chunk =
+          applicationNumbers.subList(
+              start, Math.min(start + MAX_IN_LIST_SIZE, applicationNumbers.size()));
+      List<Object> bindValues = new ArrayList<>(chunk.size() + 1);
+      bindValues.add(normalized);
+      bindValues.addAll(chunk);
+      withPermits.addAll(
+          queryDirectRequired(
+              FIND_APPLICATIONS_WITH_PERMITS.formatted(
+                  String.join(", ", Collections.nCopies(chunk.size(), "?"))),
+              rs -> getLong(rs, "APPLICATION_NUMBER"),
+              bindValues.toArray()));
+    }
+    return Set.copyOf(withPermits);
   }
 
   public List<PermitSummaryRow> findPermitsByExemptionNumber(String exemptionNumber) {

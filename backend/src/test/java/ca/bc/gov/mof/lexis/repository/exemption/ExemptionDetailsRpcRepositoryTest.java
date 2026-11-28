@@ -534,25 +534,40 @@ class ExemptionDetailsRpcRepositoryTest {
   }
 
   @Test
-  void applicationsWithPermitsShouldBeReadForTheWholeExemptionInOneQuery() throws Exception {
-    JdbcTemplate jdbcTemplate = mock(JdbcTemplate.class);
-    ResultSet row = mock(ResultSet.class);
-    when(row.getLong("APPLICATION_NUMBER")).thenReturn(108653L);
-    stubDirectRow(jdbcTemplate, row, "26-8759");
-    ExemptionDetailsRpcRepository repository = new ExemptionDetailsRpcRepository(jdbcTemplate);
+  void applicationsWithPermitsShouldBeReadForOnlyTheGivenApplications() {
+    PermitLookupRepository repository = new PermitLookupRepository(List.of(108653L));
 
-    assertThat(repository.findApplicationNumbersWithPermitsByExemptionNumber(" 26-8759 "))
+    assertThat(repository.findApplicationNumbersWithPermits(" 26-8759 ", List.of(108653L, 108654L)))
         .containsExactly(108653L);
-    assertThat(repository.findApplicationNumbersWithPermitsByExemptionNumber(" ")).isEmpty();
 
-    String sql = capturedDirectSql(jdbcTemplate, "26-8759");
-    assertThat(sql)
+    assertThat(repository.binds).containsExactly(List.of("26-8759", 108653L, 108654L));
+    assertThat(repository.sqls.get(0))
         .contains("WHERE EEA.EXEMPTION_NUMBER = ?")
+        .contains("AND EEA.APPLICATION_NUMBER IN (?, ?)")
         .contains("ON EP.APPLICATION_NUMBER = EEA.APPLICATION_NUMBER")
         .contains("ON ESD.PACKAGE_NUMBER = EP.PACKAGE_NUMBER")
         .contains("AND EPD.EXEMPTION_NUMBER = EEA.EXEMPTION_NUMBER")
         .contains("INNER JOIN EXPORT_PERMIT_STATUS_CODE EPSC");
-    verify(jdbcTemplate, never()).execute(any(String.class), any(CallableStatementCallback.class));
+  }
+
+  @Test
+  void applicationsWithPermitsShouldNotQueryWithoutApplicationsOrExemption() {
+    PermitLookupRepository repository = new PermitLookupRepository(List.of());
+
+    assertThat(repository.findApplicationNumbersWithPermits("26-8759", List.of())).isEmpty();
+    assertThat(repository.findApplicationNumbersWithPermits(" ", List.of(108653L))).isEmpty();
+    assertThat(repository.sqls).isEmpty();
+  }
+
+  @Test
+  void applicationsWithPermitsShouldStayWithinOraclesInListLimit() {
+    PermitLookupRepository repository = new PermitLookupRepository(List.of());
+    List<Long> applicationNumbers =
+        java.util.stream.LongStream.rangeClosed(1, 1001).boxed().toList();
+
+    repository.findApplicationNumbersWithPermits("26-8759", applicationNumbers);
+
+    assertThat(repository.binds).extracting(List::size).containsExactly(1001, 2);
   }
 
   @Test
@@ -561,6 +576,8 @@ class ExemptionDetailsRpcRepositoryTest {
     JdbcTemplate jdbcTemplate = mock(JdbcTemplate.class);
     when(jdbcTemplate.query(any(String.class), any(RowMapper.class), any()))
         .thenThrow(new DataAccessResourceFailureException("Oracle unavailable"));
+    when(jdbcTemplate.query(any(String.class), any(RowMapper.class), any(), any()))
+        .thenThrow(new DataAccessResourceFailureException("Oracle unavailable"));
     ExemptionDetailsRpcRepository repository = new ExemptionDetailsRpcRepository(jdbcTemplate);
 
     assertOracleFailure(() -> repository.findApplicationSummariesByExemptionNumber("26-8759"));
@@ -568,7 +585,7 @@ class ExemptionDetailsRpcRepositoryTest {
     assertOracleFailure(() -> repository.findExemptionRecord("26-8759"));
     assertOracleFailure(() -> repository.existsByExemptionNumber("26-8759"));
     assertOracleFailure(
-        () -> repository.findApplicationNumbersWithPermitsByExemptionNumber("26-8759"));
+        () -> repository.findApplicationNumbersWithPermits("26-8759", List.of(108653L)));
   }
 
   @Test
@@ -682,6 +699,26 @@ class ExemptionDetailsRpcRepositoryTest {
     assertThatThrownBy(operation::run)
         .isInstanceOf(DataAccessResourceFailureException.class)
         .hasMessage("Oracle unavailable");
+  }
+
+  private static final class PermitLookupRepository extends ExemptionDetailsRpcRepository {
+    private final List<Long> rows;
+    private final List<String> sqls = new java.util.ArrayList<>();
+    private final List<List<Object>> binds = new java.util.ArrayList<>();
+
+    PermitLookupRepository(List<Long> rows) {
+      super(null);
+      this.rows = rows;
+    }
+
+    @Override
+    @SuppressWarnings("unchecked")
+    protected <T> List<T> queryDirectRequired(
+        String sql, SqlRowMapper<T> rowMapper, Object... bindValues) {
+      sqls.add(sql);
+      binds.add(List.of(bindValues));
+      return (List<T>) rows;
+    }
   }
 
   private static final class FailingExemptionDetailsRpcRepository
