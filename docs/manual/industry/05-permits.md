@@ -77,7 +77,9 @@ A permit record has these tabs: **Permit**, **Applicant**, **Shipping**,
    a scale line off this permit, select **Edit scale selection**, clear its
    **Include in permit** tick and save. A package with every line cleared
    leaves the tab. To add its lines back, take the application off the
-   permit and include it again.
+   permit and include it again. That also adds back lines you cleared in
+   the application's other packages, so check them and clear any you still
+   want left off.
 8. Add any documents the export office needs on the **Documents** tab.
 9. Send the review request (see below).
 
