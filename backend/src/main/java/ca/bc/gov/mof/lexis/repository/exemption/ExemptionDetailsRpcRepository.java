@@ -1,5 +1,8 @@
 package ca.bc.gov.mof.lexis.repository.exemption;
 
+import static ca.bc.gov.mof.lexis.repository.application.ApplicationRowQueries.APPLICATIONS_BY_EXEMPTION;
+import static ca.bc.gov.mof.lexis.repository.application.ApplicationRowQueries.APPLICATION_BY_NUMBER;
+import static ca.bc.gov.mof.lexis.repository.exemption.ExemptionRowQueries.EXEMPTION_BY_NUMBER;
 import static ca.bc.gov.mof.lexis.util.ValueUtils.coalesce;
 import static ca.bc.gov.mof.lexis.util.ValueUtils.positiveOrNull;
 
@@ -17,10 +20,14 @@ import java.sql.Timestamp;
 import java.sql.Types;
 import java.time.Instant;
 import java.time.LocalDate;
+import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.context.annotation.Profile;
 import org.springframework.dao.DataAccessException;
@@ -38,6 +45,25 @@ import org.springframework.transaction.interceptor.TransactionAspectSupport;
 @Profile("oracle")
 public class ExemptionDetailsRpcRepository extends OracleRepositorySupport {
 
+  // Which of the given applications LEXIS.FIND_PERMIT_DET_BY_APP lists a permit for, in one read.
+  private static final String FIND_APPLICATIONS_WITH_PERMITS =
+      """
+      SELECT DISTINCT EEA.APPLICATION_NUMBER
+      FROM EXPORT_EXEMPTION_APPLICATION EEA
+      INNER JOIN EXPORT_PACKAGE EP
+        ON EP.APPLICATION_NUMBER = EEA.APPLICATION_NUMBER
+      INNER JOIN EXPORT_SCALE_DETAIL ESD
+        ON ESD.PACKAGE_NUMBER = EP.PACKAGE_NUMBER
+      INNER JOIN EXPORT_PERMIT_DETAIL EPD
+        ON EPD.EXPORT_PERMIT_DETAIL_NUMBER = ESD.EXPORT_PERMIT_DETAIL_NUMBER
+       AND EPD.EXEMPTION_NUMBER = EEA.EXEMPTION_NUMBER
+      INNER JOIN EXPORT_PERMIT_STATUS_CODE EPSC
+        ON EPSC.EXPORT_PERMIT_STATUS_CODE = EPD.EXPORT_PERMIT_STATUS_CODE
+      WHERE EEA.EXEMPTION_NUMBER = ?
+        AND EEA.APPLICATION_NUMBER IN (%s)
+      """;
+  // Oracle's limit on expressions in one IN list.
+  private static final int MAX_IN_LIST_SIZE = 1000;
   private static final String FIND_APPLICATIONS_BY_EXEMPTION =
       LEXIS_GROUP_5_PACKAGE + "FIND_APPLICATION_BY_EXEMPTION(?,?)";
   private static final String FIND_PERMITS_BY_EXEMPTION =
@@ -50,8 +76,6 @@ public class ExemptionDetailsRpcRepository extends OracleRepositorySupport {
       FROM EXPORT_PERMIT_DETAIL
       WHERE EXEMPTION_NUMBER = ?
       """;
-  private static final String FIND_EXEMPTION_BY_NUMBER =
-      LEXIS_GROUP_5_PACKAGE + "FIND_EXEMPTION_BY_NUMBER(?,?)";
   private static final String FIND_EXEMPTION_TYPE_BY_NUMBER =
       """
       SELECT EXPORT_EXEMPTION_TYPE_CODE
@@ -62,8 +86,6 @@ public class ExemptionDetailsRpcRepository extends OracleRepositorySupport {
       LEXIS_GROUP_11_PACKAGE + "FIND_ALL_EXPIRING_EXEMPTIONS(?)";
   private static final String FIND_EXEMPTION_FILE_DETAILS =
       LEXIS_GROUP_5_PACKAGE + "FIND_EXEMPT_FILE_DETAILS(?,?)";
-  private static final String FIND_APPLICATION_BY_NUMBER =
-      LEXIS_GROUP_5_PACKAGE + "FIND_APPLICATION_BY_NUMBER(?,?)";
   private static final String FIND_PURCHASE_OFFERS_BY_APPLICATION =
       LEXIS_GROUP_5_PACKAGE + "FIND_PURCHASE_OFFERS_BY_APP(?,?)";
   private static final String FIND_PERMITS_BY_APPLICATION =
@@ -142,11 +164,46 @@ public class ExemptionDetailsRpcRepository extends OracleRepositorySupport {
     if (normalized == null) {
       return List.of();
     }
+    return queryDirectRequired(
+        APPLICATIONS_BY_EXEMPTION, this::mapApplicationSummaryRow, normalized);
+  }
+
+  /** The unordered legacy cursor's application order; legacy took its first row as the owner. */
+  public List<Long> findLegacyApplicationOrder(String exemptionNumber) {
+    String normalized = trim(exemptionNumber);
+    if (normalized == null) {
+      return List.of();
+    }
     return queryCursorProcedureRequired(
         FIND_APPLICATIONS_BY_EXEMPTION,
         cs -> cs.setString(1, normalized),
         2,
-        this::mapApplicationSummaryRow);
+        rs -> getLong(rs, "APPLICATION_NUMBER"));
+  }
+
+  /** The given linked applications that have a permit row, as the per-application cursor does. */
+  public Set<Long> findApplicationNumbersWithPermits(
+      String exemptionNumber, List<Long> applicationNumbers) {
+    String normalized = trim(exemptionNumber);
+    if (normalized == null || applicationNumbers.isEmpty()) {
+      return Set.of();
+    }
+    Set<Long> withPermits = new HashSet<>();
+    for (int start = 0; start < applicationNumbers.size(); start += MAX_IN_LIST_SIZE) {
+      List<Long> chunk =
+          applicationNumbers.subList(
+              start, Math.min(start + MAX_IN_LIST_SIZE, applicationNumbers.size()));
+      List<Object> bindValues = new ArrayList<>(chunk.size() + 1);
+      bindValues.add(normalized);
+      bindValues.addAll(chunk);
+      withPermits.addAll(
+          queryDirectRequired(
+              FIND_APPLICATIONS_WITH_PERMITS.formatted(
+                  String.join(", ", Collections.nCopies(chunk.size(), "?"))),
+              rs -> getLong(rs, "APPLICATION_NUMBER"),
+              bindValues.toArray()));
+    }
+    return Set.copyOf(withPermits);
   }
 
   public List<PermitSummaryRow> findPermitsByExemptionNumber(String exemptionNumber) {
@@ -187,15 +244,11 @@ public class ExemptionDetailsRpcRepository extends OracleRepositorySupport {
     if (normalized == null) {
       return Optional.empty();
     }
-    return jdbcTemplate
-        .query(
+    return queryDirectSingleRequired(
             FIND_EXEMPTION_TYPE_BY_NUMBER,
-            (rs, rowNumber) ->
-                trim(getString(rs, "EXPORT_EXEMPTION_TYPE_CODE")),
+            rs -> trim(getString(rs, "EXPORT_EXEMPTION_TYPE_CODE")),
             normalized)
-        .stream()
-        .findFirst()
-        .filter(value -> value != null && !value.isBlank());
+        .filter(value -> !value.isBlank());
   }
 
   public boolean existsByExemptionNumber(String exemptionNumber) {
@@ -203,12 +256,9 @@ public class ExemptionDetailsRpcRepository extends OracleRepositorySupport {
     if (normalized == null) {
       return false;
     }
-    return queryCursorSingleRequired(
-            FIND_EXEMPTION_BY_NUMBER,
-            cs -> cs.setString(1, normalized),
-            2,
-            rs -> getString(rs, "EXEMPTION_NUMBER"))
-        .isPresent();
+    return !queryDirectRequired(
+            EXEMPTION_BY_NUMBER, rs -> getString(rs, "EXEMPTION_NUMBER"), normalized)
+        .isEmpty();
   }
 
   public Optional<ExemptionRecord> findExemptionRecord(String exemptionNumber) {
@@ -216,11 +266,7 @@ public class ExemptionDetailsRpcRepository extends OracleRepositorySupport {
     if (normalized == null) {
       return Optional.empty();
     }
-    return queryCursorSingleRequired(
-        FIND_EXEMPTION_BY_NUMBER,
-        cs -> cs.setString(1, normalized),
-        2,
-        this::mapExemptionRecord);
+    return queryDirectSingleRequired(EXEMPTION_BY_NUMBER, this::mapExemptionRecord, normalized);
   }
 
   public List<String> findAllExpiringExemptionNumbers() {
@@ -267,11 +313,8 @@ public class ExemptionDetailsRpcRepository extends OracleRepositorySupport {
     if (applicationNumber == null || applicationNumber < 1) {
       return Optional.empty();
     }
-    return queryCursorSingleRequired(
-        FIND_APPLICATION_BY_NUMBER,
-        cs -> cs.setString(1, applicationNumber.toString()),
-        2,
-        this::mapApplicationLinkRecord);
+    return queryDirectSingleRequired(
+        APPLICATION_BY_NUMBER, this::mapApplicationLinkRecord, applicationNumber);
   }
 
   public boolean hasActiveValidOffers(Long applicationNumber) {

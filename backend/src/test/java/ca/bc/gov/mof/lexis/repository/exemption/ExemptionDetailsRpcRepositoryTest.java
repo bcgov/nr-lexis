@@ -8,6 +8,7 @@ import static org.assertj.core.api.Assertions.entry;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.atLeastOnce;
 import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
@@ -380,17 +381,8 @@ class ExemptionDetailsRpcRepositoryTest {
   @SuppressWarnings({"rawtypes", "unchecked"})
   void applicationLinkLookupShouldUseLegacyExemptionApplicationVolumeColumn() throws Exception {
     JdbcTemplate jdbcTemplate = mock(JdbcTemplate.class);
-    CallableStatement statement = mock(CallableStatement.class);
-    ResultSet cursor = applicationLinkCursor(108653L, 847.7d);
-    when(
-            jdbcTemplate.execute(
-                eq("{ call LEXIS_GROUP_5.FIND_APPLICATION_BY_NUMBER(?,?) }"),
-                any(CallableStatementCallback.class)))
-        .thenAnswer(
-            invocation ->
-                ((CallableStatementCallback) invocation.getArgument(1))
-                    .doInCallableStatement(statement));
-    when(statement.getObject(2)).thenReturn(cursor);
+    ResultSet row = applicationLinkCursor(108653L, 847.7d);
+    stubDirectRow(jdbcTemplate, row, 108653L);
 
     ExemptionDetailsRpcRepository repository = new ExemptionDetailsRpcRepository(jdbcTemplate);
 
@@ -401,7 +393,17 @@ class ExemptionDetailsRpcRepositoryTest {
               assertThat(application.exemptionApplicationVolume()).isEqualTo(847.7d);
             });
 
-    verify(cursor, never()).getDouble("APPLICATION_VOLUME");
+    verify(row, never()).getDouble("APPLICATION_VOLUME");
+    String sql = capturedDirectSql(jdbcTemplate, 108653L);
+    assertThat(sql)
+        .contains("WHERE EEA.APPLICATION_NUMBER = ?")
+        .contains("LEFT JOIN EXPORT_SCHEDULE ES")
+        .contains("INNER JOIN EXPORT_APPLICATION_STATUS_CODE EASC")
+        .contains("INNER JOIN EXPORT_EXEMPTION_REASON_CODE EERC")
+        .contains("INNER JOIN EXPORT_APPLICANT_TYPE_CODE EATC")
+        .doesNotContain("GET_APPLICATION_APPROVAL_DATE")
+        .doesNotContain("EXPORT_PACKAGE");
+    verify(jdbcTemplate, never()).execute(any(String.class), any(CallableStatementCallback.class));
   }
 
   @ParameterizedTest
@@ -411,19 +413,10 @@ class ExemptionDetailsRpcRepositoryTest {
   void applicationLinkRoundTripShouldPreserveStoredProductLocation(String productLocation)
       throws Exception {
     JdbcTemplate jdbcTemplate = mock(JdbcTemplate.class);
-    CallableStatement readStatement = mock(CallableStatement.class);
     CallableStatement writeStatement = mock(CallableStatement.class);
-    ResultSet cursor = applicationLinkCursor(900101L, 10.0d);
-    when(cursor.getString("PRODUCT_LOCATION")).thenReturn(productLocation);
-    when(readStatement.getObject(2)).thenReturn(cursor);
-    when(
-            jdbcTemplate.execute(
-                eq("{ call LEXIS_GROUP_5.FIND_APPLICATION_BY_NUMBER(?,?) }"),
-                any(CallableStatementCallback.class)))
-        .thenAnswer(
-            invocation ->
-                ((CallableStatementCallback) invocation.getArgument(1))
-                    .doInCallableStatement(readStatement));
+    ResultSet row = applicationLinkCursor(900101L, 10.0d);
+    when(row.getString("PRODUCT_LOCATION")).thenReturn(productLocation);
+    stubDirectRow(jdbcTemplate, row, 900101L);
     when(
             jdbcTemplate.execute(
                 eq("{ call LEXIS_GROUP_14.UPDATE_EXEMPTION_APPLICATION(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?) }"),
@@ -464,21 +457,12 @@ class ExemptionDetailsRpcRepositoryTest {
   @SuppressWarnings({"rawtypes", "unchecked"})
   void applicationSummaryLookupShouldNotReadScaleColumnsMissingFromLegacyCursor() throws Exception {
     JdbcTemplate jdbcTemplate = mock(JdbcTemplate.class);
-    CallableStatement statement = mock(CallableStatement.class);
     ResultSet cursor = applicationSummaryCursor(108653L, 847.7d);
-    when(
-            jdbcTemplate.execute(
-                eq("{ call LEXIS_GROUP_5.FIND_APPLICATION_BY_EXEMPTION(?,?) }"),
-                any(CallableStatementCallback.class)))
-        .thenAnswer(
-            invocation ->
-                ((CallableStatementCallback) invocation.getArgument(1))
-                    .doInCallableStatement(statement));
-    when(statement.getObject(2)).thenReturn(cursor);
+    stubDirectRow(jdbcTemplate, cursor, "26-8759");
 
     ExemptionDetailsRpcRepository repository = new ExemptionDetailsRpcRepository(jdbcTemplate);
 
-    assertThat(repository.findApplicationSummariesByExemptionNumber("26-8759"))
+    assertThat(repository.findApplicationSummariesByExemptionNumber(" 26-8759 "))
         .singleElement()
         .satisfies(
             application -> {
@@ -501,6 +485,107 @@ class ExemptionDetailsRpcRepositoryTest {
 
     verify(cursor, never()).getDouble("TOTAL_SCALE_VOLUME");
     verify(cursor, never()).getDouble("SCALE_VOLUME");
+    String sql = capturedDirectSql(jdbcTemplate, "26-8759");
+    assertThat(sql)
+        .contains("WHERE EEA.EXEMPTION_NUMBER = ?")
+        .contains("ORDER BY EEA.APPLICATION_NUMBER")
+        .contains("INNER JOIN EXPORT_APPLICATION_STATUS_CODE EASC")
+        .contains("INNER JOIN EXPORT_EXEMPTION_REASON_CODE EERC")
+        .contains("INNER JOIN EXPORT_APPLICANT_TYPE_CODE EATC")
+        .contains("LEFT JOIN THE.V_CLIENT_PUBLIC FCO")
+        .doesNotContain("GET_APPLICATION_APPROVAL_DATE")
+        .doesNotContain("EXPORT_PACKAGE")
+        .doesNotContain(" FOREST_CLIENT");
+    verify(jdbcTemplate, never()).execute(any(String.class), any(CallableStatementCallback.class));
+  }
+
+  @Test
+  void exemptionRecordShouldReadTheExemptionRowWithoutAggregatingItsChildren() throws Exception {
+    JdbcTemplate jdbcTemplate = mock(JdbcTemplate.class);
+    ResultSet row = mock(ResultSet.class);
+    when(row.getString("EXEMPTION_NUMBER")).thenReturn("26-8759");
+    when(row.getDouble("APPROVED_VOLUME")).thenReturn(1200.5d);
+    when(row.getTimestamp("EXPIRY_DATE")).thenReturn(Timestamp.valueOf("2027-02-21 00:00:00"));
+    when(row.getString("EXPORT_EXEMPTION_TYPE_CODE")).thenReturn("M");
+    when(row.getString("EXPORT_EXEMPTION_STATUS_CODE")).thenReturn("ACT");
+    stubDirectRow(jdbcTemplate, row, "26-8759");
+    ExemptionDetailsRpcRepository repository = new ExemptionDetailsRpcRepository(jdbcTemplate);
+
+    assertThat(repository.findExemptionRecord(" 26-8759 "))
+        .hasValueSatisfying(
+            exemption -> {
+              assertThat(exemption.exemptionNumber()).isEqualTo("26-8759");
+              assertThat(exemption.approvedVolume()).isEqualTo(1200.5d);
+              assertThat(exemption.exemptionTypeCode()).isEqualTo("M");
+              assertThat(exemption.exemptionStatusCode()).isEqualTo("ACT");
+            });
+    assertThat(repository.existsByExemptionNumber("26-8759")).isTrue();
+    assertThat(repository.existsByExemptionNumber("26-0000")).isFalse();
+    assertThat(repository.findExemptionRecord("26-0000")).isEmpty();
+
+    String sql = capturedDirectSql(jdbcTemplate, "26-8759");
+    assertThat(sql)
+        .contains("FROM EXPORT_EXEMPTION EE")
+        .contains("INNER JOIN EXPORT_EXEMPTION_STATUS_CODE EESC")
+        .contains("WHERE EE.EXEMPTION_NUMBER = ?")
+        .doesNotContain("EXPORT_EXEMPTION_APPLICATION")
+        .doesNotContain("EXPORT_SCALE_DETAIL");
+    verify(jdbcTemplate, never()).execute(any(String.class), any(CallableStatementCallback.class));
+  }
+
+  @Test
+  void applicationsWithPermitsShouldBeReadForOnlyTheGivenApplications() {
+    PermitLookupRepository repository = new PermitLookupRepository(List.of(108653L));
+
+    assertThat(repository.findApplicationNumbersWithPermits(" 26-8759 ", List.of(108653L, 108654L)))
+        .containsExactly(108653L);
+
+    assertThat(repository.binds).containsExactly(List.of("26-8759", 108653L, 108654L));
+    assertThat(repository.sqls.get(0))
+        .contains("WHERE EEA.EXEMPTION_NUMBER = ?")
+        .contains("AND EEA.APPLICATION_NUMBER IN (?, ?)")
+        .contains("ON EP.APPLICATION_NUMBER = EEA.APPLICATION_NUMBER")
+        .contains("ON ESD.PACKAGE_NUMBER = EP.PACKAGE_NUMBER")
+        .contains("AND EPD.EXEMPTION_NUMBER = EEA.EXEMPTION_NUMBER")
+        .contains("INNER JOIN EXPORT_PERMIT_STATUS_CODE EPSC");
+  }
+
+  @Test
+  void applicationsWithPermitsShouldNotQueryWithoutApplicationsOrExemption() {
+    PermitLookupRepository repository = new PermitLookupRepository(List.of());
+
+    assertThat(repository.findApplicationNumbersWithPermits("26-8759", List.of())).isEmpty();
+    assertThat(repository.findApplicationNumbersWithPermits(" ", List.of(108653L))).isEmpty();
+    assertThat(repository.sqls).isEmpty();
+  }
+
+  @Test
+  void applicationsWithPermitsShouldStayWithinOraclesInListLimit() {
+    PermitLookupRepository repository = new PermitLookupRepository(List.of());
+    List<Long> applicationNumbers =
+        java.util.stream.LongStream.rangeClosed(1, 1001).boxed().toList();
+
+    repository.findApplicationNumbersWithPermits("26-8759", applicationNumbers);
+
+    assertThat(repository.binds).extracting(List::size).containsExactly(1001, 2);
+  }
+
+  @Test
+  @SuppressWarnings("unchecked")
+  void changedLookupsShouldPropagateOracleFailure() {
+    JdbcTemplate jdbcTemplate = mock(JdbcTemplate.class);
+    when(jdbcTemplate.query(any(String.class), any(RowMapper.class), any()))
+        .thenThrow(new DataAccessResourceFailureException("Oracle unavailable"));
+    when(jdbcTemplate.query(any(String.class), any(RowMapper.class), any(), any()))
+        .thenThrow(new DataAccessResourceFailureException("Oracle unavailable"));
+    ExemptionDetailsRpcRepository repository = new ExemptionDetailsRpcRepository(jdbcTemplate);
+
+    assertOracleFailure(() -> repository.findApplicationSummariesByExemptionNumber("26-8759"));
+    assertOracleFailure(() -> repository.findApplicationLinkRecord(108653L));
+    assertOracleFailure(() -> repository.findExemptionRecord("26-8759"));
+    assertOracleFailure(() -> repository.existsByExemptionNumber("26-8759"));
+    assertOracleFailure(
+        () -> repository.findApplicationNumbersWithPermits("26-8759", List.of(108653L)));
   }
 
   @Test
@@ -534,6 +619,30 @@ class ExemptionDetailsRpcRepositoryTest {
     assertThat(permits.get(0).permitVolume()).isEqualTo(80.0d);
     verify(cursor, never()).getLong("EXPORT_PERMIT_NUMBER");
     verify(cursor, never()).getLong("ORG_UNIT_NO");
+  }
+
+  @Test
+  @SuppressWarnings({"rawtypes", "unchecked"})
+  void legacyApplicationOrderShouldKeepTheCursorsRowOrder() throws Exception {
+    JdbcTemplate jdbcTemplate = mock(JdbcTemplate.class);
+    CallableStatement statement = mock(CallableStatement.class);
+    ResultSet cursor = mock(ResultSet.class);
+    when(cursor.next()).thenReturn(true, true, false);
+    when(cursor.getLong("APPLICATION_NUMBER")).thenReturn(290L, 190L);
+    when(cursor.wasNull()).thenReturn(false);
+    when(
+            jdbcTemplate.execute(
+                eq("{ call LEXIS_GROUP_5.FIND_APPLICATION_BY_EXEMPTION(?,?) }"),
+                any(CallableStatementCallback.class)))
+        .thenAnswer(
+            invocation ->
+                ((CallableStatementCallback) invocation.getArgument(1))
+                    .doInCallableStatement(statement));
+    when(statement.getObject(2)).thenReturn(cursor);
+    ExemptionDetailsRpcRepository repository = new ExemptionDetailsRpcRepository(jdbcTemplate);
+
+    assertThat(repository.findLegacyApplicationOrder(" EX-205 ")).containsExactly(290L, 190L);
+    verify(statement).setString(1, "EX-205");
   }
 
   private static ResultSet applicationLinkCursor(long applicationNumber, double applicationVolume)
@@ -571,10 +680,45 @@ class ExemptionDetailsRpcRepositoryTest {
     return cursor;
   }
 
+  @SuppressWarnings({"rawtypes", "unchecked"})
+  private static void stubDirectRow(JdbcTemplate jdbcTemplate, ResultSet row, Object bindValue)
+      throws SQLException {
+    when(jdbcTemplate.query(any(String.class), any(RowMapper.class), eq(bindValue)))
+        .thenAnswer(invocation -> List.of(((RowMapper) invocation.getArgument(1)).mapRow(row, 0)));
+  }
+
+  @SuppressWarnings("unchecked")
+  private static String capturedDirectSql(JdbcTemplate jdbcTemplate, Object bindValue) {
+    ArgumentCaptor<String> sql = ArgumentCaptor.forClass(String.class);
+    verify(jdbcTemplate, atLeastOnce())
+        .query(sql.capture(), any(RowMapper.class), eq(bindValue));
+    return sql.getValue();
+  }
+
   private static void assertOracleFailure(Runnable operation) {
     assertThatThrownBy(operation::run)
         .isInstanceOf(DataAccessResourceFailureException.class)
         .hasMessage("Oracle unavailable");
+  }
+
+  private static final class PermitLookupRepository extends ExemptionDetailsRpcRepository {
+    private final List<Long> rows;
+    private final List<String> sqls = new java.util.ArrayList<>();
+    private final List<List<Object>> binds = new java.util.ArrayList<>();
+
+    PermitLookupRepository(List<Long> rows) {
+      super(null);
+      this.rows = rows;
+    }
+
+    @Override
+    @SuppressWarnings("unchecked")
+    protected <T> List<T> queryDirectRequired(
+        String sql, SqlRowMapper<T> rowMapper, Object... bindValues) {
+      sqls.add(sql);
+      binds.add(List.of(bindValues));
+      return (List<T>) rows;
+    }
   }
 
   private static final class FailingExemptionDetailsRpcRepository

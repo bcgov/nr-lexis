@@ -24,13 +24,17 @@ import ca.bc.gov.mof.lexis.service.coordination.OptimisticRecordType;
 import ca.bc.gov.mof.lexis.service.coordination.OptimisticRecordVersion;
 import ca.bc.gov.mof.lexis.service.coordination.OracleOptimisticRecordVersionService;
 import ca.bc.gov.mof.lexis.service.coordination.StaleRecordException;
+import java.sql.SQLException;
 import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
 import java.util.concurrent.atomic.AtomicBoolean;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.mockito.InOrder;
 import org.springframework.dao.CannotAcquireLockException;
+import org.springframework.jdbc.UncategorizedSQLException;
 
 class OracleAggregateRowLockServiceTest {
 
@@ -95,6 +99,45 @@ class OracleAggregateRowLockServiceTest {
         .hasMessageContaining("same record")
         .hasCauseInstanceOf(CannotAcquireLockException.class);
     assertThat(invoked).isFalse();
+  }
+
+  @ParameterizedTest
+  @ValueSource(ints = {30006, 54})
+  void shouldMapUncategorizedOracleRowLockTimeoutsWithoutRunningTheMutation(int oracleErrorCode) {
+    AtomicBoolean invoked = new AtomicBoolean();
+    doThrow(
+            new UncategorizedSQLException(
+                "lock permit",
+                "SELECT * FROM EXPORT_PERMIT_DETAIL WHERE EXPORT_PERMIT_DETAIL_NUMBER = ? FOR UPDATE WAIT 30",
+                new SQLException("resource busy", "61000", oracleErrorCode)))
+        .when(repository)
+        .lockPermitRow(100L);
+
+    assertThatThrownBy(
+            () ->
+                service.execute(
+                    List.of(),
+                    List.of(),
+                    List.of(100L),
+                    () -> {
+                      invoked.set(true);
+                      return "not-reached";
+                    }))
+        .isInstanceOf(DistributedLockBusyException.class)
+        .hasMessageContaining("same record")
+        .hasCauseInstanceOf(UncategorizedSQLException.class);
+    assertThat(invoked).isFalse();
+  }
+
+  @Test
+  void shouldLeaveOtherUncategorizedOracleErrorsUnchanged() {
+    UncategorizedSQLException failure =
+        new UncategorizedSQLException(
+            "lock permit", "SELECT 1 FROM DUAL", new SQLException("other", "99999", 600));
+    doThrow(failure).when(repository).lockPermitRow(100L);
+
+    assertThatThrownBy(() -> service.execute(List.of(), List.of(), List.of(100L), () -> "x"))
+        .isSameAs(failure);
   }
 
   @Test

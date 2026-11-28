@@ -5,8 +5,11 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.assertj.core.api.Assertions.tuple;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.CALLS_REAL_METHODS;
+import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.atLeastOnce;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
@@ -26,6 +29,7 @@ import java.time.LocalDate;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.stream.Stream;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -605,6 +609,7 @@ class OracleExemptionDetailsRpcServiceTest {
                     "Exempted"),
                 new ExemptionDetailsRpcRepository.ApplicationSummaryRow(
                     1000457L, 11.0d, 11.0d, "00077881", "P", "S")));
+    when(repository.findLegacyApplicationOrder("EX-205")).thenReturn(List.of(1000456L, 1000457L));
 
     ExemptionDetailsRpcService.ExemptionApplicationsResponse response =
         service.getApplications("EX-205", true, ignored -> true);
@@ -704,18 +709,8 @@ class OracleExemptionDetailsRpcServiceTest {
                 new ExemptionDetailsRpcRepository.ApplicationSummaryRow(
                     1000462L, 16.0d, 16.0d, "00077881", "P", "S", "REJ")));
     when(repository.findExemptionRecord("EX-205")).thenReturn(Optional.of(exemption("ACT")));
-    when(repository.findPermitsByApplicationNumberRequired(1000456L)).thenReturn(List.of());
-    when(repository.findPermitsByApplicationNumberRequired(1000459L)).thenReturn(List.of());
-    when(repository.findPermitsByApplicationNumberRequired(1000461L))
-        .thenReturn(
-            List.of(new ExemptionDetailsRpcRepository.ApplicationPermitRow(7000125L, "EX-205")));
-    when(repository.findPermitsByApplicationNumberRequired(1000457L))
-        .thenReturn(
-            List.of(new ExemptionDetailsRpcRepository.ApplicationPermitRow(7000123L, "EX-205")));
-    when(repository.findPermitsByApplicationNumberRequired(1000458L)).thenReturn(List.of());
-    when(repository.findPermitsByApplicationNumberRequired(1000460L))
-        .thenReturn(
-            List.of(new ExemptionDetailsRpcRepository.ApplicationPermitRow(7000124L, "EX-205")));
+    when(repository.findApplicationNumbersWithPermits(eq("EX-205"), any()))
+        .thenReturn(Set.of(1000457L, 1000460L, 1000461L));
 
     ExemptionDetailsRpcService.ExemptionApplicationsResponse response =
         service.getApplications("EX-205", true, ignored -> true);
@@ -732,7 +727,24 @@ class OracleExemptionDetailsRpcServiceTest {
             tuple(1000460L, false),
             tuple(1000461L, false),
             tuple(1000462L, false));
-    verify(repository, never()).findPermitsByApplicationNumberRequired(1000462L);
+    verify(repository).findApplicationNumbersWithPermits(eq("EX-205"), any());
+    verify(repository, never()).findPermitsByApplicationNumberRequired(any());
+  }
+
+  @Test
+  void getApplicationsShouldNotReadPermitsWhenNoVisibleApplicationCouldBeRemoved() {
+    when(repository.findApplicationSummariesByExemptionNumber("EX-205"))
+        .thenReturn(
+            List.of(
+                new ExemptionDetailsRpcRepository.ApplicationSummaryRow(
+                    1000456L, 95.0d, 95.0d, "00077881", "P", "S", "EXE")));
+
+    ExemptionDetailsRpcService.ExemptionApplicationsResponse response =
+        service.getApplications("EX-205", true, ignored -> false);
+
+    assertThat(response.applications()).isEmpty();
+    verify(repository, never()).findApplicationNumbersWithPermits(any(), any());
+    verify(repository, never()).findExemptionRecord(any());
   }
 
   @ParameterizedTest
@@ -745,7 +757,8 @@ class OracleExemptionDetailsRpcServiceTest {
                 new ExemptionDetailsRpcRepository.ApplicationSummaryRow(
                     1000458L, 12.0d, 12.0d, "00077881", "P", "S", "APP")));
     when(repository.findExemptionRecord("EX-205")).thenReturn(Optional.of(exemption(status)));
-    when(repository.findPermitsByApplicationNumberRequired(1000458L)).thenReturn(List.of());
+    when(repository.findApplicationNumbersWithPermits(eq("EX-205"), any()))
+        .thenReturn(Set.of());
 
     ExemptionDetailsRpcService.ExemptionApplicationsResponse response =
         service.getApplications("EX-205", true, ignored -> true);
@@ -767,7 +780,8 @@ class OracleExemptionDetailsRpcServiceTest {
                     1000456L, 95.0d, 95.0d, "00077881", "P", "S", "EXE")));
     when(repository.findExemptionRecord("EX-205")).thenReturn(Optional.of(exemption(status)));
     if (removable) {
-      when(repository.findPermitsByApplicationNumberRequired(1000456L)).thenReturn(List.of());
+      when(repository.findApplicationNumbersWithPermits(eq("EX-205"), any()))
+          .thenReturn(Set.of());
     }
 
     ExemptionDetailsRpcService.ExemptionApplicationsResponse response =
@@ -778,7 +792,7 @@ class OracleExemptionDetailsRpcServiceTest {
         .extracting(ExemptionDetailsRpcService.ApplicationItem::removable)
         .isEqualTo(removable);
     if (!removable) {
-      verify(repository, never()).findPermitsByApplicationNumberRequired(any());
+      verify(repository, never()).findApplicationNumbersWithPermits(any(), any());
     }
   }
 
@@ -808,7 +822,6 @@ class OracleExemptionDetailsRpcServiceTest {
                     "Exempted")));
     when(repository.findExemptionRecord("EX-205"))
         .thenReturn(Optional.of(exemption(exemptionStatus)));
-    when(repository.findPermitsByApplicationNumberRequired(1000456L)).thenReturn(List.of());
 
     ExemptionDetailsRpcService.ExemptionApplicationsResponse response =
         service.getApplications("EX-205", true, ignored -> true);
@@ -3723,6 +3736,7 @@ class OracleExemptionDetailsRpcServiceTest {
                     1000456L, 95.0d, 95.0d, "00077881", "P", "S"),
                 new ExemptionDetailsRpcRepository.ApplicationSummaryRow(
                     1000457L, 50.0d, 50.0d, "00077881", "P", "S")));
+    when(repository.findLegacyApplicationOrder("EX-205")).thenReturn(List.of(1000456L, 1000457L));
     when(repository.findApplicationLinkRecord(1000456L))
         .thenReturn(
             Optional.of(
@@ -3738,6 +3752,245 @@ class OracleExemptionDetailsRpcServiceTest {
             new WorkflowEmailEvent.ExemptionApproval(
                 "EX-205", "1000456\n1000457", "edited@example.com", RegionalMailRoute.RSI));
     verify(repository, never()).findApplicationLinkRecord(1000457L);
+  }
+
+  @Test
+  void sendExemptionApprovalEmailShouldRouteByTheLegacyCursorsFirstApplication() {
+    when(repository.findExemptionRecord("EX-205"))
+        .thenReturn(Optional.of(exemption("ACT")));
+    when(repository.findApplicationSummariesByExemptionNumber("EX-205"))
+        .thenReturn(
+            List.of(
+                new ExemptionDetailsRpcRepository.ApplicationSummaryRow(
+                    1000456L, 95.0d, 95.0d, "00077881", "P", "S"),
+                new ExemptionDetailsRpcRepository.ApplicationSummaryRow(
+                    1000457L, 50.0d, 50.0d, "00077881", "P", "S")));
+    when(repository.findLegacyApplicationOrder("EX-205")).thenReturn(List.of(1000457L, 1000456L));
+    when(repository.findApplicationLinkRecord(1000457L))
+        .thenReturn(
+            Optional.of(
+                applicationWithIdentity(
+                    1000457L, "00077881", "00", null, null, "EXE", "EX-205", 1834L)));
+
+    ExemptionDetailsRpcService.ExemptionApprovalEmailResult response =
+        service.sendExemptionApprovalEmail("EX-205", "edited@example.com");
+
+    assertThat(response.success()).isTrue();
+    verify(repository, atLeastOnce()).findApplicationLinkRecord(1000457L);
+    verify(repository, never()).findApplicationLinkRecord(1000456L);
+    verify(notificationService)
+        .publish(
+            new WorkflowEmailEvent.ExemptionApproval(
+                "EX-205", "1000457\n1000456", "edited@example.com", RegionalMailRoute.RSI));
+  }
+
+  @Test
+  void queueApprovalEmailsShouldListApplicationsInTheLegacyCursorsOrder() {
+    when(repository.findExemptionRecord("EX-205")).thenReturn(Optional.of(exemption("ACT")));
+    when(repository.findApplicationSummariesByExemptionNumber("EX-205"))
+        .thenReturn(
+            List.of(
+                applicationSummary(1000456L, "00077881"),
+                applicationSummary(1000457L, "00077881")));
+    when(repository.findLegacyApplicationOrder("EX-205")).thenReturn(List.of(1000457L, 1000456L));
+    when(repository.findApplicationLinkRecord(1000457L))
+        .thenReturn(
+            Optional.of(
+                applicationWithIdentity(
+                    1000457L, "00077881", "00", null, null, "EXE", "EX-205", 1834L)));
+
+    assertThat(
+            service.queueApprovalEmails(
+                List.of(
+                    new ExemptionDetailsRpcService.ApprovalRecipients(
+                        "EX-205", "manual@example.com", ""))))
+        .containsExactly(
+            new ExemptionDetailsRpcService.ApprovalEmailOutcome(
+                "EX-205", true, "Approval email queued."));
+    verify(notificationService)
+        .publish(
+            new WorkflowEmailEvent.ExemptionApproval(
+                "EX-205", "1000457\n1000456", "manual@example.com", RegionalMailRoute.RSI));
+  }
+
+  @Test
+  void getApplicationsShouldLookUpPermitsForOnlyTheListedRemovableApplications() {
+    when(repository.findApplicationSummariesByExemptionNumber("EX-205"))
+        .thenReturn(
+            List.of(
+                new ExemptionDetailsRpcRepository.ApplicationSummaryRow(
+                    1000456L, 1.0d, 1.0d, "00077881", "P", "S", "APP"),
+                new ExemptionDetailsRpcRepository.ApplicationSummaryRow(
+                    1000457L, 1.0d, 1.0d, "00077881", "P", "S", "NEW"),
+                new ExemptionDetailsRpcRepository.ApplicationSummaryRow(
+                    1000458L, 1.0d, 1.0d, "00077881", "F", "S", "APP")));
+    when(repository.findExemptionRecord("EX-205")).thenReturn(Optional.of(exemption("NEW")));
+    when(repository.findApplicationNumbersWithPermits("EX-205", List.of(1000456L)))
+        .thenReturn(Set.of());
+
+    ExemptionDetailsRpcService.ExemptionApplicationsResponse response =
+        service.getApplications("EX-205", false, ignored -> true);
+
+    assertThat(response.applications())
+        .extracting("applicationNumber", "removable")
+        .containsExactly(tuple(1000456L, true), tuple(1000457L, false));
+  }
+
+  @Test
+  void approvalEmailsShouldUseOnlyTheApplicationsTheLegacyCursorStillLinks() {
+    when(repository.findExemptionRecord("EX-205")).thenReturn(Optional.of(exemption("ACT")));
+    when(repository.findApplicationSummariesByExemptionNumber("EX-205"))
+        .thenReturn(
+            List.of(
+                applicationSummary(1000101L, "00077881"),
+                applicationSummary(1000202L, "00077881")));
+    // 1000202 was unlinked between the two reads.
+    when(repository.findLegacyApplicationOrder("EX-205")).thenReturn(List.of(1000101L));
+    when(repository.findApplicationLinkRecord(1000101L))
+        .thenReturn(
+            Optional.of(
+                applicationWithIdentity(
+                    1000101L, "00077881", "00", null, null, "EXE", "EX-205", 1834L)));
+
+    assertThat(service.sendExemptionApprovalEmail("EX-205", "edited@example.com").success())
+        .isTrue();
+    assertThat(
+            service.queueApprovalEmails(
+                List.of(
+                    new ExemptionDetailsRpcService.ApprovalRecipients(
+                        "EX-205", "manual@example.com", ""))))
+        .extracting(ExemptionDetailsRpcService.ApprovalEmailOutcome::queued)
+        .containsExactly(true);
+
+    verify(notificationService)
+        .publish(
+            new WorkflowEmailEvent.ExemptionApproval(
+                "EX-205", "1000101", "edited@example.com", RegionalMailRoute.RSI));
+    verify(notificationService)
+        .publish(
+            new WorkflowEmailEvent.ExemptionApproval(
+                "EX-205", "1000101", "manual@example.com", RegionalMailRoute.RSI));
+    verify(repository, never()).findApplicationLinkRecord(1000202L);
+  }
+
+  @Test
+  void getApplicationsShouldIgnoreAgentFieldsOfOwnerApplicants() {
+    when(repository.findApplicationSummariesByExemptionNumber("EX-205"))
+        .thenReturn(
+            List.of(
+                new ExemptionDetailsRpcRepository.ApplicationSummaryRow(
+                    1000190L, 1.0d, 1.0d, "00055566", "00077881", "00", "01", "O",
+                    "OWNER PERSON", "", "OWNER LTD", "", "P", "S", "APP", "Approved"),
+                new ExemptionDetailsRpcRepository.ApplicationSummaryRow(
+                    1000290L, 1.0d, 1.0d, "00055566", null, "00", null, "O",
+                    "OWNER PERSON", null, "OWNER LTD", null, "P", "S", "APP", "Approved")));
+
+    ExemptionDetailsRpcService.ExemptionApplicationsResponse response =
+        service.getApplications("EX-205", true, ignored -> true);
+
+    assertThat(response.applications())
+        .extracting("applicationNumber")
+        .containsExactly(1000190L, 1000290L);
+    verify(repository, never()).findLegacyApplicationOrder(any());
+  }
+
+  @Test
+  void getApplicationsShouldListInLegacyCursorOrderWhenTheApplicantContactsDiffer() {
+    when(repository.findApplicationSummariesByExemptionNumber("EX-205"))
+        .thenReturn(
+            List.of(
+                applicationSummary(1000190L, "00011122"),
+                applicationSummary(1000290L, "00055566")));
+    when(repository.findLegacyApplicationOrder("EX-205")).thenReturn(List.of(1000290L, 1000190L));
+
+    ExemptionDetailsRpcService.ExemptionApplicationsResponse response =
+        service.getApplications("EX-205", true, ignored -> true);
+
+    assertThat(response.applications())
+        .extracting("applicationNumber")
+        .containsExactly(1000290L, 1000190L);
+  }
+
+  @Test
+  void getApplicationsShouldNotAskTheLegacyCursorWhenTheApplicantContactsMatch() {
+    when(repository.findApplicationSummariesByExemptionNumber("EX-205"))
+        .thenReturn(
+            List.of(
+                applicationSummary(1000190L, "00055566"),
+                applicationSummary(1000290L, "00055566")));
+
+    ExemptionDetailsRpcService.ExemptionApplicationsResponse response =
+        service.getApplications("EX-205", true, ignored -> true);
+
+    assertThat(response.applications())
+        .extracting("applicationNumber")
+        .containsExactly(1000190L, 1000290L);
+    verify(repository, never()).findLegacyApplicationOrder(any());
+  }
+
+  @Test
+  void getApplicationsShouldNotAskTheLegacyCursorForAHiddenApplicationsContact() {
+    when(repository.findApplicationSummariesByExemptionNumber("EX-205"))
+        .thenReturn(
+            List.of(
+                applicationSummary(1000190L, "00055566"),
+                new ExemptionDetailsRpcRepository.ApplicationSummaryRow(
+                    1000290L, 1.0d, 1.0d, "00011122", "F", "S")));
+
+    ExemptionDetailsRpcService.ExemptionApplicationsResponse response =
+        service.getApplications("EX-205", false, ignored -> true);
+
+    assertThat(response.applications()).extracting("applicationNumber").containsExactly(1000190L);
+    verify(repository, never()).findLegacyApplicationOrder(any());
+  }
+
+  @Test
+  void addApplicationToAnOrderInCouncilExemptionShouldNotAskTheLegacyCursor() {
+    ExemptionDetailsRpcRepository.ApplicationLinkRecord candidate =
+        applicationWithIdentity(1000333L, "00099999", "00", null, null, "APP", null);
+    when(repository.findExemptionRecord("EX-205"))
+        .thenReturn(Optional.of(exemption("ACT", "O")));
+    when(repository.findApplicationLinkRecord(1000333L)).thenReturn(Optional.of(candidate));
+    when(repository.findApplicationSummariesByExemptionNumber("EX-205"))
+        .thenReturn(
+            List.of(
+                applicationSummary(1000190L, "00011122"),
+                applicationSummary(1000290L, "00055566")));
+    when(repository.updateApplicationExemption(any())).thenReturn(true);
+
+    ExemptionDetailsRpcService.ApplicationExemptionLinkResult response =
+        service.addApplicationToExemption(1000333L, "EX-205", "idir\\jsmith", true);
+
+    assertThat(response.success()).isTrue();
+    verify(repository, never()).findLegacyApplicationOrder(any());
+  }
+
+  @ParameterizedTest
+  @CsvSource({"1000290, true", "1000190, false"})
+  void addApplicationToExemptionShouldCompareTheOwnerOfTheLegacyCursorsFirstApplication(
+      long legacyFirstApplicationNumber, boolean accepted) {
+    ExemptionDetailsRpcRepository.ApplicationLinkRecord candidate =
+        applicationWithIdentity(1000333L, "00055566", "00", null, null, "APP", null);
+    when(repository.findExemptionRecord("EX-205"))
+        .thenReturn(Optional.of(exemption("NEW")));
+    when(repository.findApplicationLinkRecord(1000333L)).thenReturn(Optional.of(candidate));
+    when(repository.findApplicationSummariesByExemptionNumber("EX-205"))
+        .thenReturn(
+            List.of(
+                applicationSummary(1000190L, "00011122"),
+                applicationSummary(1000290L, "00055566")));
+    when(repository.findLegacyApplicationOrder("EX-205"))
+        .thenReturn(
+            legacyFirstApplicationNumber == 1000290L
+                ? List.of(1000290L, 1000190L)
+                : List.of(1000190L, 1000290L));
+    lenient().when(repository.updateApplicationExemption(any())).thenReturn(true);
+
+    ExemptionDetailsRpcService.ApplicationExemptionLinkResult response =
+        service.addApplicationToExemption(1000333L, "EX-205", "idir\\jsmith", true);
+
+    assertThat(response.success()).isEqualTo(accepted);
+    verify(repository, accepted ? times(1) : never()).updateApplicationExemption(any());
   }
 
   @Test

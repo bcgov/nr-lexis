@@ -1,5 +1,8 @@
 package ca.bc.gov.mof.lexis.repository.permit;
 
+import static ca.bc.gov.mof.lexis.repository.application.ApplicationRowQueries.APPLICATIONS_BY_EXEMPTION;
+import static ca.bc.gov.mof.lexis.repository.application.ApplicationRowQueries.APPLICATION_BY_NUMBER;
+import static ca.bc.gov.mof.lexis.repository.exemption.ExemptionRowQueries.EXEMPTION_BY_NUMBER;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.assertj.core.groups.Tuple.tuple;
@@ -62,11 +65,13 @@ class PermitRpcRepositoryTest {
     assertThat(sql.getValue())
         .contains("WHEN EXISTS")
         .contains("FROM EXPORT_PACKAGE P")
-        .contains("LEFT JOIN EXPORT_EXEMPTION_APPLICATION EEA")
-        .contains("LEFT JOIN EXPORT_PERMIT_DETAIL EPD")
-        .contains("LEFT JOIN EXPORT_SCALE_DETAIL ESD")
-        .contains("EPD.EXPORT_PERMIT_DETAIL_NUMBER = ?")
-        .contains("OR ESD.EXPORT_PERMIT_DETAIL_NUMBER = ?");
+        .contains("WHERE P.PACKAGE_NUMBER = ?")
+        .contains("ON EEA.APPLICATION_NUMBER = EPD.OIC_APPLICATION_NUMBER")
+        .contains("WHERE EPD.EXPORT_PERMIT_DETAIL_NUMBER = ?")
+        .contains("AND EEA.APPLICATION_NUMBER = P.APPLICATION_NUMBER")
+        .contains("WHERE ESD.PACKAGE_NUMBER = P.PACKAGE_NUMBER")
+        .contains("AND ESD.EXPORT_PERMIT_DETAIL_NUMBER = ?")
+        .doesNotContain("LEFT JOIN EXPORT_PERMIT_DETAIL EPD");
   }
 
   @Test
@@ -170,13 +175,29 @@ class PermitRpcRepositoryTest {
   }
 
   @Test
-  void oicPackageListShouldPreserveDistinctCursorKeys() throws Exception {
-    stubCursorProcedure("{ call LEXIS_GROUP_5.FIND_PACKAGES_BY_OIC_PERMIT(?,?) }", 2);
-    when(resultSet.next()).thenReturn(true, true, true, false);
+  @SuppressWarnings("unchecked")
+  void oicPackageListShouldPreserveDistinctKeysFromOneDrivenQuery() throws Exception {
     when(resultSet.getString("PACKAGE_NUMBER")).thenReturn("PKG-100  ", "PKG-100", "PKG-100  ");
+    when(jdbcTemplate.query(anyString(), any(RowMapper.class), eq(7000123L), eq(7000123L)))
+        .thenAnswer(
+            invocation -> {
+              RowMapper<Object> mapper = invocation.getArgument(1);
+              return List.of(
+                  mapper.mapRow(resultSet, 0), mapper.mapRow(resultSet, 1), mapper.mapRow(resultSet, 2));
+            });
 
     assertThat(new PermitRpcRepository(jdbcTemplate).findPackageNumbersByOicPermitNumber(7000123L))
         .containsExactly("PKG-100", "PKG-100  ");
+
+    ArgumentCaptor<String> sql = ArgumentCaptor.forClass(String.class);
+    verify(jdbcTemplate).query(sql.capture(), any(RowMapper.class), eq(7000123L), eq(7000123L));
+    assertThat(sql.getValue())
+        .contains("WHERE P.PACKAGE_NUMBER IN (")
+        .contains("WHERE EPD.EXPORT_PERMIT_DETAIL_NUMBER = ?")
+        .contains("UNION ALL")
+        .contains("WHERE ESD.EXPORT_PERMIT_DETAIL_NUMBER = ?")
+        .doesNotContain(" OR ");
+    verify(jdbcTemplate, never()).execute(anyString(), any(CallableStatementCallback.class));
   }
 
   @Test
@@ -359,11 +380,14 @@ class PermitRpcRepositoryTest {
         .contains("LEFT JOIN EXPORT_EXEMPTION_APPLICATION EEA")
         .contains("LEFT JOIN EXPORT_EXEMPTION EE")
         .contains("ASSIGNED_TO_PERMIT")
+        .contains("WHERE P.PACKAGE_NUMBER IN (")
         .contains("TARGET_SCALE.EXPORT_PERMIT_DETAIL_NUMBER = ?")
         .contains("UNASSIGNED_SCALE.EXPORT_PERMIT_DETAIL_NUMBER IS NULL")
-        .contains("ASSOCIATED_PACKAGE.APPLICATION_NUMBER = P.APPLICATION_NUMBER")
+        .contains("WHERE SIBLING_PACKAGE.APPLICATION_NUMBER IN (")
+        .doesNotContain("JOIN EXPORT_PACKAGE SIBLING_PACKAGE")
         .contains("ASSOCIATED_SCALE.EXPORT_PERMIT_DETAIL_NUMBER = ?")
-        .contains("ORDER BY P.PACKAGE_NUMBER");
+        .contains("ORDER BY P.PACKAGE_NUMBER")
+        .doesNotContain(" OR (EXISTS");
   }
 
   @Test
@@ -385,6 +409,16 @@ class PermitRpcRepositoryTest {
 
     assertThat(new PermitRpcRepository(jdbcTemplate).findCorePackageContexts(7000123L, true))
         .containsExactly(plain, padded);
+
+    ArgumentCaptor<String> sql = ArgumentCaptor.forClass(String.class);
+    verify(jdbcTemplate)
+        .query(sql.capture(), any(RowMapper.class), eq(7000123L), eq(7000123L), eq(7000123L));
+    assertThat(sql.getValue())
+        .contains("WHERE P.PACKAGE_NUMBER IN (")
+        .contains("ON OIC_PACKAGE.APPLICATION_NUMBER = TARGET_PERMIT.OIC_APPLICATION_NUMBER")
+        .contains("WHERE TARGET_PERMIT.EXPORT_PERMIT_DETAIL_NUMBER = ?")
+        .contains("WHERE TARGET_SCALE.EXPORT_PERMIT_DETAIL_NUMBER = ?")
+        .doesNotContain(" OR EXISTS");
   }
 
   @Test
@@ -973,23 +1007,49 @@ class PermitRpcRepositoryTest {
         .hasMessage("Oracle unavailable");
   }
 
+  @SuppressWarnings("unchecked")
+  private void stubApplicationRow(long applicationNumber) throws Exception {
+    when(jdbcTemplate.query(
+            eq(APPLICATION_BY_NUMBER),
+            any(RowMapper.class),
+            eq(applicationNumber)))
+        .thenAnswer(
+            invocation ->
+                List.of(((RowMapper<Object>) invocation.getArgument(1)).mapRow(resultSet, 0)));
+  }
+
   @Test
   void findApplicationStatusCodeShouldUseRequiredApplicationLookup() throws Exception {
-    stubCursorProcedure("{ call LEXIS_GROUP_5.FIND_APPLICATION_BY_NUMBER(?,?) }", 2);
-    when(resultSet.next()).thenReturn(true, false);
     when(resultSet.getString("EXPORT_APPLICATION_STATUS_CODE")).thenReturn("PMT");
+    stubApplicationRow(1000456L);
 
     PermitRpcRepository repository = new PermitRpcRepository(jdbcTemplate);
 
     assertThat(repository.findApplicationStatusCodeByNumber(1000456L)).contains("PMT");
-    verify(callableStatement).setString(1, "1000456");
-    verify(callableStatement).registerOutParameter(2, Types.REF_CURSOR);
+    verify(jdbcTemplate)
+        .query(
+            eq(APPLICATION_BY_NUMBER),
+            any(RowMapper.class),
+            eq(1000456L));
+    verify(jdbcTemplate, never()).execute(anyString(), any(CallableStatementCallback.class));
+  }
+
+  @Test
+  void applicationRowQueryShouldSkipTheCursorsPerPackageApprovalDate() {
+    assertThat(APPLICATION_BY_NUMBER)
+        .contains("WHERE EEA.APPLICATION_NUMBER = ?")
+        .contains("INNER JOIN EXPORT_APPLICATION_STATUS_CODE EASC")
+        .contains("INNER JOIN EXPORT_EXEMPTION_REASON_CODE EERC")
+        .contains("INNER JOIN EXPORT_APPLICANT_TYPE_CODE EATC")
+        .contains("OU.ORG_UNIT_NAME AS REGION")
+        .contains("ES.ADVERTISING_DATE")
+        .doesNotContain("GET_APPLICATION_APPROVAL_DATE")
+        .doesNotContain("EXPORT_PACKAGE");
   }
 
   @Test
   void findApplicationInfoShouldMapTheAuthoritativeOicIndicator() throws Exception {
-    stubCursorProcedure("{ call LEXIS_GROUP_5.FIND_APPLICATION_BY_NUMBER(?,?) }", 2);
-    when(resultSet.next()).thenReturn(true, false);
+    stubApplicationRow(1000999L);
     when(resultSet.getLong(any(String.class)))
         .thenAnswer(
             invocation ->
@@ -1012,8 +1072,6 @@ class PermitRpcRepositoryTest {
         .get()
         .extracting("applicationNumber", "exemptionNumber", "regionName", "oicIndicator")
         .containsExactly(1000999L, "EX-700", "Cariboo Natural Resource Region", "Y");
-    verify(callableStatement).setString(1, "1000999");
-    verify(callableStatement).registerOutParameter(2, Types.REF_CURSOR);
     verify(resultSet, never()).getString("END_USE_SORT");
     verify(resultSet, never()).getString("ORG_UNIT_NAME");
   }
@@ -1126,29 +1184,67 @@ class PermitRpcRepositoryTest {
   }
 
   @Test
+  @SuppressWarnings("unchecked")
   void requiredExemptionApplicationRelationshipsShouldBeSortedAndFailClosed()
       throws Exception {
-    stubCursorProcedure("{ call LEXIS_GROUP_5.FIND_APPLICATION_BY_EXEMPTION(?,?) }", 2);
-    when(resultSet.next()).thenReturn(true, true, false);
-    when(resultSet.getLong("APPLICATION_NUMBER")).thenReturn(1000457L, 1000456L);
-    when(resultSet.wasNull()).thenReturn(false);
+    when(resultSet.getLong("APPLICATION_NUMBER")).thenReturn(1000457L, 1000456L, 0L);
+    when(resultSet.wasNull()).thenReturn(false, false, true);
+    when(jdbcTemplate.query(eq(APPLICATIONS_BY_EXEMPTION), any(RowMapper.class), eq("EX-700")))
+        .thenAnswer(
+            invocation -> {
+              RowMapper<Object> mapper = invocation.getArgument(1);
+              return List.of(mapper.mapRow(resultSet, 0), mapper.mapRow(resultSet, 1));
+            })
+        .thenAnswer(
+            invocation ->
+                java.util.Arrays.asList(
+                    ((RowMapper<Object>) invocation.getArgument(1)).mapRow(resultSet, 0)));
     PermitRpcRepository repository = new PermitRpcRepository(jdbcTemplate);
 
-    assertThat(repository.findApplicationNumbersByExemptionNumberRequired("EX-700"))
+    assertThat(repository.findApplicationNumbersByExemptionNumberRequired(" EX-700 "))
         .containsExactly(1000456L, 1000457L);
-    verify(callableStatement).setString(1, "EX-700");
-
-    org.mockito.Mockito.reset(callableStatement, resultSet);
-    stubCursorProcedure("{ call LEXIS_GROUP_5.FIND_APPLICATION_BY_EXEMPTION(?,?) }", 2);
-    when(resultSet.next()).thenReturn(true, false);
-    when(resultSet.getLong("APPLICATION_NUMBER")).thenReturn(0L);
-    when(resultSet.wasNull()).thenReturn(true);
 
     assertThatThrownBy(
             () -> repository.findApplicationNumbersByExemptionNumberRequired("EX-700"))
         .isInstanceOf(DataRetrievalFailureException.class)
         .hasMessageContaining("invalid application relationship")
         .hasMessageContaining("exemption EX-700");
+    verify(jdbcTemplate, never()).execute(anyString(), any(CallableStatementCallback.class));
+  }
+
+  @Test
+  @SuppressWarnings("unchecked")
+  void exemptionTypeAndExpiryShouldBeEmptyWhenTheExemptionRowHasNoValue() throws Exception {
+    when(jdbcTemplate.query(eq(EXEMPTION_BY_NUMBER), any(RowMapper.class), eq("EX-NEW")))
+        .thenAnswer(
+            invocation ->
+                java.util.Arrays.asList(
+                    ((RowMapper<Object>) invocation.getArgument(1)).mapRow(resultSet, 0)));
+    PermitRpcRepository repository = new PermitRpcRepository(jdbcTemplate);
+
+    assertThat(repository.findExemptionTypeCode("EX-NEW")).isEmpty();
+    assertThat(repository.findExemptionExpiryDate("EX-NEW")).isEmpty();
+  }
+
+  @Test
+  @SuppressWarnings("unchecked")
+  void exemptionTypeAndExpiryShouldReadTheExemptionRowDirectly() throws Exception {
+    when(resultSet.getString("EXPORT_EXEMPTION_TYPE_CODE")).thenReturn(" B ");
+    when(resultSet.getTimestamp("EXPIRY_DATE"))
+        .thenReturn(java.sql.Timestamp.valueOf("2027-03-31 00:00:00"));
+    when(jdbcTemplate.query(eq(EXEMPTION_BY_NUMBER), any(RowMapper.class), eq("EX-700")))
+        .thenAnswer(
+            invocation ->
+                List.of(((RowMapper<Object>) invocation.getArgument(1)).mapRow(resultSet, 0)));
+    PermitRpcRepository repository = new PermitRpcRepository(jdbcTemplate);
+
+    assertThat(repository.findExemptionTypeCode(" EX-700 ")).contains("B");
+    assertThat(repository.findExemptionExpiryDate("EX-700"))
+        .contains(java.time.LocalDate.of(2027, 3, 31));
+    assertThat(EXEMPTION_BY_NUMBER)
+        .contains("WHERE EE.EXEMPTION_NUMBER = ?")
+        .doesNotContain("EXPORT_EXEMPTION_APPLICATION");
+    verify(jdbcTemplate, never()).execute(anyString(), any(CallableStatementCallback.class));
   }
 
   @Test

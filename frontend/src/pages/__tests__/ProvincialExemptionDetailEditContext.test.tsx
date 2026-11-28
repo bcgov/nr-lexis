@@ -1726,7 +1726,8 @@ describe('Provincial exemption edit context', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Save changes' }))
 
     await waitFor(() => expect(vi.mocked(fetchProvincialExemptionDetail)).toHaveBeenCalledTimes(2))
-    expect(vi.mocked(fetchExemptionApplications)).toHaveBeenCalledTimes(1)
+    // A Blanket OIC hides its applications, so they aren't read.
+    expect(vi.mocked(fetchExemptionApplications)).not.toHaveBeenCalled()
     expect(vi.mocked(fetchExemptionEditContext)).toHaveBeenCalledTimes(1)
     expect(vi.mocked(fetchExemptionPermits)).toHaveBeenCalledTimes(1)
 
@@ -1735,7 +1736,7 @@ describe('Provincial exemption edit context', () => {
     })
 
     await waitFor(() => expect(vi.mocked(fetchExemptionPermits)).toHaveBeenCalledTimes(2))
-    expect(vi.mocked(fetchExemptionApplications)).toHaveBeenCalledTimes(2)
+    expect(vi.mocked(fetchExemptionApplications)).not.toHaveBeenCalled()
     expect(vi.mocked(fetchExemptionEditContext)).toHaveBeenCalledTimes(2)
     expect(screen.queryByRole('button', { name: 'Edit exemption details' })).not.toBeInTheDocument()
 
@@ -1779,7 +1780,7 @@ describe('Provincial exemption edit context', () => {
     expect(
       await screen.findByRole('button', { name: 'Edit exemption details' }),
     ).toBeInTheDocument()
-    expect(vi.mocked(fetchExemptionApplications)).toHaveBeenCalledWith('BOIC-205')
+    expect(vi.mocked(fetchExemptionApplications)).not.toHaveBeenCalled()
     expect(vi.mocked(fetchExemptionEditContext)).toHaveBeenCalledWith('BOIC-205')
     expect(vi.mocked(fetchExemptionPermits)).toHaveBeenCalledWith('BOIC-205')
   })

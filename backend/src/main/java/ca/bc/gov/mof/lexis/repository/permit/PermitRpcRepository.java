@@ -1,5 +1,8 @@
 package ca.bc.gov.mof.lexis.repository.permit;
 
+import static ca.bc.gov.mof.lexis.repository.application.ApplicationRowQueries.APPLICATIONS_BY_EXEMPTION;
+import static ca.bc.gov.mof.lexis.repository.application.ApplicationRowQueries.APPLICATION_BY_NUMBER;
+import static ca.bc.gov.mof.lexis.repository.exemption.ExemptionRowQueries.EXEMPTION_BY_NUMBER;
 import static ca.bc.gov.mof.lexis.util.ValueUtils.coalesce;
 import static ca.bc.gov.mof.lexis.util.ValueUtils.firstNonNull;
 
@@ -46,8 +49,6 @@ public class PermitRpcRepository extends OracleRepositorySupport {
       LEXIS_GROUP_5_PACKAGE + "FIND_SCALE_DETAIL_BY_PRM(?,?)";
   private static final String FIND_PACKAGES_BY_PERMIT =
       LEXIS_GROUP_5_PACKAGE + "FIND_PACKAGES_BY_PERMIT(?,?)";
-  private static final String FIND_PACKAGES_BY_OIC_PERMIT =
-      LEXIS_GROUP_5_PACKAGE + "FIND_PACKAGES_BY_OIC_PERMIT(?,?)";
   private static final String CORE_PACKAGE_SELECT =
       """
       SELECT
@@ -105,36 +106,38 @@ public class PermitRpcRepository extends OracleRepositorySupport {
       LEFT JOIN EXPORT_APPLICATION_STATUS_CODE EASC
         ON EASC.EXPORT_APPLICATION_STATUS_CODE = EEA.EXPORT_APPLICATION_STATUS_CODE
       """;
+  // The permit's packages, plus unassigned packages of the same applications, so a package stays in
+  // the Scale selector after its final scale is removed while its application still has a scale on
+  // this permit. One uncorrelated IN driven by the permit's scale rows: an ORed EXISTS has no
+  // driving predicate and probes every package.
   private static final String FIND_CORE_PACKAGES_BY_PERMIT =
       CORE_PACKAGE_SELECT
-          + " WHERE EXISTS ("
-          + "SELECT 1 FROM EXPORT_SCALE_DETAIL TARGET_SCALE "
-          + "WHERE TARGET_SCALE.PACKAGE_NUMBER = P.PACKAGE_NUMBER "
-          + "AND TARGET_SCALE.EXPORT_PERMIT_DETAIL_NUMBER = ?)"
-          // Keep a package in the Scale selector after its final scale is removed, provided the
-          // same application still has a scale on this permit. Core scales remain restricted to
-          // the current permit or unassigned rows below.
-          + " OR (EXISTS ("
-          + "SELECT 1 FROM EXPORT_SCALE_DETAIL UNASSIGNED_SCALE "
-          + "WHERE UNASSIGNED_SCALE.PACKAGE_NUMBER = P.PACKAGE_NUMBER "
-          + "AND UNASSIGNED_SCALE.EXPORT_PERMIT_DETAIL_NUMBER IS NULL) "
-          + "AND EXISTS ("
-          + "SELECT 1 FROM EXPORT_SCALE_DETAIL ASSOCIATED_SCALE "
+          + " WHERE P.PACKAGE_NUMBER IN ("
+          + "SELECT TARGET_SCALE.PACKAGE_NUMBER FROM EXPORT_SCALE_DETAIL TARGET_SCALE "
+          + "WHERE TARGET_SCALE.EXPORT_PERMIT_DETAIL_NUMBER = ? "
+          + "UNION ALL "
+          + "SELECT SIBLING_PACKAGE.PACKAGE_NUMBER FROM EXPORT_PACKAGE SIBLING_PACKAGE "
+          + "WHERE SIBLING_PACKAGE.APPLICATION_NUMBER IN ("
+          + "SELECT ASSOCIATED_PACKAGE.APPLICATION_NUMBER FROM EXPORT_SCALE_DETAIL ASSOCIATED_SCALE "
           + "JOIN EXPORT_PACKAGE ASSOCIATED_PACKAGE "
           + "ON ASSOCIATED_PACKAGE.PACKAGE_NUMBER = ASSOCIATED_SCALE.PACKAGE_NUMBER "
-          + "WHERE ASSOCIATED_PACKAGE.APPLICATION_NUMBER = P.APPLICATION_NUMBER "
-          + "AND ASSOCIATED_SCALE.EXPORT_PERMIT_DETAIL_NUMBER = ?))"
+          + "WHERE ASSOCIATED_SCALE.EXPORT_PERMIT_DETAIL_NUMBER = ?) "
+          + "AND EXISTS ("
+          + "SELECT 1 FROM EXPORT_SCALE_DETAIL UNASSIGNED_SCALE "
+          + "WHERE UNASSIGNED_SCALE.PACKAGE_NUMBER = SIBLING_PACKAGE.PACKAGE_NUMBER "
+          + "AND UNASSIGNED_SCALE.EXPORT_PERMIT_DETAIL_NUMBER IS NULL))"
           + " ORDER BY P.PACKAGE_NUMBER";
+  // The Blanket OIC permit's application packages and the packages of its scale rows.
   private static final String FIND_CORE_PACKAGES_BY_OIC_PERMIT =
       CORE_PACKAGE_SELECT
-          + " WHERE EXISTS ("
-          + "SELECT 1 FROM EXPORT_PERMIT_DETAIL TARGET_PERMIT "
+          + " WHERE P.PACKAGE_NUMBER IN ("
+          + "SELECT OIC_PACKAGE.PACKAGE_NUMBER FROM EXPORT_PERMIT_DETAIL TARGET_PERMIT "
+          + "JOIN EXPORT_PACKAGE OIC_PACKAGE "
+          + "ON OIC_PACKAGE.APPLICATION_NUMBER = TARGET_PERMIT.OIC_APPLICATION_NUMBER "
           + "WHERE TARGET_PERMIT.EXPORT_PERMIT_DETAIL_NUMBER = ? "
-          + "AND TARGET_PERMIT.OIC_APPLICATION_NUMBER = P.APPLICATION_NUMBER)"
-          + " OR EXISTS ("
-          + "SELECT 1 FROM EXPORT_SCALE_DETAIL TARGET_SCALE "
-          + "WHERE TARGET_SCALE.PACKAGE_NUMBER = P.PACKAGE_NUMBER "
-          + "AND TARGET_SCALE.EXPORT_PERMIT_DETAIL_NUMBER = ?)"
+          + "UNION ALL "
+          + "SELECT TARGET_SCALE.PACKAGE_NUMBER FROM EXPORT_SCALE_DETAIL TARGET_SCALE "
+          + "WHERE TARGET_SCALE.EXPORT_PERMIT_DETAIL_NUMBER = ?)"
           + " ORDER BY P.PACKAGE_NUMBER";
   private static final String CORE_SCALE_SELECT =
       """
@@ -245,27 +248,56 @@ public class PermitRpcRepository extends OracleRepositorySupport {
         AND ELA.EXPORT_GROWTH_TYPE_CODE = SC.AMV_GROWTH_TYPE_CODE
       ORDER BY SC.PACKAGE_NUMBER, SC.TIMBER_MARK, SC.EXPORT_GRADE_CODE
       """;
+  // The relationships of LEXIS.FIND_PACKAGES_BY_OIC_PERMIT and the normal package list for one
+  // package, checked by key: the permit by primary key, its scale rows by the permit index.
   private static final String PACKAGE_BELONGS_TO_PERMIT =
       """
       SELECT CASE
         WHEN EXISTS (
           SELECT 1
           FROM EXPORT_PACKAGE P
-          LEFT JOIN EXPORT_EXEMPTION_APPLICATION EEA
-            ON EEA.APPLICATION_NUMBER = P.APPLICATION_NUMBER
-          LEFT JOIN EXPORT_PERMIT_DETAIL EPD
-            ON EPD.OIC_APPLICATION_NUMBER = EEA.APPLICATION_NUMBER
-          LEFT JOIN EXPORT_SCALE_DETAIL ESD
-            ON ESD.PACKAGE_NUMBER = P.PACKAGE_NUMBER
           WHERE P.PACKAGE_NUMBER = ?
             AND (
-              EPD.EXPORT_PERMIT_DETAIL_NUMBER = ?
-              OR ESD.EXPORT_PERMIT_DETAIL_NUMBER = ?
+              EXISTS (
+                SELECT 1
+                FROM EXPORT_PERMIT_DETAIL EPD
+                INNER JOIN EXPORT_EXEMPTION_APPLICATION EEA
+                  ON EEA.APPLICATION_NUMBER = EPD.OIC_APPLICATION_NUMBER
+                WHERE EPD.EXPORT_PERMIT_DETAIL_NUMBER = ?
+                  AND EEA.APPLICATION_NUMBER = P.APPLICATION_NUMBER
+              )
+              OR EXISTS (
+                SELECT 1
+                FROM EXPORT_SCALE_DETAIL ESD
+                WHERE ESD.PACKAGE_NUMBER = P.PACKAGE_NUMBER
+                  AND ESD.EXPORT_PERMIT_DETAIL_NUMBER = ?
+              )
             )
         ) THEN 1
         ELSE 0
       END
       FROM DUAL
+      """;
+  // The packages of LEXIS.FIND_PACKAGES_BY_OIC_PERMIT, which ORs the permit and scale keys over
+  // every package: those of the permit's OIC application, by the permit's primary key, and those of
+  // its scale rows, by the permit index.
+  private static final String PACKAGE_NUMBERS_BY_OIC_PERMIT =
+      """
+      SELECT P.PACKAGE_NUMBER
+      FROM EXPORT_PACKAGE P
+      WHERE P.PACKAGE_NUMBER IN (
+        SELECT OIC_PACKAGE.PACKAGE_NUMBER
+        FROM EXPORT_PERMIT_DETAIL EPD
+        INNER JOIN EXPORT_EXEMPTION_APPLICATION EEA
+          ON EEA.APPLICATION_NUMBER = EPD.OIC_APPLICATION_NUMBER
+        INNER JOIN EXPORT_PACKAGE OIC_PACKAGE
+          ON OIC_PACKAGE.APPLICATION_NUMBER = EEA.APPLICATION_NUMBER
+        WHERE EPD.EXPORT_PERMIT_DETAIL_NUMBER = ?
+        UNION ALL
+        SELECT ESD.PACKAGE_NUMBER
+        FROM EXPORT_SCALE_DETAIL ESD
+        WHERE ESD.EXPORT_PERMIT_DETAIL_NUMBER = ?
+      )
       """;
   private static final String LINKED_PROVINCIAL_APPLICATION_BELONGS_TO_CLIENT =
       """
@@ -294,10 +326,6 @@ public class PermitRpcRepository extends OracleRepositorySupport {
       LEXIS_GROUP_5_PACKAGE + "FIND_PACKAGES_BY_EXMP(?,?)";
   private static final String FIND_PACKAGE_BY_NUMBER =
       LEXIS_GROUP_5_PACKAGE + "FIND_PACKAGE_BY_NUMBER(?,?)";
-  private static final String FIND_APPLICATION_BY_NUMBER =
-      LEXIS_GROUP_5_PACKAGE + "FIND_APPLICATION_BY_NUMBER(?,?)";
-  private static final String FIND_APPLICATION_BY_EXEMPTION =
-      LEXIS_GROUP_5_PACKAGE + "FIND_APPLICATION_BY_EXEMPTION(?,?)";
   private static final String FIND_END_USE_BY_APP = LEXIS_GROUP_5_PACKAGE + "FIND_END_USE_BY_APP(?,?)";
   private static final String FIND_END_USE_BY_PACK = LEXIS_GROUP_5_PACKAGE + "FIND_END_USE_BY_PACK(?,?)";
   private static final String FIND_PERMIT_DETAIL_BY_ID =
@@ -306,8 +334,6 @@ public class PermitRpcRepository extends OracleRepositorySupport {
       "SELECT OVERRIDE_FEE, OVERRIDE_COMMENT, ORG_UNIT_NO "
           + "FROM EXPORT_PERMIT_DETAIL "
           + "WHERE EXPORT_PERMIT_DETAIL_NUMBER = ?";
-  private static final String FIND_EXEMPTION_BY_NUMBER =
-      LEXIS_GROUP_5_PACKAGE + "FIND_EXEMPTION_BY_NUMBER(?,?)";
   private static final String FIND_PERMIT_FILE_DETAILS =
       LEXIS_GROUP_5_PACKAGE + "FIND_PERMIT_FILE_DETAILS(?,?)";
   private static final String FIND_PERMIT_FILE_ATTACHMENT =
@@ -732,11 +758,11 @@ public class PermitRpcRepository extends OracleRepositorySupport {
       return List.of();
     }
 
-    return queryCursorProcedureRequired(
-            FIND_PACKAGES_BY_OIC_PERMIT,
-            cs -> cs.setString(1, oicPermitNumber.toString()),
-            2,
-            rs -> getRawString(rs, "PACKAGE_NUMBER"))
+    return queryDirectRequired(
+            PACKAGE_NUMBERS_BY_OIC_PERMIT,
+            rs -> getRawString(rs, "PACKAGE_NUMBER"),
+            oicPermitNumber,
+            oicPermitNumber)
         .stream()
         .filter(packageNumber -> packageNumber != null && !packageNumber.isBlank())
         .distinct()
@@ -1101,11 +1127,10 @@ public class PermitRpcRepository extends OracleRepositorySupport {
     }
 
     List<Long> applicationNumbers =
-        queryCursorProcedureRequired(
-            FIND_APPLICATION_BY_EXEMPTION,
-            cs -> cs.setString(1, normalizedExemptionNumber),
-            2,
-            rs -> getLong(rs, "APPLICATION_NUMBER"));
+        queryDirectRequired(
+            APPLICATIONS_BY_EXEMPTION,
+            rs -> getLong(rs, "APPLICATION_NUMBER"),
+            normalizedExemptionNumber);
     return normalizeApplicationRelationships(
         applicationNumbers,
         strictRelationships,
@@ -1612,12 +1637,9 @@ public class PermitRpcRepository extends OracleRepositorySupport {
       return Optional.empty();
     }
 
-    return queryCursorSingleRequired(
-            FIND_EXEMPTION_BY_NUMBER,
-            cs -> cs.setString(1, normalized),
-            2,
-            rs -> trim(rs.getString("EXPORT_EXEMPTION_TYPE_CODE")))
-        .filter(value -> value != null && !value.isBlank());
+    return queryDirectSingleRequired(
+            EXEMPTION_BY_NUMBER, rs -> trim(rs.getString("EXPORT_EXEMPTION_TYPE_CODE")), normalized)
+        .filter(value -> !value.isBlank());
   }
 
   public Optional<LocalDate> findExemptionExpiryDate(String exemptionNumber) {
@@ -1626,11 +1648,8 @@ public class PermitRpcRepository extends OracleRepositorySupport {
       return Optional.empty();
     }
 
-    return queryCursorSingleRequired(
-        FIND_EXEMPTION_BY_NUMBER,
-        cs -> cs.setString(1, normalized),
-        2,
-        rs -> getLocalDate(rs, "EXPIRY_DATE"));
+    return queryDirectSingleRequired(
+        EXEMPTION_BY_NUMBER, rs -> getLocalDate(rs, "EXPIRY_DATE"), normalized);
   }
 
   public Optional<PackageInfoRow> findPackageInfoByPackageNumber(String packageNumber) {
@@ -1682,10 +1701,8 @@ public class PermitRpcRepository extends OracleRepositorySupport {
       return Optional.empty();
     }
 
-    return queryCursorSingleRequired(
-        FIND_APPLICATION_BY_NUMBER,
-        cs -> cs.setString(1, applicationNumber.toString()),
-        2,
+    return queryDirectSingleRequired(
+        APPLICATION_BY_NUMBER,
         rs ->
             new ApplicationInfoRow(
                 getLong(rs, "APPLICATION_NUMBER"),
@@ -1694,14 +1711,15 @@ public class PermitRpcRepository extends OracleRepositorySupport {
                 getString(rs, "REGION"),
                 getString(rs, "EXPORT_PRODUCT_TYPE_CODE"),
                 getString(rs, "EXPORT_GROWTH_TYPE_CODE"),
-                // FIND_APPLICATION_BY_NUMBER does not project END_USE_SORT. The service derives it
-                // from the authoritative application end-use relationships when it is needed.
+                // The application row has no END_USE_SORT. The service derives it from the
+                // authoritative application end-use relationships when it is needed.
                 null,
                 getString(rs, "OWNER_CLIENT_NUMBER"),
                 getString(rs, "OWNER_CLIENT_LOCATION_CODE"),
                 getString(rs, "AGENT_CLIENT_NUMBER"),
                 getString(rs, "AGENT_CLIENT_LOCATION_CODE"),
-                getString(rs, "OIC_INDICATOR")));
+                getString(rs, "OIC_INDICATOR")),
+        applicationNumber);
   }
 
   public Optional<String> findApplicationStatusCodeByNumber(Long applicationNumber) {
@@ -1709,11 +1727,10 @@ public class PermitRpcRepository extends OracleRepositorySupport {
       return Optional.empty();
     }
 
-    return queryCursorSingleRequired(
-        FIND_APPLICATION_BY_NUMBER,
-        cs -> cs.setString(1, applicationNumber.toString()),
-        2,
-        rs -> getString(rs, "EXPORT_APPLICATION_STATUS_CODE"));
+    return queryDirectSingleRequired(
+        APPLICATION_BY_NUMBER,
+        rs -> getString(rs, "EXPORT_APPLICATION_STATUS_CODE"),
+        applicationNumber);
   }
 
   public List<EndUsePairRow> findEndUsesByApplicationNumber(Long applicationNumber) {

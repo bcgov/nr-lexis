@@ -20,6 +20,9 @@ import java.math.RoundingMode;
 import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Comparator;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -29,6 +32,7 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.SortedSet;
 import java.util.TreeSet;
+import java.util.function.Function;
 import java.util.function.Predicate;
 import org.springframework.context.annotation.Profile;
 import org.springframework.dao.DataRetrievalFailureException;
@@ -105,8 +109,22 @@ public class OracleExemptionDetailsRpcService implements ExemptionDetailsRpcServ
       String exemptionNumber,
       boolean canViewFederalApplications,
       Predicate<Long> applicationAccess) {
+    List<ExemptionDetailsRpcRepository.ApplicationSummaryRow> visibleRows =
+        repository.findApplicationSummariesByExemptionNumber(exemptionNumber).stream()
+            .filter(
+                row ->
+                    canViewFederalApplications
+                        || !JURISDICTION_FEDERAL.equalsIgnoreCase(row.jurisdictionCode()))
+            .filter(
+                row ->
+                    !RETIRED_INDIAN_RESERVE_JURISDICTION_CODE.equalsIgnoreCase(
+                        row.jurisdictionCode()))
+            .filter(row -> applicationAccess.test(row.applicationNumber()))
+            .toList();
+    // The Applicant tab shows the contact of the first listed application.
     List<ExemptionDetailsRpcRepository.ApplicationSummaryRow> rows =
-        repository.findApplicationSummariesByExemptionNumber(exemptionNumber);
+        inLegacyOrderWhereItDecides(
+            exemptionNumber, visibleRows, OracleExemptionDetailsRpcService::applicantContact);
     String exemptionStatus =
         rows.isEmpty()
             ? null
@@ -115,24 +133,23 @@ public class OracleExemptionDetailsRpcService implements ExemptionDetailsRpcServ
                 .map(ExemptionDetailsRpcRepository.ExemptionRecord::exemptionStatusCode)
                 .orElse(null);
 
+    // Permits are read once, for only the listed applications the status rules let staff remove.
+    Set<Long> applicationsWithPermits =
+        canRemoveApplications(exemptionStatus)
+            ? repository.findApplicationNumbersWithPermits(
+                exemptionNumber,
+                rows.stream()
+                    .filter(row -> isAllowedRemovalSourceStatus(row.applicationStatusCode()))
+                    .map(ExemptionDetailsRpcRepository.ApplicationSummaryRow::applicationNumber)
+                    .toList())
+            : Set.of();
+
     List<ApplicationItem> applications = new ArrayList<>();
     String previousOwnerClientNumber = null;
     boolean blanketOic = false;
     boolean containsUnmanu = false;
 
     for (ExemptionDetailsRpcRepository.ApplicationSummaryRow row : rows) {
-      if (JURISDICTION_FEDERAL.equalsIgnoreCase(row.jurisdictionCode())
-          && !canViewFederalApplications) {
-        continue;
-      }
-      if (RETIRED_INDIAN_RESERVE_JURISDICTION_CODE.equalsIgnoreCase(
-          row.jurisdictionCode())) {
-        continue;
-      }
-      if (!applicationAccess.test(row.applicationNumber())) {
-        continue;
-      }
-
       if (blanketOic
           || (previousOwnerClientNumber != null
               && !previousOwnerClientNumber.equals(row.ownerClientNumber()))) {
@@ -161,7 +178,7 @@ public class OracleExemptionDetailsRpcService implements ExemptionDetailsRpcServ
               row.agentContactName(),
               row.ownerCompanyName(),
               row.agentCompanyName(),
-              isRemovableFromExemption(exemptionStatus, row),
+              isRemovableFromExemption(exemptionStatus, row, applicationsWithPermits),
               LexisApplicationRepository.displayStatus(
                   row.applicationStatusCode(), row.statusDescription(), exemptionStatus)));
     }
@@ -655,7 +672,7 @@ public class OracleExemptionDetailsRpcService implements ExemptionDetailsRpcServ
       errors.add("Application has valid offers and cannot be added to an exemption.");
     } else if (!oicExemption && appNotPastListingDate(application)) {
       errors.add("Application listing date has not passed.");
-    } else if (!oicExemption && ownerClientMismatch(assignedApplications, application)) {
+    } else if (!oicExemption && ownerClientMismatch(normalizedExemptionNumber, assignedApplications, application)) {
       errors.add(
           "The application you entered cannot be assigned to this exemption due to the owner client number not matching the other applications.");
     } else if (!canViewFederalApplications && JURISDICTION_FEDERAL.equalsIgnoreCase(application.exportJurisdictionCode())) {
@@ -943,14 +960,15 @@ public class OracleExemptionDetailsRpcService implements ExemptionDetailsRpcServ
   /** The linked applications and sender route an approval email needs, or why it can't be sent. */
   private ApprovalEmailSource approvalEmailSource(String exemptionNumber) {
     List<ExemptionDetailsRpcRepository.ApplicationSummaryRow> applications =
-        repository.findApplicationSummariesByExemptionNumber(exemptionNumber);
+        inLegacyOrder(
+            exemptionNumber,
+            repository.findApplicationSummariesByExemptionNumber(exemptionNumber));
     if (applications.isEmpty()) {
       return new ApprovalEmailSource(
           applications, null, null, APPROVAL_EMAIL_NO_APPLICATION_MESSAGE);
     }
     ExemptionDetailsRpcRepository.ApplicationLinkRecord firstApplication =
-        repository.findApplicationLinkRecord(applications.getFirst().applicationNumber())
-            .orElse(null);
+        repository.findApplicationLinkRecord(applications.get(0).applicationNumber()).orElse(null);
     if (firstApplication == null) {
       return new ApprovalEmailSource(
           applications, null, null, APPROVAL_EMAIL_APPLICATION_UNAVAILABLE_MESSAGE);
@@ -1051,11 +1069,15 @@ public class OracleExemptionDetailsRpcService implements ExemptionDetailsRpcServ
       return false;
     }
     List<ExemptionDetailsRpcRepository.ApplicationSummaryRow> applications =
-        repository.findApplicationSummariesByExemptionNumber(normalizedNumber);
+        inLegacyOrder(
+            normalizedNumber,
+            repository.findApplicationSummariesByExemptionNumber(normalizedNumber));
+    Optional<ExemptionDetailsRpcRepository.ApplicationLinkRecord> firstApplication =
+        applications.isEmpty()
+            ? Optional.empty()
+            : repository.findApplicationLinkRecord(applications.get(0).applicationNumber());
     RegionalMailRoute senderRoute =
-        applications.stream()
-            .findFirst()
-            .flatMap(row -> repository.findApplicationLinkRecord(row.applicationNumber()))
+        firstApplication
             .map(ExemptionDetailsRpcRepository.ApplicationLinkRecord::orgUnitNo)
             .flatMap(RegionalMailRoute::forOrgUnit)
             .orElse(null);
@@ -1065,7 +1087,10 @@ public class OracleExemptionDetailsRpcService implements ExemptionDetailsRpcServ
     String requestedRecipient = trimToNull(toEmailAddress);
     String recipient =
         requestedRecipient == null
-            ? resolveClientEmail(normalizedNumber).orElse(null)
+            ? firstApplication
+                .flatMap(this::resolveApplicationClientEmail)
+                .map(value -> trimToNull(value))
+                .orElse(null)
             : MailRecipientValidator.normalize(requestedRecipient).orElse(null);
     if (!stageExemptionApprovalEmail(normalizedNumber, recipient)) {
       return false;
@@ -1128,13 +1153,23 @@ public class OracleExemptionDetailsRpcService implements ExemptionDetailsRpcServ
    * each other.
    */
   private boolean ownerClientMismatch(
+      String exemptionNumber,
       List<ExemptionDetailsRpcRepository.ApplicationSummaryRow> assignedApplications,
       ExemptionDetailsRpcRepository.ApplicationLinkRecord candidate) {
     if (assignedApplications == null || assignedApplications.isEmpty() || candidate == null) {
       return false;
     }
+    List<ExemptionDetailsRpcRepository.ApplicationSummaryRow> ordered =
+        inLegacyOrderWhereItDecides(
+            exemptionNumber,
+            assignedApplications,
+            row -> normalizeClientNumber(row.ownerClientNumber()));
+    if (ordered.isEmpty()) {
+      return false;
+    }
+    ExemptionDetailsRpcRepository.ApplicationSummaryRow firstApplication = ordered.get(0);
     return !Objects.equals(
-        normalizeClientNumber(assignedApplications.get(0).ownerClientNumber()),
+        normalizeClientNumber(firstApplication.ownerClientNumber()),
         normalizeClientNumber(candidate.ownerClientNumber()));
   }
 
@@ -1416,12 +1451,6 @@ public class OracleExemptionDetailsRpcService implements ExemptionDetailsRpcServ
     errorMessage.append("Failed to approve exemption ").append(exemptionNumber).append("</br>");
   }
 
-  private Optional<String> resolveClientEmail(String exemptionNumber) {
-    return firstLinkedApplication(exemptionNumber)
-        .flatMap(this::resolveApplicationClientEmail)
-        .map(value -> trimToNull(value));
-  }
-
   private String resolveApprovalGridEmail(String exemptionNumber) {
     return firstLinkedApplication(exemptionNumber)
         .map(
@@ -1442,9 +1471,63 @@ public class OracleExemptionDetailsRpcService implements ExemptionDetailsRpcServ
 
   private Optional<ExemptionDetailsRpcRepository.ApplicationLinkRecord> firstLinkedApplication(
       String exemptionNumber) {
-    return repository.findApplicationSummariesByExemptionNumber(exemptionNumber).stream()
-        .findFirst()
-        .flatMap(row -> repository.findApplicationLinkRecord(row.applicationNumber()));
+    List<ExemptionDetailsRpcRepository.ApplicationSummaryRow> applications =
+        inLegacyOrder(
+            exemptionNumber,
+            repository.findApplicationSummariesByExemptionNumber(exemptionNumber));
+    if (applications.isEmpty()) {
+      return Optional.empty();
+    }
+    return repository.findApplicationLinkRecord(applications.get(0).applicationNumber());
+  }
+
+  /**
+   * Legacy cursor order, read only when the applications differ in what the first one decides. The
+   * cursor is the later read, so an application it no longer returns is dropped.
+   */
+  private List<ExemptionDetailsRpcRepository.ApplicationSummaryRow> inLegacyOrderWhereItDecides(
+      String exemptionNumber,
+      List<ExemptionDetailsRpcRepository.ApplicationSummaryRow> applications,
+      Function<ExemptionDetailsRpcRepository.ApplicationSummaryRow, ?> decidedValue) {
+    if (applications.size() < 2 || applications.stream().map(decidedValue).distinct().count() < 2) {
+      return applications;
+    }
+    Map<Long, Integer> legacyPosition = new HashMap<>();
+    List<Long> legacyOrder = repository.findLegacyApplicationOrder(exemptionNumber);
+    for (int index = 0; index < legacyOrder.size(); index++) {
+      legacyPosition.putIfAbsent(legacyOrder.get(index), index);
+    }
+    return applications.stream()
+        .filter(row -> legacyPosition.containsKey(row.applicationNumber()))
+        .sorted(Comparator.comparingInt(row -> legacyPosition.get(row.applicationNumber())))
+        .toList();
+  }
+
+  /**
+   * Approval emails take their sender region from the first application and list the rest after
+   * it; the region isn't in the summary rows, so any choice asks the cursor.
+   */
+  private List<ExemptionDetailsRpcRepository.ApplicationSummaryRow> inLegacyOrder(
+      String exemptionNumber,
+      List<ExemptionDetailsRpcRepository.ApplicationSummaryRow> applications) {
+    return inLegacyOrderWhereItDecides(
+        exemptionNumber,
+        applications,
+        ExemptionDetailsRpcRepository.ApplicationSummaryRow::applicationNumber);
+  }
+
+  /** What the Applicant tab shows from an application; agent details only for an agent. */
+  private static List<String> applicantContact(
+      ExemptionDetailsRpcRepository.ApplicationSummaryRow row) {
+    boolean agent = APPLICANT_TYPE_AGENT.equalsIgnoreCase(trimToNull(row.applicantTypeCode()));
+    return Arrays.asList(
+        row.ownerClientNumber(),
+        row.ownerClientLocationCode(),
+        row.applicantTypeCode(),
+        row.ownerContactName(),
+        agent ? row.agentClientNumber() : null,
+        agent ? row.agentClientLocationCode() : null,
+        agent ? row.agentContactName() : null);
   }
 
   private Optional<String> resolveApplicationClientEmail(
@@ -2033,17 +2116,21 @@ public class OracleExemptionDetailsRpcService implements ExemptionDetailsRpcServ
         || APPLICATION_STATUS_PERMITTED.equals(normalizedApplicationStatus);
   }
 
+  private boolean canRemoveApplications(String exemptionStatus) {
+    String normalizedExemptionStatus = normalizeCode(exemptionStatus);
+    return normalizedExemptionStatus != null
+        && !EXEMPTION_STATUS_EXPIRED.equals(normalizedExemptionStatus)
+        && !EXEMPTION_STATUS_CANCELLED.equals(normalizedExemptionStatus);
+  }
+
   /** Applies the rules of {@link #removeApplicationFromExemption} to a listed application. */
   private boolean isRemovableFromExemption(
-      String exemptionStatus, ExemptionDetailsRpcRepository.ApplicationSummaryRow row) {
-    String normalizedExemptionStatus = normalizeCode(exemptionStatus);
-    if (normalizedExemptionStatus == null
-        || EXEMPTION_STATUS_EXPIRED.equals(normalizedExemptionStatus)
-        || EXEMPTION_STATUS_CANCELLED.equals(normalizedExemptionStatus)
-        || !isAllowedRemovalSourceStatus(row.applicationStatusCode())) {
-      return false;
-    }
-    return repository.findPermitsByApplicationNumberRequired(row.applicationNumber()).isEmpty();
+      String exemptionStatus,
+      ExemptionDetailsRpcRepository.ApplicationSummaryRow row,
+      Set<Long> applicationsWithPermits) {
+    return canRemoveApplications(exemptionStatus)
+        && isAllowedRemovalSourceStatus(row.applicationStatusCode())
+        && !applicationsWithPermits.contains(row.applicationNumber());
   }
 
   private String initialExemptionStatus(String exemptionTypeCode) {

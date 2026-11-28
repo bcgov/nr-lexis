@@ -333,6 +333,15 @@ public abstract class OracleRepositorySupport {
     return jdbcTemplate.query(sql, (rs, rowNumber) -> rowMapper.map(rs), bindValues);
   }
 
+  /**
+   * The first row of {@link #queryDirectRequired}, empty when there is no row or its mapped value is
+   * null, as {@link #queryCursorSingleRequired} returns for a cursor.
+   */
+  protected <T> Optional<T> queryDirectSingleRequired(
+      String sql, SqlRowMapper<T> rowMapper, Object... bindValues) {
+    return firstResult(queryDirectRequired(sql, rowMapper, bindValues));
+  }
+
   /** Executes a bound SELECT with the same required-column contract as a required cursor read. */
   protected <T> List<T> queryDirectRequired(
       String sql, SqlRowMapper<T> rowMapper, Object... bindValues) {

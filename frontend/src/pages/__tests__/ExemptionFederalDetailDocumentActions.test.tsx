@@ -871,6 +871,78 @@ describe('Exemption and Federal Detail Document Actions', () => {
     },
   )
 
+  it('does not request the applications a Blanket OIC hides', async () => {
+    mockedFetchProvincialExemptionDetail.mockResolvedValue({
+      ...exemptionDetail,
+      exemptionTypeCode: 'B',
+      exemptionTypeDescription: 'Blanket OIC',
+      blanketOic: true,
+    })
+    render(
+      <MemoryRouter initialEntries={['/provincial/exemption/EX-777']}>
+        <Routes>
+          <Route
+            path="/provincial/exemption/:exemptionNumber"
+            element={<ProvincialExemptionDetailsPage />}
+          />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    expect((await screen.findAllByText('Blanket OIC')).length).toBeGreaterThan(0)
+    expect(mockedFetchExemptionPermits).toHaveBeenCalled()
+    expect(mockedFetchExemptionApplications).not.toHaveBeenCalled()
+    expect(screen.queryByRole('tab', { name: 'Applications' })).not.toBeInTheDocument()
+  })
+
+  it('names the owner of the first listed application, which the server compares', async () => {
+    const listedApplication = (applicationNumber: string, ownerClientNumber: string) => ({
+      applicationNumber,
+      requestedVolume: '1.0',
+      scaleVolume: '',
+      locked: false,
+      jurisdiction: 'P',
+      ownerClientNumber,
+      agentClientNumber: '',
+      ownerClientLocationCode: '00',
+      agentClientLocationCode: '',
+      applicantTypeCode: 'O',
+      ownerContactName: '',
+      agentContactName: '',
+      ownerCompanyName: '',
+      agentCompanyName: '',
+      removable: true,
+      statusDescription: '',
+    })
+    mockedFetchProvincialExemptionDetail.mockResolvedValue({
+      ...exemptionDetail,
+      exemptionTypeCode: 'M',
+      exemptionTypeDescription: 'Ministerial',
+      ownerClientNumber: '00055566',
+    })
+    mockedFetchExemptionApplications.mockResolvedValue({
+      applications: [listedApplication('190', '00011122'), listedApplication('290', '00055566')],
+      containsUnmanu: false,
+      ownerNumber: 'Blanket OIC',
+    })
+    render(
+      <MemoryRouter initialEntries={['/provincial/exemption/EX-777']}>
+        <Routes>
+          <Route
+            path="/provincial/exemption/:exemptionNumber"
+            element={<ProvincialExemptionDetailsPage />}
+          />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    await selectDetailTab('Applications')
+    await userEvent.click(screen.getByRole('button', { name: 'Add application' }))
+    expect(await screen.findByLabelText('Application number')).toHaveAccessibleDescription(
+      'Approved applications for client 00011122 only.',
+    )
+  })
+
   it('does not name a client when an Order in Council application cannot be added', async () => {
     mockedFetchProvincialExemptionDetail.mockResolvedValue({
       ...exemptionDetail,
