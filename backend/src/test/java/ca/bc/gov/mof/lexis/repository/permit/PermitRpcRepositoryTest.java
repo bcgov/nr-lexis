@@ -354,14 +354,10 @@ class PermitRpcRepositoryTest {
 
   @Test
   @SuppressWarnings("unchecked")
-  void corePackageContextsShouldUseOneDirectPermitQuery() {
+  void corePackageContextsShouldListOnlyPackagesWithAScaleOnThePermit() {
     when(
             jdbcTemplate.query(
-                any(String.class),
-                any(RowMapper.class),
-                eq(7000123L),
-                eq(7000123L),
-                eq(7000123L)))
+                any(String.class), any(RowMapper.class), eq(7000123L), eq(7000123L)))
         .thenReturn(List.of());
     PermitRpcRepository repository = new PermitRpcRepository(jdbcTemplate);
 
@@ -369,25 +365,18 @@ class PermitRpcRepositoryTest {
 
     ArgumentCaptor<String> sql = ArgumentCaptor.forClass(String.class);
     verify(jdbcTemplate)
-        .query(
-            sql.capture(),
-            any(RowMapper.class),
-            eq(7000123L),
-            eq(7000123L),
-            eq(7000123L));
+        .query(sql.capture(), any(RowMapper.class), eq(7000123L), eq(7000123L));
     assertThat(sql.getValue())
         .contains("FROM EXPORT_PACKAGE P")
         .contains("LEFT JOIN EXPORT_EXEMPTION_APPLICATION EEA")
         .contains("LEFT JOIN EXPORT_EXEMPTION EE")
         .contains("ASSIGNED_TO_PERMIT")
-        .contains("WHERE P.PACKAGE_NUMBER IN (")
-        .contains("TARGET_SCALE.EXPORT_PERMIT_DETAIL_NUMBER = ?")
-        .contains("UNASSIGNED_SCALE.EXPORT_PERMIT_DETAIL_NUMBER IS NULL")
-        .contains("WHERE SIBLING_PACKAGE.APPLICATION_NUMBER IN (")
-        .doesNotContain("JOIN EXPORT_PACKAGE SIBLING_PACKAGE")
-        .contains("ASSOCIATED_SCALE.EXPORT_PERMIT_DETAIL_NUMBER = ?")
+        .contains(
+            "WHERE P.PACKAGE_NUMBER IN (SELECT TARGET_SCALE.PACKAGE_NUMBER FROM EXPORT_SCALE_DETAIL"
+                + " TARGET_SCALE WHERE TARGET_SCALE.EXPORT_PERMIT_DETAIL_NUMBER = ?)")
         .contains("ORDER BY P.PACKAGE_NUMBER")
-        .doesNotContain(" OR (EXISTS");
+        .doesNotContain("EXPORT_PERMIT_DETAIL_NUMBER IS NULL")
+        .doesNotContain("APPLICATION_NUMBER IN (");
   }
 
   @Test

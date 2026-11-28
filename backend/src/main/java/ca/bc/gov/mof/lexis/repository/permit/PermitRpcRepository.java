@@ -106,26 +106,12 @@ public class PermitRpcRepository extends OracleRepositorySupport {
       LEFT JOIN EXPORT_APPLICATION_STATUS_CODE EASC
         ON EASC.EXPORT_APPLICATION_STATUS_CODE = EEA.EXPORT_APPLICATION_STATUS_CODE
       """;
-  // The permit's packages, plus unassigned packages of the same applications, so a package stays in
-  // the Scale selector after its final scale is removed while its application still has a scale on
-  // this permit. One uncorrelated IN driven by the permit's scale rows: an ORed EXISTS has no
-  // driving predicate and probes every package.
+  // The packages with a scale row on the permit; a package whose rows are all removed drops out.
   private static final String FIND_CORE_PACKAGES_BY_PERMIT =
       CORE_PACKAGE_SELECT
           + " WHERE P.PACKAGE_NUMBER IN ("
           + "SELECT TARGET_SCALE.PACKAGE_NUMBER FROM EXPORT_SCALE_DETAIL TARGET_SCALE "
-          + "WHERE TARGET_SCALE.EXPORT_PERMIT_DETAIL_NUMBER = ? "
-          + "UNION ALL "
-          + "SELECT SIBLING_PACKAGE.PACKAGE_NUMBER FROM EXPORT_PACKAGE SIBLING_PACKAGE "
-          + "WHERE SIBLING_PACKAGE.APPLICATION_NUMBER IN ("
-          + "SELECT ASSOCIATED_PACKAGE.APPLICATION_NUMBER FROM EXPORT_SCALE_DETAIL ASSOCIATED_SCALE "
-          + "JOIN EXPORT_PACKAGE ASSOCIATED_PACKAGE "
-          + "ON ASSOCIATED_PACKAGE.PACKAGE_NUMBER = ASSOCIATED_SCALE.PACKAGE_NUMBER "
-          + "WHERE ASSOCIATED_SCALE.EXPORT_PERMIT_DETAIL_NUMBER = ?) "
-          + "AND EXISTS ("
-          + "SELECT 1 FROM EXPORT_SCALE_DETAIL UNASSIGNED_SCALE "
-          + "WHERE UNASSIGNED_SCALE.PACKAGE_NUMBER = SIBLING_PACKAGE.PACKAGE_NUMBER "
-          + "AND UNASSIGNED_SCALE.EXPORT_PERMIT_DETAIL_NUMBER IS NULL))"
+          + "WHERE TARGET_SCALE.EXPORT_PERMIT_DETAIL_NUMBER = ?)"
           + " ORDER BY P.PACKAGE_NUMBER";
   // The Blanket OIC permit's application packages and the packages of its scale rows.
   private static final String FIND_CORE_PACKAGES_BY_OIC_PERMIT =
@@ -791,7 +777,10 @@ public class PermitRpcRepository extends OracleRepositorySupport {
     }
 
     String sql = blanketOic ? FIND_CORE_PACKAGES_BY_OIC_PERMIT : FIND_CORE_PACKAGES_BY_PERMIT;
-    Object[] bindValues = {permitNumber, permitNumber, permitNumber};
+    Object[] bindValues =
+        blanketOic
+            ? new Object[] {permitNumber, permitNumber, permitNumber}
+            : new Object[] {permitNumber, permitNumber};
     List<PermitCorePackageContextRow> rows =
         jdbcTemplate.query(sql, (rs, rowNumber) -> mapPermitCorePackageContextRow(rs), bindValues);
 
