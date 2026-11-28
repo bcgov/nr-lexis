@@ -6,7 +6,7 @@ placing an offer, following the offers on your own applications, and
 changing or withdrawing an offer you placed.
 
 Offers are accepted from the application's list date until the final date
-for receipt of offers in the published Schedule for the Advertising List.
+for receipt of offers in the published [Export Schedule](https://www2.gov.bc.ca/gov/content?id=EEC95AA8942A4E3BA7A71C707E6F2BF5).
 
 ## Screens
 
@@ -104,7 +104,7 @@ Only the organization that placed the offer can change it.
 ### Withdraw an offer
 
 You can withdraw an offer you placed up to the day before the "offers must
-be withdrawn by" date in the published schedule.
+be withdrawn by" date in the published [Export Schedule](https://www2.gov.bc.ca/gov/content?id=EEC95AA8942A4E3BA7A71C707E6F2BF5).
 
 1. Open the offer and select **Edit offer**.
 2. Under **Offer withdrawals**, set **Offer withdrawal date** to today's

@@ -83,7 +83,9 @@ see the three Yes/No answers.
 ### Change or withdraw an offer for a client
 
 Industry users can withdraw their own offer until the day before the
-schedule's withdrawal deadline. After that they ask the export office.
+withdrawal deadline in the published
+[Export Schedule](https://www2.gov.bc.ca/gov/content?id=EEC95AA8942A4E3BA7A71C707E6F2BF5).
+After that they ask the export office.
 
 1. Open the offer and select **Edit offer**.
 2. Change the offer details, or under **Offer withdrawals** enter the

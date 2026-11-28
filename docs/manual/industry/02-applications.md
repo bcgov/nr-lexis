@@ -6,6 +6,10 @@ file. Export office staff review it on its list date. An approved
 application is advertised on the Advertising List, where other companies can
 make offers on it.
 
+> **Advertising Lists:** each Advertising List is active for two weeks. All
+> Advertising Lists and the Export Schedule can be found at
+> [Weekly Advertising Lists](https://www2.gov.bc.ca/gov/content?id=EEC95AA8942A4E3BA7A71C707E6F2BF5).
+
 ## Screens
 
 | Menu item | Use it to |
@@ -66,7 +70,8 @@ tab still has something to correct, a red count shows on it and the message
 is under the field.
 
 An application for a given list date must be saved by the final date for
-receipt of applications in the published Schedule for the Advertising List.
+receipt of applications in the published
+[Export Schedule](https://www2.gov.bc.ca/gov/content?id=EEC95AA8942A4E3BA7A71C707E6F2BF5).
 
 ### Apply as an agent
 
