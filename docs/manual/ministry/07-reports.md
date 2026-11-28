@@ -46,7 +46,9 @@ Options: **Region**, **Jurisdiction**, **Listing from date**, **Listing to
 date**.
 
 **Use current advertising period** fills the two dates with the current
-advertising period. The list holds approved applications only.
+advertising period. The list holds approved applications only. The
+published lists and the Export Schedule are on
+[Weekly Advertising Lists](https://www2.gov.bc.ca/gov/content?id=EEC95AA8942A4E3BA7A71C707E6F2BF5).
 
 ### Offers report
 
