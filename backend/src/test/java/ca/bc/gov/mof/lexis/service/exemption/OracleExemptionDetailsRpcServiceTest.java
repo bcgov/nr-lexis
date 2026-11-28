@@ -609,6 +609,7 @@ class OracleExemptionDetailsRpcServiceTest {
                     "Exempted"),
                 new ExemptionDetailsRpcRepository.ApplicationSummaryRow(
                     1000457L, 11.0d, 11.0d, "00077881", "P", "S")));
+    when(repository.findLegacyApplicationOrder("EX-205")).thenReturn(List.of(1000456L, 1000457L));
 
     ExemptionDetailsRpcService.ExemptionApplicationsResponse response =
         service.getApplications("EX-205", true, ignored -> true);
@@ -3735,6 +3736,7 @@ class OracleExemptionDetailsRpcServiceTest {
                     1000456L, 95.0d, 95.0d, "00077881", "P", "S"),
                 new ExemptionDetailsRpcRepository.ApplicationSummaryRow(
                     1000457L, 50.0d, 50.0d, "00077881", "P", "S")));
+    when(repository.findLegacyApplicationOrder("EX-205")).thenReturn(List.of(1000456L, 1000457L));
     when(repository.findApplicationLinkRecord(1000456L))
         .thenReturn(
             Optional.of(
@@ -3832,6 +3834,64 @@ class OracleExemptionDetailsRpcServiceTest {
     assertThat(response.applications())
         .extracting("applicationNumber", "removable")
         .containsExactly(tuple(1000456L, true), tuple(1000457L, false));
+  }
+
+  @Test
+  void approvalEmailsShouldUseOnlyTheApplicationsTheLegacyCursorStillLinks() {
+    when(repository.findExemptionRecord("EX-205")).thenReturn(Optional.of(exemption("ACT")));
+    when(repository.findApplicationSummariesByExemptionNumber("EX-205"))
+        .thenReturn(
+            List.of(
+                applicationSummary(1000101L, "00077881"),
+                applicationSummary(1000202L, "00077881")));
+    // 1000202 was unlinked between the two reads.
+    when(repository.findLegacyApplicationOrder("EX-205")).thenReturn(List.of(1000101L));
+    when(repository.findApplicationLinkRecord(1000101L))
+        .thenReturn(
+            Optional.of(
+                applicationWithIdentity(
+                    1000101L, "00077881", "00", null, null, "EXE", "EX-205", 1834L)));
+
+    assertThat(service.sendExemptionApprovalEmail("EX-205", "edited@example.com").success())
+        .isTrue();
+    assertThat(
+            service.queueApprovalEmails(
+                List.of(
+                    new ExemptionDetailsRpcService.ApprovalRecipients(
+                        "EX-205", "manual@example.com", ""))))
+        .extracting(ExemptionDetailsRpcService.ApprovalEmailOutcome::queued)
+        .containsExactly(true);
+
+    verify(notificationService)
+        .publish(
+            new WorkflowEmailEvent.ExemptionApproval(
+                "EX-205", "1000101", "edited@example.com", RegionalMailRoute.RSI));
+    verify(notificationService)
+        .publish(
+            new WorkflowEmailEvent.ExemptionApproval(
+                "EX-205", "1000101", "manual@example.com", RegionalMailRoute.RSI));
+    verify(repository, never()).findApplicationLinkRecord(1000202L);
+  }
+
+  @Test
+  void getApplicationsShouldIgnoreAgentFieldsOfOwnerApplicants() {
+    when(repository.findApplicationSummariesByExemptionNumber("EX-205"))
+        .thenReturn(
+            List.of(
+                new ExemptionDetailsRpcRepository.ApplicationSummaryRow(
+                    1000190L, 1.0d, 1.0d, "00055566", "00077881", "00", "01", "O",
+                    "OWNER PERSON", "", "OWNER LTD", "", "P", "S", "APP", "Approved"),
+                new ExemptionDetailsRpcRepository.ApplicationSummaryRow(
+                    1000290L, 1.0d, 1.0d, "00055566", null, "00", null, "O",
+                    "OWNER PERSON", null, "OWNER LTD", null, "P", "S", "APP", "Approved")));
+
+    ExemptionDetailsRpcService.ExemptionApplicationsResponse response =
+        service.getApplications("EX-205", true, ignored -> true);
+
+    assertThat(response.applications())
+        .extracting("applicationNumber")
+        .containsExactly(1000190L, 1000290L);
+    verify(repository, never()).findLegacyApplicationOrder(any());
   }
 
   @Test

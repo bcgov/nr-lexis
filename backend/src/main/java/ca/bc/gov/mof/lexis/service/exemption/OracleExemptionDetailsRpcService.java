@@ -1159,12 +1159,15 @@ public class OracleExemptionDetailsRpcService implements ExemptionDetailsRpcServ
     if (assignedApplications == null || assignedApplications.isEmpty() || candidate == null) {
       return false;
     }
-    ExemptionDetailsRpcRepository.ApplicationSummaryRow firstApplication =
+    List<ExemptionDetailsRpcRepository.ApplicationSummaryRow> ordered =
         inLegacyOrderWhereItDecides(
-                exemptionNumber,
-                assignedApplications,
-                row -> normalizeClientNumber(row.ownerClientNumber()))
-            .get(0);
+            exemptionNumber,
+            assignedApplications,
+            row -> normalizeClientNumber(row.ownerClientNumber()));
+    if (ordered.isEmpty()) {
+      return false;
+    }
+    ExemptionDetailsRpcRepository.ApplicationSummaryRow firstApplication = ordered.get(0);
     return !Objects.equals(
         normalizeClientNumber(firstApplication.ownerClientNumber()),
         normalizeClientNumber(candidate.ownerClientNumber()));
@@ -1478,7 +1481,10 @@ public class OracleExemptionDetailsRpcService implements ExemptionDetailsRpcServ
     return repository.findApplicationLinkRecord(applications.get(0).applicationNumber());
   }
 
-  /** Legacy cursor order, read only when the applications differ in what the first one decides. */
+  /**
+   * Legacy cursor order, read only when the applications differ in what the first one decides. The
+   * cursor is the later read, so an application it no longer returns is dropped.
+   */
   private List<ExemptionDetailsRpcRepository.ApplicationSummaryRow> inLegacyOrderWhereItDecides(
       String exemptionNumber,
       List<ExemptionDetailsRpcRepository.ApplicationSummaryRow> applications,
@@ -1492,9 +1498,8 @@ public class OracleExemptionDetailsRpcService implements ExemptionDetailsRpcServ
       legacyPosition.putIfAbsent(legacyOrder.get(index), index);
     }
     return applications.stream()
-        .sorted(
-            Comparator.comparingInt(
-                row -> legacyPosition.getOrDefault(row.applicationNumber(), Integer.MAX_VALUE)))
+        .filter(row -> legacyPosition.containsKey(row.applicationNumber()))
+        .sorted(Comparator.comparingInt(row -> legacyPosition.get(row.applicationNumber())))
         .toList();
   }
 
@@ -1511,16 +1516,18 @@ public class OracleExemptionDetailsRpcService implements ExemptionDetailsRpcServ
         ExemptionDetailsRpcRepository.ApplicationSummaryRow::applicationNumber);
   }
 
+  /** What the Applicant tab shows from an application; agent details only for an agent. */
   private static List<String> applicantContact(
       ExemptionDetailsRpcRepository.ApplicationSummaryRow row) {
+    boolean agent = APPLICANT_TYPE_AGENT.equalsIgnoreCase(trimToNull(row.applicantTypeCode()));
     return Arrays.asList(
         row.ownerClientNumber(),
         row.ownerClientLocationCode(),
-        row.agentClientNumber(),
-        row.agentClientLocationCode(),
         row.applicantTypeCode(),
         row.ownerContactName(),
-        row.agentContactName());
+        agent ? row.agentClientNumber() : null,
+        agent ? row.agentClientLocationCode() : null,
+        agent ? row.agentContactName() : null);
   }
 
   private Optional<String> resolveApplicationClientEmail(
